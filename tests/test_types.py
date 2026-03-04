@@ -10,7 +10,6 @@ from star_chamber.types import (
     ClassificationResult,
     CodeReviewResult,
     CouncilConfig,
-    DebateMetadata,
     DesignQuestionResult,
     Issue,
     MajorityIssue,
@@ -503,27 +502,6 @@ class TestClassificationResult:
         assert rebuilt == cr
 
 
-# -- DebateMetadata ------------------------------------------------------------
-
-
-class TestDebateMetadata:
-    def test_all_fields_set(self):
-        dm = DebateMetadata(rounds_completed=3, converged=True)
-        assert dm.rounds_completed == 3
-        assert dm.converged is True
-
-    def test_frozen(self):
-        dm = DebateMetadata(rounds_completed=1, converged=False)
-        with pytest.raises(AttributeError):
-            dm.converged = True  # type: ignore[misc]
-
-    def test_json_round_trip(self):
-        dm = DebateMetadata(rounds_completed=2, converged=False)
-        data = _round_trip(dm)
-        rebuilt = _reconstruct(DebateMetadata, data)
-        assert rebuilt == dm
-
-
 # -- CodeReviewResult -------------------------------------------------------------
 
 
@@ -565,7 +543,6 @@ class TestCodeReviewResult:
             individual_issues={"openai": (issue,)},
             quality_ratings={"openai": "good"},
             summary="Overall good",
-            debate=DebateMetadata(rounds_completed=2, converged=True),
         )
 
     def test_all_fields_set(self, result):
@@ -578,11 +555,9 @@ class TestCodeReviewResult:
         assert result.individual_issues == {"openai": result.consensus_issues}
         assert result.quality_ratings == {"openai": "good"}
         assert result.summary == "Overall good"
-        assert result.debate is not None
-        assert result.debate.converged is True
 
     def test_defaults(self):
-        cr = CodeReviewResult(
+        CodeReviewResult(
             mode="code-review",
             providers_used=(),
             failed_providers=(),
@@ -593,7 +568,6 @@ class TestCodeReviewResult:
             quality_ratings={},
             summary="empty",
         )
-        assert cr.debate is None
 
     def test_frozen(self, result):
         with pytest.raises(AttributeError):
@@ -612,12 +586,9 @@ class TestCodeReviewResult:
             "individual_issues",
             "quality_ratings",
             "summary",
-            "debate",
         }
         assert set(data.keys()) == expected_keys
         # Verify nested structures survive serialization.
-        assert data["debate"]["converged"] is True
-        assert data["debate"]["rounds_completed"] == 2
         assert len(data["reviews"]) == 1
         assert data["reviews"][0]["provider"] == "openai"
 
@@ -644,7 +615,6 @@ class TestDesignQuestionResult:
             approaches=(approach,),
             consensus_recommendation="Go with Option A",
             summary="Option A is best",
-            debate=DebateMetadata(rounds_completed=1, converged=True),
         )
 
     def test_all_fields_set(self, design_result):
@@ -655,7 +625,6 @@ class TestDesignQuestionResult:
         assert len(design_result.approaches) == 1
         assert design_result.consensus_recommendation == "Go with Option A"
         assert design_result.summary == "Option A is best"
-        assert design_result.debate is not None
 
     def test_defaults(self):
         dr = DesignQuestionResult(
@@ -667,7 +636,6 @@ class TestDesignQuestionResult:
         )
         assert dr.consensus_recommendation is None
         assert dr.summary == ""
-        assert dr.debate is None
 
     def test_frozen(self, design_result):
         with pytest.raises(AttributeError):
@@ -683,8 +651,6 @@ class TestDesignQuestionResult:
             "approaches",
             "consensus_recommendation",
             "summary",
-            "debate",
         }
         assert set(data.keys()) == expected_keys
         assert data["approaches"][0]["name"] == "Option A"
-        assert data["debate"]["converged"] is True

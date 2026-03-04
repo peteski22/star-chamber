@@ -179,19 +179,6 @@ class ClassificationResult:
 
 
 @dataclass(frozen=True)
-class DebateMetadata:
-    """Metadata about a debate session.
-
-    Attributes:
-        rounds_completed: Number of debate rounds completed.
-        converged: Whether the debate reached convergence.
-    """
-
-    rounds_completed: int
-    converged: bool
-
-
-@dataclass(frozen=True)
 class CodeReviewResult:
     """Final aggregated result from a code review council.
 
@@ -205,7 +192,6 @@ class CodeReviewResult:
         individual_issues: Issues keyed by provider name.
         quality_ratings: Quality ratings keyed by provider name.
         summary: Aggregated summary of all reviews.
-        debate: Optional debate session metadata.
     """
 
     mode: str
@@ -217,7 +203,6 @@ class CodeReviewResult:
     individual_issues: dict[str, tuple[Issue, ...]]
     quality_ratings: dict[str, str]
     summary: str
-    debate: DebateMetadata | None = None
 
 
 @dataclass(frozen=True)
@@ -232,7 +217,6 @@ class DesignQuestionResult:
         approaches: Aggregated design approaches.
         consensus_recommendation: Recommendation all providers agreed on.
         summary: Aggregated summary of design advice.
-        debate: Optional debate session metadata.
     """
 
     mode: str
@@ -242,4 +226,3 @@ class DesignQuestionResult:
     approaches: tuple[Approach, ...]
     consensus_recommendation: str | None = None
     summary: str = ""
-    debate: DebateMetadata | None = None

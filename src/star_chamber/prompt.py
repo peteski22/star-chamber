@@ -74,11 +74,6 @@ Provide your advice as structured JSON:
 }}
 ```"""
 
-_SYNTHESIS_TEMPLATE = """
-## Other council members' feedback (round {round_number}):
-{synthesis}
-Please provide your perspective on these points. Note where you agree, disagree, or have additional insights."""
-
 _NO_CONTEXT = "(No project-specific context provided.)"
 
 
@@ -126,21 +121,4 @@ def render_design_prompt(question: str, context: str = "") -> str:
     return _DESIGN_TEMPLATE.format(
         context=context if context else _NO_CONTEXT,
         question=question,
-    )
-
-
-def augment_with_synthesis(original_prompt: str, synthesis: str, round_number: int) -> str:
-    """Append an anonymous Chatham House synthesis to the prompt for debate rounds.
-
-    Args:
-        original_prompt: The original prompt to augment.
-        synthesis: The anonymised synthesis from prior round responses.
-        round_number: The current debate round number.
-
-    Returns:
-        The original prompt with the synthesis section appended.
-    """
-    return original_prompt + _SYNTHESIS_TEMPLATE.format(
-        round_number=round_number,
-        synthesis=synthesis,
     )

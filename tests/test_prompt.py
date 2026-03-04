@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from star_chamber.prompt import (
-    augment_with_synthesis,
     render_code_review_prompt,
     render_design_prompt,
 )
@@ -82,20 +81,3 @@ class TestRenderDesignPrompt:
         assert "recommendation" in result
         assert "approaches" in result
         assert "summary" in result
-
-
-class TestAugmentWithSynthesis:
-    def test_synthesis_appended_correctly(self):
-        original = "You are reviewing code."
-        synthesis = "Provider A found a bug in line 10."
-        result = augment_with_synthesis(original, synthesis, round_number=2)
-        assert "Provider A found a bug in line 10." in result
-
-    def test_round_number_included(self):
-        result = augment_with_synthesis("Original.", "Some synthesis.", round_number=3)
-        assert "round 3" in result
-
-    def test_original_prompt_preserved(self):
-        original = "You are a senior software craftsman reviewing code."
-        result = augment_with_synthesis(original, "Feedback here.", round_number=1)
-        assert result.startswith(original)

@@ -1,0 +1,8 @@
+{
+  "providers": [
+    {"provider": "openai", "model": "gpt-4o", "api_key": "${OPENAI_API_KEY}", "max_tokens": 16384},
+    {"provider": "anthropic", "model": "claude-sonnet-4-20250514", "api_key": "${ANTHROPIC_API_KEY}"}
+  ],
+  "timeout_seconds": 90,
+  "consensus_threshold": 2
+}

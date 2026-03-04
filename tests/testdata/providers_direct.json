@@ -1,0 +1,6 @@
+{
+  "providers": [
+    {"provider": "openai", "model": "gpt-4o", "api_key": "${OPENAI_API_KEY}"},
+    {"provider": "ollama", "model": "llama-3.1-70b", "api_base": "http://localhost:11434", "local": true}
+  ]
+}

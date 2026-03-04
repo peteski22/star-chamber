@@ -1,0 +1,7 @@
+{
+  "platform": "any-llm",
+  "providers": [
+    {"provider": "openai", "model": "gpt-4o"},
+    {"provider": "anthropic", "model": "claude-sonnet-4-20250514"}
+  ]
+}

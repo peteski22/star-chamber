@@ -212,6 +212,92 @@ class TestAskCommand:
 
 
 # ---------------------------------------------------------------------------
+# --context-file flag.
+# ---------------------------------------------------------------------------
+
+
+class TestContextFileFlag:
+    def test_review_with_context_file(self, tmp_path: Path):
+        src = tmp_path / "app.py"
+        src.write_text("x = 1\n")
+        ctx = tmp_path / "context.txt"
+        ctx.write_text("This project uses strict typing.\n")
+
+        responses = [
+            _success_response("openai", "gpt-4o", _code_review_json()),
+        ]
+        single_config = CouncilConfig(providers=(_OPENAI_CONFIG,))
+
+        with (
+            patch("star_chamber.cli._load_config", return_value=single_config),
+            patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+        ):
+            runner = CliRunner()
+            result = runner.invoke(main, ["review", "--context-file", str(ctx), str(src)])
+
+        assert result.exit_code == 0
+        # Context should appear in the prompt sent to providers.
+        call_kwargs = mock_fan_out.call_args
+        prompt_arg = call_kwargs.kwargs.get("prompt") or call_kwargs[0][1]
+        assert "strict typing" in prompt_arg
+
+    def test_ask_with_context_file(self, tmp_path: Path):
+        ctx = tmp_path / "context.txt"
+        ctx.write_text("Monorepo with shared packages.\n")
+
+        responses = [
+            _success_response("openai", "gpt-4o", _design_json()),
+        ]
+        single_config = CouncilConfig(providers=(_OPENAI_CONFIG,))
+
+        with (
+            patch("star_chamber.cli._load_config", return_value=single_config),
+            patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+        ):
+            runner = CliRunner()
+            result = runner.invoke(main, ["ask", "--context-file", str(ctx), "Should we use Redis?"])
+
+        assert result.exit_code == 0
+        call_kwargs = mock_fan_out.call_args
+        prompt_arg = call_kwargs.kwargs.get("prompt") or call_kwargs[0][1]
+        assert "shared packages" in prompt_arg
+
+    def test_review_context_file_not_found(self, tmp_path: Path):
+        src = tmp_path / "app.py"
+        src.write_text("x = 1\n")
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["review", "--context-file", "/nonexistent/ctx.txt", str(src)])
+        assert result.exit_code != 0
+
+    def test_review_without_context_file(self, tmp_path: Path):
+        """Context defaults to empty when --context-file is not provided."""
+        src = tmp_path / "app.py"
+        src.write_text("x = 1\n")
+
+        responses = [
+            _success_response("openai", "gpt-4o", _code_review_json()),
+        ]
+        single_config = CouncilConfig(providers=(_OPENAI_CONFIG,))
+
+        with (
+            patch("star_chamber.cli._load_config", return_value=single_config),
+            patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+        ):
+            runner = CliRunner()
+            result = runner.invoke(main, ["review", str(src)])
+
+        assert result.exit_code == 0
+        # Prompt should contain the "no context" fallback.
+        call_kwargs = mock_fan_out.call_args
+        prompt_arg = call_kwargs.kwargs.get("prompt") or call_kwargs[0][1]
+        assert "No project-specific context" in prompt_arg
+
+
+# ---------------------------------------------------------------------------
 # list-providers command.
 # ---------------------------------------------------------------------------
 

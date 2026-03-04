@@ -124,6 +124,12 @@ def main() -> None:
 @click.option("-p", "--provider", "providers", multiple=True, help="Provider name to include (repeatable).")
 @click.option("--config", "config_path", type=click.Path(), default=None, help="Path to providers.json.")
 @click.option("--timeout", type=int, default=None, help="Per-provider timeout in seconds.")
+@click.option(
+    "--context-file",
+    type=click.Path(exists=True),
+    default=None,
+    help="File containing project context to include in the prompt.",
+)
 @click.option("--output", type=click.Path(), default=None, help="Write JSON result to file.")
 @click.option("--format", "fmt", type=click.Choice(["text", "json"]), default="text", help="Output format.")
 def review(
@@ -131,6 +137,7 @@ def review(
     providers: tuple[str, ...],
     config_path: str | None,
     timeout: int | None,
+    context_file: str | None,
     output: str | None,
     fmt: str,
 ) -> None:
@@ -165,6 +172,11 @@ def review(
             platform=config.platform,
         )
 
+    # Read context file if provided.
+    context = ""
+    if context_file:
+        context = Path(context_file).read_text(encoding="utf-8")
+
     # Read file contents.
     file_contents: dict[str, str] = {}
     for file_path in files:
@@ -175,7 +187,7 @@ def review(
         files=file_contents,
         config=config,
         mode="code-review",
-        context="",
+        context=context,
     )
 
     # Output handling.
@@ -193,6 +205,12 @@ def review(
 @click.option("-p", "--provider", "providers", multiple=True, help="Provider name to include (repeatable).")
 @click.option("--config", "config_path", type=click.Path(), default=None, help="Path to providers.json.")
 @click.option("--timeout", type=int, default=None, help="Per-provider timeout in seconds.")
+@click.option(
+    "--context-file",
+    type=click.Path(exists=True),
+    default=None,
+    help="File containing project context to include in the prompt.",
+)
 @click.option("--output", type=click.Path(), default=None, help="Write JSON result to file.")
 @click.option("--format", "fmt", type=click.Choice(["text", "json"]), default="text", help="Output format.")
 def ask(
@@ -200,6 +218,7 @@ def ask(
     providers: tuple[str, ...],
     config_path: str | None,
     timeout: int | None,
+    context_file: str | None,
     output: str | None,
     fmt: str,
 ) -> None:
@@ -234,10 +253,16 @@ def ask(
             platform=config.platform,
         )
 
+    # Read context file if provided.
+    context = ""
+    if context_file:
+        context = Path(context_file).read_text(encoding="utf-8")
+
     result = run_council_sync(
         prompt=question,
         config=config,
         mode="design-question",
+        context=context,
     )
 
     # Output handling.

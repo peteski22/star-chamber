@@ -49,6 +49,10 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "*" = ["py.typed"]
+"star_chamber.spec" = ["*.md"]
+"star_chamber.spec.schemas" = ["*.json"]
+"star_chamber.spec.examples.code_review" = ["*.json"]
+"star_chamber.spec.examples.design_question" = ["*.json"]
 
 [tool.setuptools_scm]
 

@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=75", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "star-chamber"
+dynamic = ["version"]
+description = "Multi-LLM council protocol SDK."
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.11"
+dependencies = [
+    "any-llm-sdk>=1.9.0,<2.0.0",
+    "click>=8.3.1",
+]
+
+[project.optional-dependencies]
+platform = ["any-llm-platform-client>=0.4.0"]
+
+[project.scripts]
+star-chamber = "star_chamber.cli:main"
+
+[dependency-groups]
+dev = [
+    { include-group = "lint" },
+    { include-group = "tests" },
+    "debugpy>=1.8.20",
+]
+
+lint = [
+    "pre-commit>=4.5.1",
+    "ruff>=0.15.4",
+]
+
+tests = [
+    "pytest>=9.0.2",
+    "setuptools>=82.0.0",
+    "setuptools-scm[toml]>=9.2.2",
+]
+
+all = [
+    { include-group = "dev" },
+    { include-group = "lint" },
+    { include-group = "tests" },
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["py.typed"]
+
+[tool.setuptools_scm]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

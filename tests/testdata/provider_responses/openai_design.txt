@@ -1,0 +1,22 @@
+```json
+{
+  "recommendation": "Use the repository pattern for data access.",
+  "approaches": [
+    {
+      "name": "Repository Pattern",
+      "pros": ["Clean separation of concerns", "Testable"],
+      "cons": ["More boilerplate"],
+      "risk_level": "low",
+      "fit_rating": "excellent"
+    },
+    {
+      "name": "Active Record",
+      "pros": ["Simple for small projects"],
+      "cons": ["Tight coupling to DB", "Hard to test"],
+      "risk_level": "medium",
+      "fit_rating": "fair"
+    }
+  ],
+  "summary": "Repository pattern is the best fit for this codebase."
+}
+```

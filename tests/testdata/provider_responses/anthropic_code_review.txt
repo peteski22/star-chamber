@@ -1,0 +1,1 @@
+{"provider": "anthropic", "quality_rating": "good", "issues": [], "praise": ["Well structured."], "summary": "No issues found."}

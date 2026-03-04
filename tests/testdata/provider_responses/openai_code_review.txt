@@ -1,0 +1,17 @@
+```json
+{
+  "provider": "openai",
+  "quality_rating": "fair",
+  "issues": [
+    {
+      "severity": "high",
+      "location": "auth.py:23",
+      "category": "correctness",
+      "description": "SHA-256 for password hashing is insecure.",
+      "suggestion": "Use bcrypt."
+    }
+  ],
+  "praise": ["Clean separation of concerns."],
+  "summary": "Critical security flaw found."
+}
+```

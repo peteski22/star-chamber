@@ -282,3 +282,30 @@ class TestConfigErrorHandling:
 
         assert result.exit_code != 0
         assert "Bad config" in result.output
+
+
+# ---------------------------------------------------------------------------
+# schema command.
+# ---------------------------------------------------------------------------
+
+
+class TestSchemaCommand:
+    def test_schema_list(self):
+        runner = CliRunner()
+        result = runner.invoke(main, ["schema", "list"])
+        assert result.exit_code == 0
+        assert "code-review-result" in result.output
+        assert "council-config" in result.output
+
+    def test_schema_get(self):
+        runner = CliRunner()
+        result = runner.invoke(main, ["schema", "code-review-result"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert isinstance(data, dict)
+
+    def test_schema_unknown(self):
+        runner = CliRunner()
+        result = runner.invoke(main, ["schema", "nonexistent"])
+        assert result.exit_code != 0
+        assert "not found" in result.output.lower() or "Error" in result.output

@@ -270,3 +270,22 @@ def list_providers(config_path: str | None) -> None:
             status = "direct"
         click.echo(f"  {provider.provider} — {provider.model} [{status}]")
     click.echo("")
+
+
+@main.command()
+@click.argument("name")
+def schema(name: str) -> None:
+    """Show a protocol schema. Use 'list' to see available schemas."""
+    from star_chamber.schema import get_schema, list_schemas
+
+    if name == "list":
+        for schema_name in list_schemas():
+            click.echo(schema_name)
+        return
+
+    try:
+        content = get_schema(name)
+    except FileNotFoundError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(2)
+    click.echo(content)

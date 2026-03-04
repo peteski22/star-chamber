@@ -77,6 +77,7 @@ star-chamber ask "Should we use Redis or Memcached for session storage?"
 --provider, -p    Provider to include (repeatable)
 --config          Path to providers.json
 --timeout         Per-provider timeout in seconds
+--context-file    File containing project context to include in the prompt
 --format          Output format: text or json
 --output          Write JSON result to file
 ```

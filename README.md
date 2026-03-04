@@ -1,0 +1,133 @@
+# star-chamber
+
+Multi-LLM council protocol SDK. Fan out code reviews and design questions to multiple LLM providers, then classify findings by consensus.
+
+## Installation
+
+```bash
+pip install star-chamber
+```
+
+Or with [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv add star-chamber
+```
+
+For platform-managed API key resolution, install the optional `platform` extra:
+
+```bash
+pip install star-chamber[platform]
+```
+
+## Configuration
+
+Create `~/.config/star-chamber/providers.json`:
+
+```json
+{
+  "providers": [
+    {"provider": "openai", "model": "gpt-4o", "api_key": "${OPENAI_API_KEY}"},
+    {"provider": "anthropic", "model": "claude-sonnet-4-20250514", "api_key": "${ANTHROPIC_API_KEY}"}
+  ],
+  "timeout_seconds": 90,
+  "consensus_threshold": 2
+}
+```
+
+API keys can be literal values or `${ENV_VAR}` references that are resolved at runtime.
+
+Override the config path with the `STAR_CHAMBER_CONFIG` environment variable.
+
+## CLI
+
+### Code review
+
+```bash
+star-chamber review src/auth.py src/db.py
+```
+
+### Design question
+
+```bash
+star-chamber ask "Should we use Redis or Memcached for session storage?"
+```
+
+### Options
+
+```
+--provider, -p    Provider to include (repeatable)
+--config          Path to providers.json
+--timeout         Per-provider timeout in seconds
+--debate          Enable multi-round debate mode
+--rounds          Number of debate rounds (default: 2)
+--format          Output format: text or json
+--output          Write JSON result to file
+```
+
+### List providers
+
+```bash
+star-chamber list-providers
+```
+
+## Python API
+
+```python
+from star_chamber import run_council_sync, CouncilConfig, ProviderConfig
+
+config = CouncilConfig(
+    providers=(
+        ProviderConfig(provider="openai", model="gpt-4o"),
+        ProviderConfig(provider="anthropic", model="claude-sonnet-4-20250514"),
+    ),
+    timeout_seconds=90,
+    consensus_threshold=2,
+)
+
+# Code review.
+result = run_council_sync(
+    files={"auth.py": open("auth.py").read()},
+    config=config,
+    mode="code-review",
+)
+
+print(result.summary)
+for issue in result.consensus_issues:
+    print(f"  [{issue.severity}] {issue.location}: {issue.description}")
+
+# Design question.
+result = run_council_sync(
+    prompt="Should we use a monorepo or polyrepo?",
+    config=config,
+    mode="design-question",
+)
+
+print(result.consensus_recommendation)
+```
+
+### Async
+
+```python
+import asyncio
+from star_chamber import run_council
+
+result = asyncio.run(run_council(
+    files={"auth.py": open("auth.py").read()},
+    mode="code-review",
+))
+```
+
+## Consensus classification
+
+Issues from multiple providers are grouped by file, line proximity (within 5 lines), and category, then classified as:
+
+- **Consensus** -- all providers agree.
+- **Majority** -- two or more providers agree, but not all.
+- **Individual** -- flagged by a single provider.
+
+Results are sorted by severity within each bucket.
+
+## License
+
+Apache-2.0

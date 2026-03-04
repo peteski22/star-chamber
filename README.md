@@ -37,6 +37,24 @@ Create `~/.config/star-chamber/providers.json`:
 
 API keys can be literal values or `${ENV_VAR}` references that are resolved at runtime.
 
+### Platform mode (any-llm)
+
+Instead of managing API keys per provider, you can use [Mozilla AI's any-llm platform](https://github.com/mozilla-ai/any-llm) for centralised key management. Set `ANY_LLM_KEY` in your environment and add `"platform": "any-llm"` to your config:
+
+```json
+{
+  "providers": [
+    {"provider": "openai", "model": "gpt-4o"},
+    {"provider": "anthropic", "model": "claude-sonnet-4-20250514"}
+  ],
+  "platform": "any-llm",
+  "timeout_seconds": 90,
+  "consensus_threshold": 2
+}
+```
+
+When `platform` is set, API keys are fetched from the platform service — no `api_key` fields needed. Install the platform extra: `pip install star-chamber[platform]`.
+
 Override the config path with the `STAR_CHAMBER_CONFIG` environment variable.
 
 ## CLI

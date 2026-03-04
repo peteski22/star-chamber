@@ -59,8 +59,6 @@ star-chamber ask "Should we use Redis or Memcached for session storage?"
 --provider, -p    Provider to include (repeatable)
 --config          Path to providers.json
 --timeout         Per-provider timeout in seconds
---debate          Enable multi-round debate mode
---rounds          Number of debate rounds (default: 2)
 --format          Output format: text or json
 --output          Write JSON result to file
 ```
@@ -69,6 +67,18 @@ star-chamber ask "Should we use Redis or Memcached for session storage?"
 
 ```bash
 star-chamber list-providers
+```
+
+### Protocol schemas
+
+The SDK ships the council protocol specification as package data.
+
+```bash
+# List available schemas.
+star-chamber schema list
+
+# Print a specific schema.
+star-chamber schema code-review-result
 ```
 
 ## Python API
@@ -116,6 +126,18 @@ result = asyncio.run(run_council(
     files={"auth.py": open("auth.py").read()},
     mode="code-review",
 ))
+```
+
+### Schema access
+
+```python
+from star_chamber import get_schema, list_schemas
+
+# List available schema names.
+names = list_schemas()
+
+# Get a specific schema as a JSON string.
+schema_json = get_schema("code-review-result")
 ```
 
 ## Consensus classification

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from star_chamber.council import _build_code_review_result, _build_design_result, _synthesize_round, run_council
+from star_chamber.council import _build_code_review_result, _build_design_result, run_council
 from star_chamber.transport import ProviderResponse
 from star_chamber.types import (
     CodeReviewResult,
@@ -198,41 +198,6 @@ class TestBuildDesignQuestionResult:
         result = _build_design_result(responses, prompt="How to improve perf?")
 
         assert result.consensus_recommendation is None
-
-
-# ---------------------------------------------------------------------------
-# _synthesize_round
-# ---------------------------------------------------------------------------
-
-
-class TestSynthesizeRound:
-    def test_produces_anonymous_text(self):
-        responses = [
-            _success_response("openai", "gpt-4o", _code_review_json(summary="Code is clean.")),
-            _success_response("anthropic", "claude-3", _code_review_json(summary="Missing error handling.")),
-        ]
-
-        synthesis = _synthesize_round(responses)
-
-        # Must not contain provider names.
-        assert "openai" not in synthesis.lower()
-        assert "anthropic" not in synthesis.lower()
-        assert "gpt" not in synthesis.lower()
-        assert "claude" not in synthesis.lower()
-        # Must contain actual content.
-        assert len(synthesis) > 0
-
-    def test_skips_failed_responses(self):
-        responses = [
-            _success_response("openai", "gpt-4o", _code_review_json(summary="All good.")),
-            _error_response("anthropic", "claude-3", "Timeout"),
-        ]
-
-        synthesis = _synthesize_round(responses)
-
-        # Only one successful response contributes.
-        assert "anthropic" not in synthesis.lower()
-        assert len(synthesis) > 0
 
 
 # ---------------------------------------------------------------------------
@@ -428,86 +393,6 @@ class TestRunCouncilDesignQuestion:
 
 
 # ---------------------------------------------------------------------------
-# run_council — debate mode.
-# ---------------------------------------------------------------------------
-
-
-class TestRunCouncilDebate:
-    async def test_debate_calls_fan_out_per_round(self):
-        mock_responses = [
-            _success_response("openai", "gpt-4o", _code_review_json()),
-            _success_response("anthropic", "claude-3", _code_review_json()),
-        ]
-        mock_fan_out = AsyncMock(return_value=mock_responses)
-
-        with (
-            patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", mock_fan_out),
-        ):
-            result = await run_council(
-                files={"app.py": "print('hello')"},
-                config=_TWO_PROVIDER_CONFIG,
-                mode="code-review",
-                debate=True,
-                rounds=3,
-            )
-
-        assert isinstance(result, CodeReviewResult)
-        # One initial call plus two additional debate rounds.
-        assert mock_fan_out.call_count == 3
-        assert result.debate is not None
-        assert result.debate.rounds_completed == 3
-
-    async def test_debate_design_question(self):
-        mock_responses = [
-            _success_response("openai", "gpt-4o", _design_json()),
-            _success_response("anthropic", "claude-3", _design_json()),
-        ]
-        mock_fan_out = AsyncMock(return_value=mock_responses)
-
-        with (
-            patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", mock_fan_out),
-        ):
-            result = await run_council(
-                prompt="Should we use microservices?",
-                config=_TWO_PROVIDER_CONFIG,
-                mode="design-question",
-                debate=True,
-                rounds=2,
-            )
-
-        assert isinstance(result, DesignQuestionResult)
-        assert mock_fan_out.call_count == 2
-        assert result.debate is not None
-        assert result.debate.rounds_completed == 2
-
-    async def test_debate_augments_prompt_with_synthesis(self):
-        mock_responses = [
-            _success_response("openai", "gpt-4o", _code_review_json(summary="Looks clean.")),
-            _success_response("anthropic", "claude-3", _code_review_json(summary="Needs tests.")),
-        ]
-        mock_fan_out = AsyncMock(return_value=mock_responses)
-
-        with (
-            patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", mock_fan_out),
-        ):
-            await run_council(
-                files={"app.py": "print('hello')"},
-                config=_TWO_PROVIDER_CONFIG,
-                mode="code-review",
-                debate=True,
-                rounds=2,
-            )
-
-        # The second call should have a longer prompt (augmented with synthesis).
-        first_call_prompt = mock_fan_out.call_args_list[0][1].get("prompt") or mock_fan_out.call_args_list[0][0][1]
-        second_call_prompt = mock_fan_out.call_args_list[1][1].get("prompt") or mock_fan_out.call_args_list[1][0][1]
-        assert len(second_call_prompt) > len(first_call_prompt)
-
-
-# ---------------------------------------------------------------------------
 # run_council_sync
 # ---------------------------------------------------------------------------
 
@@ -554,6 +439,55 @@ class TestRunCouncilSync:
 
         assert isinstance(result, DesignQuestionResult)
         assert result.mode == "design-question"
+
+
+# ---------------------------------------------------------------------------
+# run_council — single-round only.
+# ---------------------------------------------------------------------------
+
+
+class TestRunCouncilSingleRoundOnly:
+    """Verify the SDK always does exactly one fan-out call."""
+
+    async def test_single_fan_out_call(self):
+        """run_council() always calls fan_out exactly once."""
+        mock_responses = [
+            _success_response("openai", "gpt-4o", _code_review_json()),
+            _success_response("anthropic", "claude-3", _code_review_json()),
+        ]
+        mock_fan_out = AsyncMock(return_value=mock_responses)
+
+        with (
+            patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
+            patch("star_chamber.council.fan_out", mock_fan_out),
+        ):
+            await run_council(
+                files={"app.py": "print('hello')"},
+                config=_TWO_PROVIDER_CONFIG,
+                mode="code-review",
+            )
+
+        assert mock_fan_out.call_count == 1
+
+    async def test_no_debate_parameter(self):
+        """run_council() does not accept debate or rounds parameters."""
+        with pytest.raises(TypeError):
+            await run_council(
+                files={"app.py": "x = 1"},
+                config=_TWO_PROVIDER_CONFIG,
+                mode="code-review",
+                debate=True,
+            )
+
+    async def test_no_rounds_parameter(self):
+        """run_council() does not accept a rounds parameter."""
+        with pytest.raises(TypeError):
+            await run_council(
+                files={"app.py": "x = 1"},
+                config=_TWO_PROVIDER_CONFIG,
+                mode="code-review",
+                rounds=3,
+            )
 
 
 # ---------------------------------------------------------------------------

@@ -8,13 +8,12 @@ from collections.abc import Sequence
 from star_chamber.config import load_config
 from star_chamber.consensus import classify
 from star_chamber.parsing import ParseError, parse_code_review, parse_design_advice
-from star_chamber.prompt import augment_with_synthesis, render_code_review_prompt, render_design_prompt
+from star_chamber.prompt import render_code_review_prompt, render_design_prompt
 from star_chamber.transport import ProviderResponse, fan_out, resolve_api_keys
 from star_chamber.types import (
     Approach,
     CodeReviewResult,
     CouncilConfig,
-    DebateMetadata,
     DesignQuestionResult,
     ProviderDesignAdvice,
     ProviderError,
@@ -24,36 +23,15 @@ from star_chamber.types import (
 _VALID_MODES = frozenset({"code-review", "design-question"})
 
 
-def _synthesize_round(responses: Sequence[ProviderResponse]) -> str:
-    """Build an anonymous Chatham House synthesis from round responses.
-
-    Produces a plain-text summary of what providers said without attributing
-    responses to specific providers.
-
-    Args:
-        responses: Provider responses from a single fan-out round.
-
-    Returns:
-        Anonymous synthesis text suitable for augmenting the next round's prompt.
-    """
-    successful = [r for r in responses if r.success and r.content]
-    parts: list[str] = []
-    for idx, response in enumerate(successful, start=1):
-        parts.append(f"- Reviewer {idx}: {response.content[:500]}")
-    return "\n".join(parts)
-
-
 def _build_code_review_result(
     responses: Sequence[ProviderResponse],
     threshold: int = 2,
-    debate: DebateMetadata | None = None,
 ) -> CodeReviewResult:
     """Parse responses, classify issues, and build a CodeReviewResult.
 
     Args:
-        responses: Provider responses from the final fan-out round.
+        responses: Provider responses from the fan-out round.
         threshold: Consensus threshold for classification.
-        debate: Optional debate metadata to attach to the result.
 
     Returns:
         A fully populated CodeReviewResult.
@@ -93,21 +71,18 @@ def _build_code_review_result(
         individual_issues=classification.individual_issues,
         quality_ratings=quality_ratings,
         summary=summary,
-        debate=debate,
     )
 
 
 def _build_design_result(
     responses: Sequence[ProviderResponse],
     prompt: str,
-    debate: DebateMetadata | None = None,
 ) -> DesignQuestionResult:
     """Parse responses, aggregate approaches, and build a DesignQuestionResult.
 
     Args:
-        responses: Provider responses from the final fan-out round.
+        responses: Provider responses from the fan-out round.
         prompt: The original design question.
-        debate: Optional debate metadata to attach to the result.
 
     Returns:
         A fully populated DesignQuestionResult.
@@ -150,7 +125,6 @@ def _build_design_result(
         approaches=tuple(all_approaches),
         consensus_recommendation=consensus_recommendation,
         summary=summary,
-        debate=debate,
     )
 
 
@@ -161,8 +135,6 @@ async def run_council(
     prompt: str = "",
     mode: str = "code-review",
     context: str = "",
-    debate: bool = False,
-    rounds: int = 1,
 ) -> CodeReviewResult | DesignQuestionResult:
     """Run a multi-LLM council session.
 
@@ -175,8 +147,6 @@ async def run_council(
         prompt: The design question (required for design-question mode).
         mode: Council mode, either "code-review" or "design-question".
         context: Optional project-specific context string.
-        debate: Whether to run in debate mode with multiple rounds.
-        rounds: Number of debate rounds (only used when debate is True).
 
     Returns:
         CodeReviewResult for code-review mode, DesignQuestionResult for design-question mode.
@@ -212,42 +182,23 @@ async def run_council(
     else:
         rendered_prompt = render_design_prompt(prompt, context=context)
 
-    # Determine effective round count.
-    effective_rounds = rounds if debate else 1
-
-    # Execute rounds.
-    current_prompt = rendered_prompt
-    last_responses: list[ProviderResponse] = []
-
-    for round_num in range(1, effective_rounds + 1):
-        last_responses = await fan_out(
-            configs=resolved_providers,
-            prompt=current_prompt,
-            timeout=float(config.timeout_seconds),
-        )
-
-        # If not the final round, augment the prompt with synthesis.
-        if round_num < effective_rounds:
-            synthesis = _synthesize_round(last_responses)
-            current_prompt = augment_with_synthesis(rendered_prompt, synthesis, round_number=round_num)
-
-    # Build debate metadata if applicable.
-    debate_meta: DebateMetadata | None = None
-    if debate:
-        debate_meta = DebateMetadata(rounds_completed=effective_rounds, converged=False)
+    # Fan out to all providers.
+    responses = await fan_out(
+        configs=resolved_providers,
+        prompt=rendered_prompt,
+        timeout=float(config.timeout_seconds),
+    )
 
     # Build and return the appropriate result type.
     if mode == "code-review":
         return _build_code_review_result(
-            last_responses,
+            responses,
             threshold=config.consensus_threshold,
-            debate=debate_meta,
         )
 
     return _build_design_result(
-        last_responses,
+        responses,
         prompt=prompt,
-        debate=debate_meta,
     )
 
 
@@ -258,8 +209,6 @@ def run_council_sync(
     prompt: str = "",
     mode: str = "code-review",
     context: str = "",
-    debate: bool = False,
-    rounds: int = 1,
 ) -> CodeReviewResult | DesignQuestionResult:
     """Synchronous wrapper around run_council().
 
@@ -269,8 +218,6 @@ def run_council_sync(
         prompt: The design question (required for design-question mode).
         mode: Council mode, either "code-review" or "design-question".
         context: Optional project-specific context string.
-        debate: Whether to run in debate mode with multiple rounds.
-        rounds: Number of debate rounds (only used when debate is True).
 
     Returns:
         CodeReviewResult for code-review mode, DesignQuestionResult for design-question mode.
@@ -282,7 +229,5 @@ def run_council_sync(
             prompt=prompt,
             mode=mode,
             context=context,
-            debate=debate,
-            rounds=rounds,
         )
     )

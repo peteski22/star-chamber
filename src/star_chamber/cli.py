@@ -69,9 +69,6 @@ def _print_code_review_result(result: CodeReviewResult) -> None:
     if result.summary:
         click.echo(f"\nSummary: {result.summary}")
 
-    if result.debate:
-        click.echo(f"\nDebate: {result.debate.rounds_completed} rounds, converged={result.debate.converged}")
-
     click.echo("")
 
 
@@ -114,9 +111,6 @@ def _print_design_result(result: DesignQuestionResult) -> None:
     if result.summary:
         click.echo(f"\nSummary: {result.summary}")
 
-    if result.debate:
-        click.echo(f"\nDebate: {result.debate.rounds_completed} rounds, converged={result.debate.converged}")
-
     click.echo("")
 
 
@@ -130,8 +124,6 @@ def main() -> None:
 @click.option("-p", "--provider", "providers", multiple=True, help="Provider name to include (repeatable).")
 @click.option("--config", "config_path", type=click.Path(), default=None, help="Path to providers.json.")
 @click.option("--timeout", type=int, default=None, help="Per-provider timeout in seconds.")
-@click.option("--debate", is_flag=True, default=False, help="Enable debate mode.")
-@click.option("--rounds", type=int, default=2, help="Number of debate rounds.")
 @click.option("--output", type=click.Path(), default=None, help="Write JSON result to file.")
 @click.option("--format", "fmt", type=click.Choice(["text", "json"]), default="text", help="Output format.")
 def review(
@@ -139,8 +131,6 @@ def review(
     providers: tuple[str, ...],
     config_path: str | None,
     timeout: int | None,
-    debate: bool,
-    rounds: int,
     output: str | None,
     fmt: str,
 ) -> None:
@@ -186,8 +176,6 @@ def review(
         config=config,
         mode="code-review",
         context="",
-        debate=debate,
-        rounds=rounds,
     )
 
     # Output handling.
@@ -205,8 +193,6 @@ def review(
 @click.option("-p", "--provider", "providers", multiple=True, help="Provider name to include (repeatable).")
 @click.option("--config", "config_path", type=click.Path(), default=None, help="Path to providers.json.")
 @click.option("--timeout", type=int, default=None, help="Per-provider timeout in seconds.")
-@click.option("--debate", is_flag=True, default=False, help="Enable debate mode.")
-@click.option("--rounds", type=int, default=2, help="Number of debate rounds.")
 @click.option("--output", type=click.Path(), default=None, help="Write JSON result to file.")
 @click.option("--format", "fmt", type=click.Choice(["text", "json"]), default="text", help="Output format.")
 def ask(
@@ -214,8 +200,6 @@ def ask(
     providers: tuple[str, ...],
     config_path: str | None,
     timeout: int | None,
-    debate: bool,
-    rounds: int,
     output: str | None,
     fmt: str,
 ) -> None:
@@ -254,8 +238,6 @@ def ask(
         prompt=question,
         config=config,
         mode="design-question",
-        debate=debate,
-        rounds=rounds,
     )
 
     # Output handling.

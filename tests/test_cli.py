@@ -144,27 +144,6 @@ class TestReviewCommand:
         assert len(configs_arg) == 1
         assert configs_arg[0].provider == "openai"
 
-    def test_review_with_debate_and_rounds(self, tmp_path: Path):
-        src = tmp_path / "debate.py"
-        src.write_text("z = 3\n")
-
-        responses = [
-            _success_response("openai", "gpt-4o", _code_review_json()),
-            _success_response("anthropic", "claude-3", _code_review_json()),
-        ]
-
-        with (
-            patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
-            patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
-        ):
-            runner = CliRunner()
-            result = runner.invoke(main, ["review", "--debate", "--rounds", "3", str(src)])
-
-        assert result.exit_code == 0
-        # Debate with 3 rounds means fan_out is called 3 times.
-        assert mock_fan_out.call_count == 3
-
     def test_review_output_to_file(self, tmp_path: Path):
         src = tmp_path / "out_test.py"
         src.write_text("a = 1\n")

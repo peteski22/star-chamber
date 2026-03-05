@@ -99,6 +99,7 @@ async def send_to_provider(
 
     kwargs: dict[str, object] = {
         "model": config.model,
+        "provider": config.provider,
         "messages": [{"role": "user", "content": prompt}],
     }
 

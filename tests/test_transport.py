@@ -118,6 +118,18 @@ class TestSendToProvider:
         assert result.provider == "anthropic"
         assert result.model == "claude-3"
 
+    def test_provider_passed_as_separate_kwarg(self):
+        """The any-llm SDK uses a separate provider kwarg for routing."""
+        mock_module = _make_mock_any_llm("Looks good.")
+        config = ProviderConfig(provider="openai", model="gpt-4o")
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            asyncio.run(send_to_provider(config, "Review this."))
+
+        call_kwargs = mock_module.acompletion.call_args.kwargs
+        assert call_kwargs["model"] == "gpt-4o"
+        assert call_kwargs["provider"] == "openai"
+
     def test_openai_uses_max_completion_tokens(self):
         mock_module = _make_mock_any_llm()
         config = ProviderConfig(provider="openai", model="gpt-4o", max_tokens=8192)

@@ -116,7 +116,16 @@ async def send_to_provider(
         kwargs["api_base"] = config.api_base
 
     if timeout is not None:
-        kwargs["timeout"] = timeout
+        if config.provider == "gemini":
+            # TODO: Remove when mozilla-ai/any-llm#901 is resolved.
+            # https://github.com/mozilla-ai/any-llm/issues/901
+            # Gemini rejects request-level timeout kwargs; route via client_args
+            # so any-llm passes it to genai.Client(http_options=...) instead.
+            kwargs["client_args"] = {
+                "http_options": {"timeout": int(timeout * 1000)},
+            }
+        else:
+            kwargs["timeout"] = timeout
 
     try:
         response = await any_llm.acompletion(**kwargs)

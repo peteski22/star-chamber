@@ -239,6 +239,44 @@ class TestSendToProvider:
         assert result.success is False
         assert "no response" in result.error.lower() or "empty" in result.error.lower()
 
+    def test_gemini_timeout_uses_client_args(self):
+        """Gemini does not support request-level timeout; it must be passed
+        via client_args as http_options with millisecond value."""
+        mock_module = _make_mock_any_llm()
+        config = ProviderConfig(provider="gemini", model="gemini-2.0-flash")
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            asyncio.run(send_to_provider(config, "Review this.", timeout=30.0))
+
+        call_kwargs = mock_module.acompletion.call_args.kwargs
+        assert "timeout" not in call_kwargs
+        assert "client_args" in call_kwargs
+        assert call_kwargs["client_args"]["http_options"]["timeout"] == 30000
+
+    def test_non_gemini_timeout_uses_request_kwarg(self):
+        """Non-gemini providers receive timeout as a direct request kwarg."""
+        mock_module = _make_mock_any_llm()
+        config = ProviderConfig(provider="openai", model="gpt-4")
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            asyncio.run(send_to_provider(config, "Review this.", timeout=30.0))
+
+        call_kwargs = mock_module.acompletion.call_args.kwargs
+        assert call_kwargs["timeout"] == 30.0
+        assert "client_args" not in call_kwargs
+
+    def test_gemini_no_timeout_omits_client_args(self):
+        """When no timeout is set, gemini should not get client_args either."""
+        mock_module = _make_mock_any_llm()
+        config = ProviderConfig(provider="gemini", model="gemini-2.0-flash")
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            asyncio.run(send_to_provider(config, "Review this."))
+
+        call_kwargs = mock_module.acompletion.call_args.kwargs
+        assert "timeout" not in call_kwargs
+        assert "client_args" not in call_kwargs
+
 
 # -- fan_out ------------------------------------------------------------------
 

@@ -7,7 +7,7 @@ You are a senior software craftsman reviewing code for quality, idioms, and arch
 
 ## Project Context
 {context}
-
+{council_context_section}
 ## Code to Review
 {files_section}
 
@@ -46,7 +46,7 @@ You are a senior software architect advising on design decisions.
 
 ## Project Context
 {context}
-
+{council_context_section}
 ## Design Question
 {question}
 
@@ -76,6 +76,25 @@ Provide your advice as structured JSON:
 
 _NO_CONTEXT = "(No project-specific context provided.)"
 
+_COUNCIL_CONTEXT_SECTION = """
+## Previous Council Feedback
+{council_context}
+"""
+
+
+def _format_council_context(council_context: str) -> str:
+    """Format the council context section, returning empty string when absent.
+
+    Args:
+        council_context: Prior round feedback text. Empty means no section.
+
+    Returns:
+        Formatted section string, or empty string if no council context.
+    """
+    if not council_context:
+        return ""
+    return _COUNCIL_CONTEXT_SECTION.format(council_context=council_context)
+
 
 def _build_files_section(files: dict[str, str]) -> str:
     """Render the code-to-review section from a path-to-content mapping.
@@ -92,33 +111,45 @@ def _build_files_section(files: dict[str, str]) -> str:
     return "\n\n".join(parts)
 
 
-def render_code_review_prompt(files: dict[str, str], context: str = "") -> str:
+def render_code_review_prompt(
+    files: dict[str, str],
+    context: str = "",
+    council_context: str = "",
+) -> str:
     """Render the code-review prompt template.
 
     Args:
         files: Mapping of file paths to source content to review.
         context: Optional project-specific context string.
+        council_context: Optional prior council round feedback for debate mode.
 
     Returns:
         The fully rendered prompt string ready for LLM submission.
     """
     return _CODE_REVIEW_TEMPLATE.format(
         context=context if context else _NO_CONTEXT,
+        council_context_section=_format_council_context(council_context),
         files_section=_build_files_section(files),
     )
 
 
-def render_design_prompt(question: str, context: str = "") -> str:
+def render_design_prompt(
+    question: str,
+    context: str = "",
+    council_context: str = "",
+) -> str:
     """Render the design-question prompt template.
 
     Args:
         question: The design question to present to the council.
         context: Optional project-specific context string.
+        council_context: Optional prior council round feedback for debate mode.
 
     Returns:
         The fully rendered prompt string ready for LLM submission.
     """
     return _DESIGN_TEMPLATE.format(
         context=context if context else _NO_CONTEXT,
+        council_context_section=_format_council_context(council_context),
         question=question,
     )

@@ -135,6 +135,7 @@ async def run_council(
     prompt: str = "",
     mode: str = "code-review",
     context: str = "",
+    council_context: str = "",
 ) -> CodeReviewResult | DesignQuestionResult:
     """Run a multi-LLM council session.
 
@@ -147,6 +148,7 @@ async def run_council(
         prompt: The design question (required for design-question mode).
         mode: Council mode, either "code-review" or "design-question".
         context: Optional project-specific context string.
+        council_context: Optional prior council round feedback for debate mode.
 
     Returns:
         CodeReviewResult for code-review mode, DesignQuestionResult for design-question mode.
@@ -178,9 +180,13 @@ async def run_council(
 
     # Build the initial prompt.
     if mode == "code-review":
-        rendered_prompt = render_code_review_prompt(files, context=context)  # type: ignore[arg-type]
+        rendered_prompt = render_code_review_prompt(
+            files,
+            context=context,
+            council_context=council_context,  # type: ignore[arg-type]
+        )
     else:
-        rendered_prompt = render_design_prompt(prompt, context=context)
+        rendered_prompt = render_design_prompt(prompt, context=context, council_context=council_context)
 
     # Fan out to all providers.
     responses = await fan_out(
@@ -209,6 +215,7 @@ def run_council_sync(
     prompt: str = "",
     mode: str = "code-review",
     context: str = "",
+    council_context: str = "",
 ) -> CodeReviewResult | DesignQuestionResult:
     """Synchronous wrapper around run_council().
 
@@ -218,6 +225,7 @@ def run_council_sync(
         prompt: The design question (required for design-question mode).
         mode: Council mode, either "code-review" or "design-question".
         context: Optional project-specific context string.
+        council_context: Optional prior council round feedback for debate mode.
 
     Returns:
         CodeReviewResult for code-review mode, DesignQuestionResult for design-question mode.
@@ -229,5 +237,6 @@ def run_council_sync(
             prompt=prompt,
             mode=mode,
             context=context,
+            council_context=council_context,
         )
     )

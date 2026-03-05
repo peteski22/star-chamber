@@ -130,6 +130,12 @@ def main() -> None:
     default=None,
     help="File containing project context to include in the prompt.",
 )
+@click.option(
+    "--council-context",
+    type=click.Path(exists=True),
+    default=None,
+    help="File containing prior council round feedback for debate mode.",
+)
 @click.option("--output", type=click.Path(), default=None, help="Write JSON result to file.")
 @click.option("--format", "fmt", type=click.Choice(["text", "json"]), default="text", help="Output format.")
 def review(
@@ -138,6 +144,7 @@ def review(
     config_path: str | None,
     timeout: int | None,
     context_file: str | None,
+    council_context: str | None,
     output: str | None,
     fmt: str,
 ) -> None:
@@ -177,6 +184,11 @@ def review(
     if context_file:
         context = Path(context_file).read_text(encoding="utf-8")
 
+    # Read council context file if provided.
+    council_ctx = ""
+    if council_context:
+        council_ctx = Path(council_context).read_text(encoding="utf-8")
+
     # Read file contents.
     file_contents: dict[str, str] = {}
     for file_path in files:
@@ -188,6 +200,7 @@ def review(
         config=config,
         mode="code-review",
         context=context,
+        council_context=council_ctx,
     )
 
     # Output handling.
@@ -211,6 +224,12 @@ def review(
     default=None,
     help="File containing project context to include in the prompt.",
 )
+@click.option(
+    "--council-context",
+    type=click.Path(exists=True),
+    default=None,
+    help="File containing prior council round feedback for debate mode.",
+)
 @click.option("--output", type=click.Path(), default=None, help="Write JSON result to file.")
 @click.option("--format", "fmt", type=click.Choice(["text", "json"]), default="text", help="Output format.")
 def ask(
@@ -219,6 +238,7 @@ def ask(
     config_path: str | None,
     timeout: int | None,
     context_file: str | None,
+    council_context: str | None,
     output: str | None,
     fmt: str,
 ) -> None:
@@ -258,11 +278,17 @@ def ask(
     if context_file:
         context = Path(context_file).read_text(encoding="utf-8")
 
+    # Read council context file if provided.
+    council_ctx = ""
+    if council_context:
+        council_ctx = Path(council_context).read_text(encoding="utf-8")
+
     result = run_council_sync(
         prompt=question,
         config=config,
         mode="design-question",
         context=context,
+        council_context=council_ctx,
     )
 
     # Output handling.

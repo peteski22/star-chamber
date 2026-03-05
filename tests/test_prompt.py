@@ -51,6 +51,31 @@ class TestRenderCodeReviewPrompt:
         assert "praise" in result
         assert "summary" in result
 
+    def test_council_context_injected(self):
+        result = render_code_review_prompt(
+            {"a.py": "x = 1"},
+            council_context="Previous round found missing error handling.",
+        )
+        assert "Previous Council Feedback" in result
+        assert "Previous round found missing error handling." in result
+
+    def test_council_context_absent_when_empty(self):
+        result = render_code_review_prompt({"a.py": "x = 1"})
+        assert "Previous Council Feedback" not in result
+
+    def test_council_context_with_project_context(self):
+        result = render_code_review_prompt(
+            {"a.py": "x = 1"},
+            context="Flask app.",
+            council_context="Round 1 feedback here.",
+        )
+        assert "Flask app." in result
+        assert "Round 1 feedback here." in result
+        # Council context should appear after project context.
+        ctx_pos = result.index("Flask app.")
+        council_pos = result.index("Round 1 feedback here.")
+        assert council_pos > ctx_pos
+
 
 class TestRenderDesignPrompt:
     def test_basic_render(self):
@@ -81,3 +106,15 @@ class TestRenderDesignPrompt:
         assert "recommendation" in result
         assert "approaches" in result
         assert "summary" in result
+
+    def test_council_context_injected(self):
+        result = render_design_prompt(
+            "Should we use microservices?",
+            council_context="Council members favoured monolith.",
+        )
+        assert "Previous Council Feedback" in result
+        assert "Council members favoured monolith." in result
+
+    def test_council_context_absent_when_empty(self):
+        result = render_design_prompt("Should we use microservices?")
+        assert "Previous Council Feedback" not in result

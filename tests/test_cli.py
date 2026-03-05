@@ -371,6 +371,88 @@ class TestConfigErrorHandling:
 
 
 # ---------------------------------------------------------------------------
+# --council-context flag.
+# ---------------------------------------------------------------------------
+
+
+class TestCouncilContextFlag:
+    def test_review_with_council_context(self, tmp_path: Path):
+        src = tmp_path / "app.py"
+        src.write_text("x = 1\n")
+        ctx = tmp_path / "context.txt"
+        ctx.write_text("This project uses strict typing.\n")
+        council = tmp_path / "council.txt"
+        council.write_text("Round 1: missing error handling noted.\n")
+
+        responses = [
+            _success_response("openai", "gpt-4o", _code_review_json()),
+        ]
+        single_config = CouncilConfig(providers=(_OPENAI_CONFIG,))
+
+        with (
+            patch("star_chamber.cli._load_config", return_value=single_config),
+            patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+        ):
+            runner = CliRunner()
+            result = runner.invoke(
+                main, ["review", "--context-file", str(ctx), "--council-context", str(council), str(src)]
+            )
+
+        assert result.exit_code == 0
+        call_kwargs = mock_fan_out.call_args
+        prompt_arg = call_kwargs.kwargs.get("prompt") or call_kwargs[0][1]
+        assert "strict typing" in prompt_arg
+        assert "missing error handling" in prompt_arg
+        assert "Previous Council Feedback" in prompt_arg
+
+    def test_ask_with_council_context(self, tmp_path: Path):
+        council = tmp_path / "council.txt"
+        council.write_text("Round 1: favour Redis for simplicity.\n")
+
+        responses = [
+            _success_response("openai", "gpt-4o", _design_json()),
+        ]
+        single_config = CouncilConfig(providers=(_OPENAI_CONFIG,))
+
+        with (
+            patch("star_chamber.cli._load_config", return_value=single_config),
+            patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+        ):
+            runner = CliRunner()
+            result = runner.invoke(main, ["ask", "--council-context", str(council), "Should we use Redis?"])
+
+        assert result.exit_code == 0
+        call_kwargs = mock_fan_out.call_args
+        prompt_arg = call_kwargs.kwargs.get("prompt") or call_kwargs[0][1]
+        assert "favour Redis" in prompt_arg
+
+    def test_review_without_council_context(self, tmp_path: Path):
+        """Previous Council Feedback section absent when --council-context not provided."""
+        src = tmp_path / "app.py"
+        src.write_text("x = 1\n")
+
+        responses = [
+            _success_response("openai", "gpt-4o", _code_review_json()),
+        ]
+        single_config = CouncilConfig(providers=(_OPENAI_CONFIG,))
+
+        with (
+            patch("star_chamber.cli._load_config", return_value=single_config),
+            patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+        ):
+            runner = CliRunner()
+            result = runner.invoke(main, ["review", str(src)])
+
+        assert result.exit_code == 0
+        call_kwargs = mock_fan_out.call_args
+        prompt_arg = call_kwargs.kwargs.get("prompt") or call_kwargs[0][1]
+        assert "Previous Council Feedback" not in prompt_arg
+
+
+# ---------------------------------------------------------------------------
 # schema command.
 # ---------------------------------------------------------------------------
 

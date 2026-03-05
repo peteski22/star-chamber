@@ -118,6 +118,28 @@ class TestSendToProvider:
         assert result.provider == "anthropic"
         assert result.model == "claude-3"
 
+    def test_model_name_qualified_with_provider_prefix(self):
+        """The any-llm SDK expects model names in provider/model format."""
+        mock_module = _make_mock_any_llm("Looks good.")
+        config = ProviderConfig(provider="openai", model="gpt-4o")
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            asyncio.run(send_to_provider(config, "Review this."))
+
+        call_kwargs = mock_module.acompletion.call_args.kwargs
+        assert call_kwargs["model"] == "openai/gpt-4o"
+
+    def test_already_qualified_model_not_double_prefixed(self):
+        """If the model already has a provider prefix, don't double it."""
+        mock_module = _make_mock_any_llm("Looks good.")
+        config = ProviderConfig(provider="openai", model="openai/gpt-4o")
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            asyncio.run(send_to_provider(config, "Review this."))
+
+        call_kwargs = mock_module.acompletion.call_args.kwargs
+        assert call_kwargs["model"] == "openai/gpt-4o"
+
     def test_openai_uses_max_completion_tokens(self):
         mock_module = _make_mock_any_llm()
         config = ProviderConfig(provider="openai", model="gpt-4o", max_tokens=8192)
@@ -256,7 +278,7 @@ class TestFanOut:
         async def _side_effect(*args, **kwargs):
             nonlocal call_count
             call_count += 1
-            if kwargs.get("model", "").startswith("gpt"):
+            if "gpt" in kwargs.get("model", ""):
                 raise Exception("Rate limited")
             return await original_acompletion(*args, **kwargs)
 

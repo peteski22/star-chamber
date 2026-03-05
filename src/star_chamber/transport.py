@@ -97,8 +97,13 @@ async def send_to_provider(
 
     max_tok = config.max_tokens or DEFAULT_MAX_TOKENS
 
+    # The any-llm SDK expects model names in provider/model format for routing.
+    model = config.model
+    if "/" not in model:
+        model = f"{config.provider}/{model}"
+
     kwargs: dict[str, object] = {
-        "model": config.model,
+        "model": model,
         "messages": [{"role": "user", "content": prompt}],
     }
 

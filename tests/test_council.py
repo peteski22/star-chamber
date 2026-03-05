@@ -442,6 +442,77 @@ class TestRunCouncilSync:
 
 
 # ---------------------------------------------------------------------------
+# run_council — council_context passthrough.
+# ---------------------------------------------------------------------------
+
+
+class TestRunCouncilCouncilContext:
+    async def test_council_context_appears_in_code_review_prompt(self):
+        mock_responses = [
+            _success_response("openai", "gpt-4o", _code_review_json()),
+        ]
+        single_config = CouncilConfig(providers=(_OPENAI_CONFIG,))
+        mock_fan_out = AsyncMock(return_value=mock_responses)
+
+        with (
+            patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
+            patch("star_chamber.council.fan_out", mock_fan_out),
+        ):
+            await run_council(
+                files={"app.py": "x = 1"},
+                config=single_config,
+                mode="code-review",
+                council_context="Round 1: missing error handling.",
+            )
+
+        prompt_arg = mock_fan_out.call_args.kwargs.get("prompt") or mock_fan_out.call_args[0][1]
+        assert "Previous Council Feedback" in prompt_arg
+        assert "missing error handling" in prompt_arg
+
+    async def test_council_context_absent_when_not_provided(self):
+        mock_responses = [
+            _success_response("openai", "gpt-4o", _code_review_json()),
+        ]
+        single_config = CouncilConfig(providers=(_OPENAI_CONFIG,))
+        mock_fan_out = AsyncMock(return_value=mock_responses)
+
+        with (
+            patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
+            patch("star_chamber.council.fan_out", mock_fan_out),
+        ):
+            await run_council(
+                files={"app.py": "x = 1"},
+                config=single_config,
+                mode="code-review",
+            )
+
+        prompt_arg = mock_fan_out.call_args.kwargs.get("prompt") or mock_fan_out.call_args[0][1]
+        assert "Previous Council Feedback" not in prompt_arg
+
+    async def test_council_context_appears_in_design_prompt(self):
+        mock_responses = [
+            _success_response("openai", "gpt-4o", _design_json()),
+        ]
+        single_config = CouncilConfig(providers=(_OPENAI_CONFIG,))
+        mock_fan_out = AsyncMock(return_value=mock_responses)
+
+        with (
+            patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
+            patch("star_chamber.council.fan_out", mock_fan_out),
+        ):
+            await run_council(
+                prompt="Should we use Redis?",
+                config=single_config,
+                mode="design-question",
+                council_context="Council favoured Memcached.",
+            )
+
+        prompt_arg = mock_fan_out.call_args.kwargs.get("prompt") or mock_fan_out.call_args[0][1]
+        assert "Previous Council Feedback" in prompt_arg
+        assert "Council favoured Memcached." in prompt_arg
+
+
+# ---------------------------------------------------------------------------
 # run_council — single-round only.
 # ---------------------------------------------------------------------------
 

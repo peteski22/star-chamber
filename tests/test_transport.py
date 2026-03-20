@@ -239,8 +239,8 @@ class TestSendToProvider:
         assert result.success is False
         assert "no response" in result.error.lower() or "empty" in result.error.lower()
 
-    def test_gemini_timeout_not_passed_as_kwarg(self):
-        """Gemini rejects request-level timeout; it must not appear in kwargs."""
+    def test_gemini_timeout_passed_as_kwarg(self):
+        """Gemini receives timeout as a direct request kwarg (fixed in any-llm-sdk 1.11.0)."""
         mock_module = _make_mock_any_llm()
         config = ProviderConfig(provider="gemini", model="gemini-2.0-flash")
 
@@ -248,24 +248,7 @@ class TestSendToProvider:
             asyncio.run(send_to_provider(config, "Review this.", timeout=30.0))
 
         call_kwargs = mock_module.acompletion.call_args.kwargs
-        assert "timeout" not in call_kwargs
-        assert "client_args" not in call_kwargs
-
-    def test_gemini_timeout_cancels_on_expiry(self):
-        """Gemini timeout uses asyncio.wait_for which raises TimeoutError."""
-
-        async def _slow_completion(**kwargs):
-            await asyncio.sleep(10)
-
-        mock_module = _make_mock_any_llm()
-        mock_module.acompletion = AsyncMock(side_effect=_slow_completion)  # type: ignore[attr-defined]
-        config = ProviderConfig(provider="gemini", model="gemini-2.0-flash")
-
-        with patch.dict(sys.modules, {"any_llm": mock_module}):
-            result = asyncio.run(send_to_provider(config, "Review this.", timeout=0.05))
-
-        assert result.success is False
-        assert "timeout" in result.error.lower()
+        assert call_kwargs["timeout"] == 30.0
 
     def test_non_gemini_timeout_uses_request_kwarg(self):
         """Non-gemini providers receive timeout as a direct request kwarg."""
@@ -277,7 +260,6 @@ class TestSendToProvider:
 
         call_kwargs = mock_module.acompletion.call_args.kwargs
         assert call_kwargs["timeout"] == 30.0
-        assert "client_args" not in call_kwargs
 
 
 # -- fan_out ------------------------------------------------------------------

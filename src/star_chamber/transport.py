@@ -115,19 +115,11 @@ async def send_to_provider(
     if config.api_base is not None:
         kwargs["api_base"] = config.api_base
 
-    # TODO: Remove gemini branch when mozilla-ai/any-llm#901 and #902 are resolved.
-    # Gemini rejects request-level timeout kwargs and platform mode breaks
-    # client_args routing. Use asyncio.wait_for as an external timeout instead.
-    use_external_timeout = timeout is not None and config.provider == "gemini"
-    if timeout is not None and not use_external_timeout:
+    if timeout is not None:
         kwargs["timeout"] = timeout
 
     try:
-        coro = any_llm.acompletion(**kwargs)
-        if use_external_timeout:
-            response = await asyncio.wait_for(coro, timeout=timeout)
-        else:
-            response = await coro
+        response = await any_llm.acompletion(**kwargs)
     except TimeoutError:
         return ProviderResponse(
             provider=config.provider,

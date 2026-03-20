@@ -10,12 +10,14 @@ readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.11"
 dependencies = [
-    "any-llm-sdk>=1.9.0,<2.0.0",
+    "any-llm-sdk>=1.11.0,<2.0.0",
     "click>=8.3.1",
 ]
 
 [project.optional-dependencies]
-platform = ["any-llm-platform-client>=0.4.0"]
+platform = [
+    "any-llm-sdk[platform]>=1.11.0",
+]
 
 [project.scripts]
 star-chamber = "star_chamber.cli:main"

@@ -33,7 +33,7 @@ API keys can be literal values or `${ENV_VAR}` references that are resolved at r
 
 ### Gateway mode
 
-Instead of managing API keys per provider, you can route all non-local providers through an OpenAI-compatible LLM gateway by adding a top-level `gateway` object:
+Instead of managing API keys per provider, you can route all non-local providers through an OpenAI-compatible LLM gateway such as [Mozilla AI's Otari](https://github.com/mozilla-ai/otari) by adding a top-level `gateway` object:
 
 ```json
 {

@@ -38,8 +38,8 @@ Instead of managing API keys per provider, you can route all non-local providers
 ```json
 {
   "providers": [
-    {"provider": "openai", "model": "gpt-4o"},
-    {"provider": "anthropic", "model": "claude-sonnet-4-20250514"}
+    {"provider": "openai", "model": "openai:gpt-4o"},
+    {"provider": "anthropic", "model": "anthropic:claude-sonnet-4-20250514"}
   ],
   "gateway": {
     "api_base": "https://your-gateway.example/v1",
@@ -49,6 +49,8 @@ Instead of managing API keys per provider, you can route all non-local providers
   "consensus_threshold": 2
 }
 ```
+
+In gateway mode, the gateway — not the SDK — picks the upstream provider, so the per-provider `provider` field becomes a label. Many gateways (including Otari) expect the `model` field to use a `provider:model` prefix such as `"openai:gpt-4o"`; consult your gateway's documentation for its model-naming convention.
 
 `api_base` and `api_key` may also be omitted from the config, in which case they are resolved from the `GATEWAY_API_BASE` and `GATEWAY_API_KEY` environment variables. The `api_key` field supports `${ENV_VAR}` references.
 

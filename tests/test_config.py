@@ -26,10 +26,12 @@ class TestLoadValidConfig:
         assert cfg.timeout_seconds == 90
         assert cfg.consensus_threshold == 2
 
-    def test_load_platform_config(self):
-        cfg = load_config(TESTDATA / "providers_platform.json")
+    def test_load_gateway_config(self):
+        cfg = load_config(TESTDATA / "providers_gateway.json")
 
-        assert cfg.platform == "any-llm"
+        assert cfg.gateway is not None
+        assert cfg.gateway.api_base == "https://gateway.example/v1"
+        assert cfg.gateway.api_key == "${GATEWAY_API_KEY}"
         assert len(cfg.providers) == 2
         assert cfg.providers[0].provider == "openai"
         assert cfg.providers[1].provider == "anthropic"
@@ -81,6 +83,45 @@ class TestConfigErrors:
         with pytest.raises(ConfigError, match="model"):
             load_config(missing_model)
 
+    def test_legacy_platform_key_rejected(self, tmp_path):
+        legacy = tmp_path / "legacy.json"
+        legacy.write_text(
+            json.dumps(
+                {
+                    "platform": "any-llm",
+                    "providers": [{"provider": "openai", "model": "gpt-4o"}],
+                }
+            )
+        )
+        with pytest.raises(ConfigError, match="'platform' is no longer supported"):
+            load_config(legacy)
+
+    def test_gateway_unknown_field_rejected(self, tmp_path):
+        bad = tmp_path / "bad_gw.json"
+        bad.write_text(
+            json.dumps(
+                {
+                    "gateway": {"api_base": "https://x", "extra_field": 1},
+                    "providers": [{"provider": "openai", "model": "gpt-4o"}],
+                }
+            )
+        )
+        with pytest.raises(ConfigError, match="Unknown 'gateway' fields"):
+            load_config(bad)
+
+    def test_gateway_not_object_rejected(self, tmp_path):
+        bad = tmp_path / "bad_gw_type.json"
+        bad.write_text(
+            json.dumps(
+                {
+                    "gateway": "not-an-object",
+                    "providers": [{"provider": "openai", "model": "gpt-4o"}],
+                }
+            )
+        )
+        with pytest.raises(ConfigError, match="'gateway' must be an object"):
+            load_config(bad)
+
 
 class TestDefaults:
     def test_defaults_applied(self, tmp_path):
@@ -90,7 +131,7 @@ class TestDefaults:
 
         assert cfg.timeout_seconds == 60
         assert cfg.consensus_threshold == 2
-        assert cfg.platform is None
+        assert cfg.gateway is None
 
     def test_default_config_path(self, monkeypatch):
         # When STAR_CHAMBER_CONFIG is set, use it.

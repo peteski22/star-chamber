@@ -14,12 +14,6 @@ Or with [uv](https://docs.astral.sh/uv/):
 uv add star-chamber
 ```
 
-For platform-managed API key resolution, install the optional `platform` extra:
-
-```bash
-pip install star-chamber[platform]
-```
-
 ## Configuration
 
 Create `~/.config/star-chamber/providers.json`:
@@ -37,9 +31,9 @@ Create `~/.config/star-chamber/providers.json`:
 
 API keys can be literal values or `${ENV_VAR}` references that are resolved at runtime.
 
-### Platform mode (any-llm)
+### Gateway mode
 
-Instead of managing API keys per provider, you can use [Mozilla AI's any-llm platform](https://github.com/mozilla-ai/any-llm) for centralised key management. Set `ANY_LLM_KEY` in your environment and add `"platform": "any-llm"` to your config:
+Instead of managing API keys per provider, you can route all non-local providers through an OpenAI-compatible LLM gateway by adding a top-level `gateway` object:
 
 ```json
 {
@@ -47,13 +41,18 @@ Instead of managing API keys per provider, you can use [Mozilla AI's any-llm pla
     {"provider": "openai", "model": "gpt-4o"},
     {"provider": "anthropic", "model": "claude-sonnet-4-20250514"}
   ],
-  "platform": "any-llm",
+  "gateway": {
+    "api_base": "https://your-gateway.example/v1",
+    "api_key": "${GATEWAY_API_KEY}"
+  },
   "timeout_seconds": 90,
   "consensus_threshold": 2
 }
 ```
 
-When `platform` is set, API keys are fetched from the platform service — no `api_key` fields needed. Install the platform extra: `pip install star-chamber[platform]`.
+`api_base` and `api_key` may also be omitted from the config, in which case they are resolved from the `GATEWAY_API_BASE` and `GATEWAY_API_KEY` environment variables. The `api_key` field supports `${ENV_VAR}` references.
+
+Providers marked `"local": true` always bypass the gateway and continue to use their own `api_base`.
 
 Override the config path with the `STAR_CHAMBER_CONFIG` environment variable.
 

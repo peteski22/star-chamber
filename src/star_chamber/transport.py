@@ -1,4 +1,4 @@
-"""Provider transport layer with fan-out via any-llm."""
+"""Provider transport layer with parallel fan-out across LLM providers."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import os
 import re
 from dataclasses import dataclass
 
-from star_chamber.types import ProviderConfig
+from star_chamber.types import GatewayConfig, ProviderConfig
 
 # Default maximum token limit when none is configured.
 DEFAULT_MAX_TOKENS = 16384
@@ -74,13 +74,19 @@ async def send_to_provider(
     config: ProviderConfig,
     prompt: str,
     timeout: float | None = None,
+    gateway: GatewayConfig | None = None,
 ) -> ProviderResponse:
-    """Send a prompt to a single provider via any_llm.acompletion.
+    """Send a prompt to a single provider.
+
+    When ``gateway`` is set and ``config.local`` is False, the call is routed
+    through the gateway using the gateway's api_base/api_key instead of the
+    provider's own routing. Local providers always bypass the gateway.
 
     Args:
         config: Provider configuration.
         prompt: The prompt to send.
         timeout: Optional per-call timeout in seconds.
+        gateway: Optional gateway routing configuration.
 
     Returns:
         A ProviderResponse indicating success or failure.
@@ -97,23 +103,32 @@ async def send_to_provider(
 
     max_tok = config.max_tokens or DEFAULT_MAX_TOKENS
 
+    routed_via_gateway = gateway is not None and not config.local
+    effective_provider = "gateway" if routed_via_gateway else config.provider
+
     kwargs: dict[str, object] = {
         "model": config.model,
-        "provider": config.provider,
+        "provider": effective_provider,
         "messages": [{"role": "user", "content": prompt}],
     }
 
-    # OpenAI uses max_completion_tokens; others use max_tokens.
-    if config.provider == "openai":
+    # OpenAI uses max_completion_tokens; others (including the gateway) use max_tokens.
+    if effective_provider == "openai":
         kwargs["max_completion_tokens"] = max_tok
     else:
         kwargs["max_tokens"] = max_tok
 
-    if config.api_key is not None:
-        kwargs["api_key"] = config.api_key
-
-    if config.api_base is not None:
-        kwargs["api_base"] = config.api_base
+    if routed_via_gateway:
+        assert gateway is not None  # narrowing for type checker
+        if gateway.api_key is not None:
+            kwargs["api_key"] = gateway.api_key
+        if gateway.api_base is not None:
+            kwargs["api_base"] = gateway.api_base
+    else:
+        if config.api_key is not None:
+            kwargs["api_key"] = config.api_key
+        if config.api_base is not None:
+            kwargs["api_base"] = config.api_base
 
     if timeout is not None:
         kwargs["timeout"] = timeout
@@ -166,6 +181,7 @@ async def fan_out(
     configs: tuple[ProviderConfig, ...],
     prompt: str,
     timeout: float | None = None,
+    gateway: GatewayConfig | None = None,
 ) -> list[ProviderResponse]:
     """Send a prompt to all providers in parallel.
 
@@ -173,30 +189,24 @@ async def fan_out(
         configs: Tuple of provider configurations.
         prompt: The prompt to broadcast.
         timeout: Optional per-provider timeout in seconds.
+        gateway: Optional gateway routing configuration.
 
     Returns:
         List of ProviderResponse objects, one per provider.
     """
-    tasks = [send_to_provider(cfg, prompt, timeout=timeout) for cfg in configs]
+    tasks = [send_to_provider(cfg, prompt, timeout=timeout, gateway=gateway) for cfg in configs]
     return list(await asyncio.gather(*tasks))
 
 
 def resolve_api_keys(
     configs: tuple[ProviderConfig, ...],
-    use_platform: bool,
-    any_llm_key: str = "",
 ) -> tuple[ProviderConfig, ...]:
-    """Resolve environment variable references in API keys.
-
-    In direct mode (use_platform=False), expands ``${ENV_VAR}`` patterns
-    using ``os.environ``.  In platform mode the keys are left as-is.
+    """Resolve ``${ENV_VAR}`` references in provider API keys.
 
     Always returns NEW ProviderConfig objects; never mutates input.
 
     Args:
         configs: Tuple of provider configurations.
-        use_platform: When True, skip env-var expansion.
-        any_llm_key: Optional platform API key (reserved for future use).
 
     Returns:
         Tuple of new ProviderConfig objects with resolved keys.
@@ -204,7 +214,7 @@ def resolve_api_keys(
     resolved: list[ProviderConfig] = []
     for cfg in configs:
         api_key = cfg.api_key
-        if not use_platform and api_key is not None:
+        if api_key is not None:
             api_key = _expand_env_var(api_key)
         resolved.append(
             ProviderConfig(
@@ -217,6 +227,26 @@ def resolve_api_keys(
             )
         )
     return tuple(resolved)
+
+
+def resolve_gateway(gateway: GatewayConfig | None) -> GatewayConfig | None:
+    """Resolve ``${ENV_VAR}`` references in a gateway configuration.
+
+    Returns a new GatewayConfig with api_key expanded; never mutates input.
+    Returns None when ``gateway`` is None.
+
+    Args:
+        gateway: Optional gateway configuration.
+
+    Returns:
+        A new GatewayConfig with resolved api_key, or None.
+    """
+    if gateway is None:
+        return None
+    api_key = gateway.api_key
+    if api_key is not None:
+        api_key = _expand_env_var(api_key)
+    return GatewayConfig(api_base=gateway.api_base, api_key=api_key)
 
 
 def _expand_env_var(value: str) -> str:

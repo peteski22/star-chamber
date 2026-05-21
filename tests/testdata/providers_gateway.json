@@ -1,5 +1,8 @@
 {
-  "platform": "any-llm",
+  "gateway": {
+    "api_base": "https://gateway.example/v1",
+    "api_key": "${GATEWAY_API_KEY}"
+  },
   "providers": [
     {"provider": "openai", "model": "gpt-4o"},
     {"provider": "anthropic", "model": "claude-sonnet-4-20250514"}

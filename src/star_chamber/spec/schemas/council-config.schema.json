@@ -14,10 +14,20 @@
       },
       "minItems": 1
     },
-    "platform": {
-      "type": "string",
-      "enum": ["any-llm"],
-      "description": "Platform for centralised key management. When set, API keys are fetched from the platform service."
+    "gateway": {
+      "type": "object",
+      "description": "Route all non-local providers through an OpenAI-compatible LLM gateway. When set, each provider call is dispatched through the gateway provider with the shared api_base/api_key; the per-provider `provider` field is treated as a label.",
+      "properties": {
+        "api_base": {
+          "type": "string",
+          "description": "Gateway base URL. Falls back to the GATEWAY_API_BASE environment variable when omitted."
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Gateway API key or ${ENV_VAR} reference. Falls back to the GATEWAY_API_KEY environment variable when omitted."
+        }
+      },
+      "additionalProperties": false
     },
     "timeout_seconds": {
       "type": "integer",

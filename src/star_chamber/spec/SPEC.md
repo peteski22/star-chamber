@@ -66,7 +66,7 @@ Provider configuration defines which LLM providers the council consults and how 
 |-------|----------|-------------|
 | `provider` | Yes | Provider name (e.g., `openai`, `anthropic`, `llamafile`, `ollama`). |
 | `model` | Yes | Model identifier (e.g., `gpt-4o`, `claude-sonnet-4-20250514`). |
-| `api_key` | No | API key or `${ENV_VAR}` reference. Omit for platform mode or keyless local providers. |
+| `api_key` | No | API key or `${ENV_VAR}` reference. Omit when routing through a gateway or for keyless local providers. |
 | `max_tokens` | No | Max response tokens. Default: 16384. |
 | `api_base` | No | Custom base URL. Use for local/self-hosted LLMs. Omit for cloud providers — SDKs use built-in defaults. |
 | `local` | No | Set to `true` for local/self-hosted providers. Default: `false`. |
@@ -77,19 +77,14 @@ Keys are resolved in this order:
 
 1. `api_key` field in the provider config (literal value or `${ENV_VAR}` reference).
 2. Environment variable matching the provider convention (e.g., `OPENAI_API_KEY`).
-3. Platform key fetch (when `platform` is configured).
 
-### Platform Mode
+### Gateway Mode
 
-When `platform` is set (e.g., `"any-llm"`), the orchestrator fetches API keys from the platform service for each provider. The schema currently constrains `platform` to the enum `["any-llm"]`. Adding new platform values is a minor schema change in a future spec version. Providers marked `local: true` get special treatment:
-
-- **Key fetch tolerant:** If the platform has no key for a local provider, the council proceeds with an empty key instead of failing.
-- **Network fault-tolerant:** If the platform is unreachable, local providers still proceed. Non-local providers fail.
-- **Auth error guidance:** If a local provider returns an auth error, the error message should suggest adding the key to the platform or setting `api_key` directly.
+When the top-level `gateway` object is set, non-local providers are dispatched through an OpenAI-compatible gateway. Every non-local provider entry is routed to the same `api_base` with the same `api_key`; the per-provider `provider` field is treated as an identifier label rather than as the routing target. `api_base` and `api_key` may be specified inline in the config or omitted and resolved from the `GATEWAY_API_BASE` and `GATEWAY_API_KEY` environment variables. The `api_key` field supports `${ENV_VAR}` references.
 
 ### Local Provider Semantics
 
-Local providers (`local: true`) use `api_base` to reach a local or self-hosted endpoint. They can still use keys — if the platform has a key stored, it will be fetched and used normally. The `local` flag only affects the failure path (tolerant vs fail-fast).
+Local providers (`local: true`) use `api_base` to reach a local or self-hosted endpoint and are dispatched directly even when a gateway is configured. The `local` flag preserves direct routing to the local endpoint.
 
 ## 4. Review Request
 

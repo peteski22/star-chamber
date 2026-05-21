@@ -54,6 +54,8 @@ In gateway mode, the gateway — not the SDK — picks the upstream provider, so
 
 `api_base` and `api_key` may also be omitted from the config, in which case they are resolved from the `GATEWAY_API_BASE` and `GATEWAY_API_KEY` environment variables. The `api_key` field supports `${ENV_VAR}` references.
 
+For Bearer-token auth against a hosted gateway platform, omit `api_key` and set the `GATEWAY_PLATFORM_TOKEN` environment variable instead — the gateway client detects it and switches to platform mode automatically.
+
 Providers marked `"local": true` always bypass the gateway and continue to use their own `api_base`.
 
 Override the config path with the `STAR_CHAMBER_CONFIG` environment variable.

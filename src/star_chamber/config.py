@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 
-from star_chamber.types import CouncilConfig, GatewayConfig, ProviderConfig
+from star_chamber.types import CouncilConfig, OtariConfig, ProviderConfig
 
 
 class ConfigError(Exception):
@@ -55,14 +55,14 @@ def _parse_provider(raw: dict) -> ProviderConfig:
     )
 
 
-def _parse_gateway(raw: dict) -> GatewayConfig:
-    """Build a GatewayConfig from a raw dict.
+def _parse_otari(raw: dict) -> OtariConfig:
+    """Build an OtariConfig from a raw dict.
 
     Args:
-        raw: Dictionary parsed from the top-level "gateway" key.
+        raw: Dictionary parsed from the top-level "otari" key.
 
     Returns:
-        A validated GatewayConfig instance.
+        A validated OtariConfig instance.
 
     Raises:
         ConfigError: If unexpected fields are present.
@@ -70,9 +70,9 @@ def _parse_gateway(raw: dict) -> GatewayConfig:
     allowed = {"api_base", "api_key"}
     extra = set(raw) - allowed
     if extra:
-        msg = f"Unknown 'gateway' fields: {', '.join(sorted(extra))}"
+        msg = f"Unknown 'otari' fields: {', '.join(sorted(extra))}"
         raise ConfigError(msg)
-    return GatewayConfig(api_base=raw.get("api_base"), api_key=raw.get("api_key"))
+    return OtariConfig(api_base=raw.get("api_base"), api_key=raw.get("api_key"))
 
 
 def load_config(path: Path | None = None) -> CouncilConfig:
@@ -102,10 +102,14 @@ def load_config(path: Path | None = None) -> CouncilConfig:
         msg = f"Invalid JSON in {path}: {exc}"
         raise ConfigError(msg) from exc
 
+    if not isinstance(raw, dict):
+        msg = f"Config must be a JSON object in {path}"
+        raise ConfigError(msg)
+
     if "platform" in raw:
         msg = (
             f"'platform' is no longer supported in {path}. "
-            "Replace it with a top-level 'gateway' object — see the README and SPEC for the migration."
+            "Replace it with a top-level 'otari' object — see the README and SPEC for the migration."
         )
         raise ConfigError(msg)
 
@@ -124,15 +128,15 @@ def load_config(path: Path | None = None) -> CouncilConfig:
 
     providers = tuple(_parse_provider(p) for p in providers_raw)
 
-    gateway_raw = raw.get("gateway")
-    if gateway_raw is not None and not isinstance(gateway_raw, dict):
-        msg = f"'gateway' must be an object in {path}"
+    otari_raw = raw.get("otari")
+    if otari_raw is not None and not isinstance(otari_raw, dict):
+        msg = f"'otari' must be an object in {path}"
         raise ConfigError(msg)
-    gateway = _parse_gateway(gateway_raw) if gateway_raw is not None else None
+    otari = _parse_otari(otari_raw) if otari_raw is not None else None
 
     return CouncilConfig(
         providers=providers,
         timeout_seconds=raw.get("timeout_seconds", 60),
         consensus_threshold=raw.get("consensus_threshold", 2),
-        gateway=gateway,
+        otari=otari,
     )

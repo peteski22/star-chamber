@@ -13,10 +13,10 @@ from star_chamber.transport import (
     _sanitize_error,
     fan_out,
     resolve_api_keys,
-    resolve_gateway,
+    resolve_otari,
     send_to_provider,
 )
-from star_chamber.types import GatewayConfig, ProviderConfig
+from star_chamber.types import OtariConfig, ProviderConfig
 
 # -- helpers ------------------------------------------------------------------
 
@@ -373,42 +373,82 @@ class TestResolveApiKeys:
         assert result[0] is not configs[0]
 
 
-class TestResolveGateway:
+class TestResolveOtari:
     def test_none_passes_through(self):
-        assert resolve_gateway(None) is None
+        assert resolve_otari(None) is None
 
     def test_env_var_expansion(self, monkeypatch):
-        monkeypatch.setenv("GATEWAY_API_KEY", "resolved-gw-key")
-        gw = GatewayConfig(api_base="https://gw.example/v1", api_key="${GATEWAY_API_KEY}")
+        monkeypatch.setenv("OTARI_API_KEY", "resolved-gw-key")
+        gw = OtariConfig(api_base="https://gw.example/v1", api_key="${OTARI_API_KEY}")
 
-        result = resolve_gateway(gw)
+        result = resolve_otari(gw)
 
         assert result is not None
         assert result.api_base == "https://gw.example/v1"
         assert result.api_key == "resolved-gw-key"  # pragma: allowlist secret
 
     def test_returns_new_object(self):
-        gw = GatewayConfig(api_base="https://gw.example/v1", api_key="literal")  # pragma: allowlist secret
-        result = resolve_gateway(gw)
+        gw = OtariConfig(api_base="https://gw.example/v1", api_key="literal")  # pragma: allowlist secret
+        result = resolve_otari(gw)
         assert result is not gw
 
+    def test_api_base_falls_back_to_env_when_none(self, monkeypatch):
+        monkeypatch.setenv("OTARI_API_BASE", "https://env-gw.example/v1")
+        gw = OtariConfig(api_base=None, api_key="literal")  # pragma: allowlist secret
 
-class TestGatewayRouting:
-    def test_gateway_overrides_provider_routing(self):
+        result = resolve_otari(gw)
+
+        assert result is not None
+        assert result.api_base == "https://env-gw.example/v1"
+
+    def test_api_key_falls_back_to_env_when_none(self, monkeypatch):
+        monkeypatch.setenv("OTARI_API_KEY", "env-gw-key")
+        gw = OtariConfig(api_base="https://gw.example/v1", api_key=None)
+
+        result = resolve_otari(gw)
+
+        assert result is not None
+        assert result.api_key == "env-gw-key"  # pragma: allowlist secret
+
+    def test_unset_env_leaves_fields_none(self, monkeypatch):
+        monkeypatch.delenv("OTARI_API_BASE", raising=False)
+        monkeypatch.delenv("OTARI_API_KEY", raising=False)
+        gw = OtariConfig()  # both None
+
+        result = resolve_otari(gw)
+
+        assert result is not None
+        assert result.api_base is None
+        assert result.api_key is None
+
+    def test_explicit_values_take_precedence_over_env(self, monkeypatch):
+        monkeypatch.setenv("OTARI_API_BASE", "https://env-gw.example/v1")
+        monkeypatch.setenv("OTARI_API_KEY", "env-gw-key")
+        gw = OtariConfig(api_base="https://explicit.example/v1", api_key="explicit-key")  # pragma: allowlist secret
+
+        result = resolve_otari(gw)
+
+        assert result is not None
+        assert result.api_base == "https://explicit.example/v1"
+        assert result.api_key == "explicit-key"  # pragma: allowlist secret
+
+
+class TestOtariRouting:
+    def test_otari_overrides_provider_routing(self):
         mock_module = _make_mock_any_llm("ok")
         config = ProviderConfig(provider="anthropic", model="claude-3")
-        gw = GatewayConfig(api_base="https://gw.example/v1", api_key="gw-key")  # pragma: allowlist secret
+        gw = OtariConfig(api_base="https://gw.example/v1", api_key="gw-key")  # pragma: allowlist secret
 
         with patch.dict(sys.modules, {"any_llm": mock_module}):
-            asyncio.run(send_to_provider(config, "Review this.", gateway=gw))
+            asyncio.run(send_to_provider(config, "Review this.", otari=gw))
 
         call_kwargs = mock_module.acompletion.call_args.kwargs
-        assert call_kwargs["provider"] == "gateway"
+        assert call_kwargs["provider"] == "otari"
         assert call_kwargs["model"] == "claude-3"
         assert call_kwargs["api_base"] == "https://gw.example/v1"
         assert call_kwargs["api_key"] == "gw-key"  # pragma: allowlist secret
 
-    def test_local_provider_bypasses_gateway(self):
+    def test_local_provider_bypasses_otari(self):
         mock_module = _make_mock_any_llm("ok")
         config = ProviderConfig(
             provider="ollama",
@@ -416,42 +456,62 @@ class TestGatewayRouting:
             api_base="http://localhost:11434",
             local=True,
         )
-        gw = GatewayConfig(api_base="https://gw.example/v1", api_key="gw-key")  # pragma: allowlist secret
+        gw = OtariConfig(api_base="https://gw.example/v1", api_key="gw-key")  # pragma: allowlist secret
 
         with patch.dict(sys.modules, {"any_llm": mock_module}):
-            asyncio.run(send_to_provider(config, "Review this.", gateway=gw))
+            asyncio.run(send_to_provider(config, "Review this.", otari=gw))
 
         call_kwargs = mock_module.acompletion.call_args.kwargs
-        # Local providers keep their own routing even when a gateway is configured.
+        # Local providers keep their own routing even when a otari is configured.
         assert call_kwargs["provider"] == "ollama"
         assert call_kwargs["api_base"] == "http://localhost:11434"
         assert "api_key" not in call_kwargs
 
-    def test_gateway_with_none_fields_omits_overrides(self):
-        """When gateway api_base/api_key are None, the SDK falls back to env vars."""
+    def test_otari_with_none_fields_omits_overrides(self):
+        """send_to_provider omits None otari fields from the call kwargs.
+
+        Env-var resolution happens upstream in resolve_otari; by the time a
+        field is still None here, it is left to the SDK's own resolution."""
         mock_module = _make_mock_any_llm("ok")
         config = ProviderConfig(provider="anthropic", model="claude-3")
-        gw = GatewayConfig()  # both None
+        gw = OtariConfig()  # both None
 
         with patch.dict(sys.modules, {"any_llm": mock_module}):
-            asyncio.run(send_to_provider(config, "Review this.", gateway=gw))
+            asyncio.run(send_to_provider(config, "Review this.", otari=gw))
 
         call_kwargs = mock_module.acompletion.call_args.kwargs
-        assert call_kwargs["provider"] == "gateway"
+        assert call_kwargs["provider"] == "otari"
         assert "api_base" not in call_kwargs
         assert "api_key" not in call_kwargs
 
-    def test_fan_out_forwards_gateway(self):
+    def test_otari_auth_error_points_at_otari(self):
+        """An auth failure on a otari-routed call blames the otari, not the provider."""
+        mock_module = _make_mock_any_llm()
+        mock_module.acompletion = AsyncMock(  # type: ignore[attr-defined]
+            side_effect=Exception("Unauthorized: invalid api_key")
+        )
+        config = ProviderConfig(provider="anthropic", model="claude-3")
+        gw = OtariConfig(api_base="https://gw.example/v1", api_key="gw-key")  # pragma: allowlist secret
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            result = asyncio.run(send_to_provider(config, "Review this.", otari=gw))
+
+        assert result.success is False
+        assert "otari" in result.error.lower()
+        # Must not misdirect users to the upstream provider's own key.
+        assert "key for anthropic" not in result.error.lower()
+
+    def test_fan_out_forwards_otari(self):
         mock_module = _make_mock_any_llm("ok")
         configs = (
             ProviderConfig(provider="openai", model="gpt-4"),
             ProviderConfig(provider="ollama", model="llama3", local=True, api_base="http://localhost:11434"),
         )
-        gw = GatewayConfig(api_base="https://gw.example/v1", api_key="gw-key")  # pragma: allowlist secret
+        gw = OtariConfig(api_base="https://gw.example/v1", api_key="gw-key")  # pragma: allowlist secret
 
         with patch.dict(sys.modules, {"any_llm": mock_module}):
-            asyncio.run(fan_out(configs, "Review this.", timeout=30.0, gateway=gw))
+            asyncio.run(fan_out(configs, "Review this.", timeout=30.0, otari=gw))
 
-        # Two calls were dispatched; the cloud one through the gateway, the local one direct.
+        # Two calls were dispatched; the cloud one through Otari, the local one direct.
         providers_used = [call.kwargs["provider"] for call in mock_module.acompletion.call_args_list]
-        assert sorted(providers_used) == ["gateway", "ollama"]
+        assert sorted(providers_used) == ["ollama", "otari"]

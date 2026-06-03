@@ -66,7 +66,7 @@ Provider configuration defines which LLM providers the council consults and how 
 |-------|----------|-------------|
 | `provider` | Yes | Provider name (e.g., `openai`, `anthropic`, `llamafile`, `ollama`). |
 | `model` | Yes | Model identifier (e.g., `gpt-4o`, `claude-sonnet-4-20250514`). |
-| `api_key` | No | API key or `${ENV_VAR}` reference. Omit when routing through a gateway or for keyless local providers. |
+| `api_key` | No | API key or `${ENV_VAR}` reference. Omit when routing through Otari or for keyless local providers. |
 | `max_tokens` | No | Max response tokens. Default: 16384. |
 | `api_base` | No | Custom base URL. Use for local/self-hosted LLMs. Omit for cloud providers — SDKs use built-in defaults. |
 | `local` | No | Set to `true` for local/self-hosted providers. Default: `false`. |
@@ -78,13 +78,13 @@ Keys are resolved in this order:
 1. `api_key` field in the provider config (literal value or `${ENV_VAR}` reference).
 2. Environment variable matching the provider convention (e.g., `OPENAI_API_KEY`).
 
-### Gateway Mode
+### Otari Gateway
 
-When the top-level `gateway` object is set, non-local providers are dispatched through an OpenAI-compatible gateway. Every non-local provider entry is routed to the same `api_base` with the same `api_key`; the per-provider `provider` field is treated as an identifier label rather than as the routing target. `api_base` and `api_key` may be specified inline in the config or omitted and resolved from the `GATEWAY_API_BASE` and `GATEWAY_API_KEY` environment variables. The `api_key` field supports `${ENV_VAR}` references.
+When the top-level `otari` object is set, non-local providers are dispatched through [Otari](https://github.com/mozilla-ai/otari), an OpenAI-compatible gateway. Every non-local provider entry is routed to the same `api_base` with the same `api_key`; the per-provider `provider` field is treated as an identifier label rather than as the routing target. `api_base` and `api_key` may be specified inline in the config or omitted and resolved from the `OTARI_API_BASE` and `OTARI_API_KEY` environment variables. The `api_key` field supports `${ENV_VAR}` references.
 
 ### Local Provider Semantics
 
-Local providers (`local: true`) use `api_base` to reach a local or self-hosted endpoint and are dispatched directly even when a gateway is configured. The `local` flag preserves direct routing to the local endpoint.
+Local providers (`local: true`) use `api_base` to reach a local or self-hosted endpoint and are dispatched directly even when Otari is configured. The `local` flag preserves direct routing to the local endpoint.
 
 ## 4. Review Request
 

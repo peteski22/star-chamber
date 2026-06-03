@@ -34,6 +34,24 @@ class TestListSchemas:
         assert all(not n.endswith(".json") for n in names)
 
 
+class TestCouncilConfigSchema:
+    def test_declares_all_accepted_top_level_keys(self):
+        """With additionalProperties:false, the schema must declare every
+        top-level key load_config accepts, or valid configs fail validation."""
+        schema = json.loads(get_schema("council-config"))
+        assert schema.get("additionalProperties") is False
+        accepted = {"providers", "otari", "timeout_seconds", "consensus_threshold"}
+        declared = set(schema["properties"])
+        assert accepted <= declared, f"schema missing: {accepted - declared}"
+
+    def test_consensus_threshold_property(self):
+        schema = json.loads(get_schema("council-config"))
+        prop = schema["properties"]["consensus_threshold"]
+        assert prop["type"] == "integer"
+        assert prop["default"] == 2
+        assert prop["minimum"] == 1
+
+
 class TestGetSchema:
     def test_returns_valid_json_string(self):
         content = get_schema("code-review-result")

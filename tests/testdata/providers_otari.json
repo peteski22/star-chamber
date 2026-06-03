@@ -1,7 +1,7 @@
 {
-  "gateway": {
-    "api_base": "https://gateway.example/v1",
-    "api_key": "${GATEWAY_API_KEY}"
+  "otari": {
+    "api_base": "https://otari.example/v1",
+    "api_key": "${OTARI_API_KEY}"
   },
   "providers": [
     {"provider": "openai", "model": "gpt-4o"},

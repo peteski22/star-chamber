@@ -9,7 +9,7 @@ from star_chamber.config import load_config
 from star_chamber.consensus import classify
 from star_chamber.parsing import ParseError, parse_code_review, parse_design_advice
 from star_chamber.prompt import render_code_review_prompt, render_design_prompt
-from star_chamber.transport import ProviderResponse, fan_out, resolve_api_keys, resolve_gateway
+from star_chamber.transport import ProviderResponse, fan_out, resolve_api_keys, resolve_otari
 from star_chamber.types import (
     Approach,
     CodeReviewResult,
@@ -174,9 +174,9 @@ async def run_council(
     if config is None:
         config = load_config()
 
-    # Resolve API keys and gateway env-var references.
+    # Resolve API keys and Otari env-var references.
     resolved_providers = resolve_api_keys(config.providers)
-    resolved_gateway = resolve_gateway(config.gateway)
+    resolved_otari = resolve_otari(config.otari)
 
     # Build the initial prompt.
     if mode == "code-review":
@@ -193,7 +193,7 @@ async def run_council(
         configs=resolved_providers,
         prompt=rendered_prompt,
         timeout=float(config.timeout_seconds),
-        gateway=resolved_gateway,
+        otari=resolved_otari,
     )
 
     # Build and return the appropriate result type.

@@ -8,7 +8,7 @@ from click.testing import CliRunner
 
 from star_chamber.cli import main
 from star_chamber.transport import ProviderResponse
-from star_chamber.types import CouncilConfig, GatewayConfig, ProviderConfig
+from star_chamber.types import CouncilConfig, OtariConfig, ProviderConfig
 
 # ---------------------------------------------------------------------------
 # Fixtures.
@@ -326,10 +326,10 @@ class TestListProvidersCommand:
         assert "ollama" in result.output
         assert "local" in result.output.lower()
 
-    def test_list_providers_shows_gateway_status(self):
+    def test_list_providers_shows_otari_status(self):
         config = CouncilConfig(
             providers=(_OPENAI_CONFIG,),
-            gateway=GatewayConfig(api_base="https://gw.example/v1", api_key="${GATEWAY_API_KEY}"),
+            otari=OtariConfig(api_base="https://gw.example/v1", api_key="${OTARI_API_KEY}"),
         )
 
         with patch("star_chamber.cli._load_config", return_value=config):
@@ -337,7 +337,7 @@ class TestListProvidersCommand:
             result = runner.invoke(main, ["list-providers"])
 
         assert result.exit_code == 0
-        assert "gateway" in result.output.lower()
+        assert "otari" in result.output.lower()
 
 
 # ---------------------------------------------------------------------------

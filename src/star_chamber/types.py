@@ -27,18 +27,18 @@ class ProviderConfig:
 
 
 @dataclass(frozen=True)
-class GatewayConfig:
-    """Optional LLM gateway routing.
+class OtariConfig:
+    """Optional Otari gateway routing.
 
-    When set on a CouncilConfig, non-local providers are dispatched through an
-    OpenAI-compatible gateway. The same api_base and api_key apply to all
-    routed providers.
+    When set on a CouncilConfig, non-local providers are dispatched through
+    Otari, an OpenAI-compatible gateway. The same api_base and api_key apply to
+    all routed providers.
 
     Attributes:
-        api_base: Gateway base URL. Falls back to the GATEWAY_API_BASE
+        api_base: Otari base URL. Falls back to the OTARI_API_BASE
             environment variable when None.
-        api_key: Gateway API key or ${ENV_VAR} reference. Falls back to the
-            GATEWAY_API_KEY environment variable when None.
+        api_key: Otari API key or ${ENV_VAR} reference. Falls back to the
+            OTARI_API_KEY environment variable when None.
     """
 
     api_base: str | None = None
@@ -53,13 +53,13 @@ class CouncilConfig:
         providers: Tuple of provider configurations.
         timeout_seconds: Per-provider timeout in seconds.
         consensus_threshold: Minimum providers that must agree for consensus.
-        gateway: Optional gateway routing for non-local providers.
+        otari: Optional otari routing for non-local providers.
     """
 
     providers: tuple[ProviderConfig, ...]
     timeout_seconds: int = 60
     consensus_threshold: int = 2
-    gateway: GatewayConfig | None = None
+    otari: OtariConfig | None = None
 
 
 @dataclass(frozen=True)

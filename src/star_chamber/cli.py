@@ -167,7 +167,7 @@ def review(
             providers=filtered,
             timeout_seconds=config.timeout_seconds,
             consensus_threshold=config.consensus_threshold,
-            gateway=config.gateway,
+            otari=config.otari,
         )
 
     # Override timeout if specified.
@@ -176,7 +176,7 @@ def review(
             providers=config.providers,
             timeout_seconds=timeout,
             consensus_threshold=config.consensus_threshold,
-            gateway=config.gateway,
+            otari=config.otari,
         )
 
     # Read context file if provided.
@@ -261,7 +261,7 @@ def ask(
             providers=filtered,
             timeout_seconds=config.timeout_seconds,
             consensus_threshold=config.consensus_threshold,
-            gateway=config.gateway,
+            otari=config.otari,
         )
 
     # Override timeout if specified.
@@ -270,7 +270,7 @@ def ask(
             providers=config.providers,
             timeout_seconds=timeout,
             consensus_threshold=config.consensus_threshold,
-            gateway=config.gateway,
+            otari=config.otari,
         )
 
     # Read context file if provided.
@@ -315,8 +315,8 @@ def list_providers(config_path: str | None) -> None:
     for provider in config.providers:
         if provider.local:
             status = "local"
-        elif config.gateway is not None:
-            status = "gateway"
+        elif config.otari is not None:
+            status = "otari"
         else:
             status = "direct"
         click.echo(f"  {provider.provider} — {provider.model} [{status}]")

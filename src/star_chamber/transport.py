@@ -7,7 +7,7 @@ import os
 import re
 from dataclasses import dataclass
 
-from star_chamber.types import GatewayConfig, ProviderConfig
+from star_chamber.types import OtariConfig, ProviderConfig
 
 # Default maximum token limit when none is configured.
 DEFAULT_MAX_TOKENS = 16384
@@ -74,19 +74,19 @@ async def send_to_provider(
     config: ProviderConfig,
     prompt: str,
     timeout: float | None = None,
-    gateway: GatewayConfig | None = None,
+    otari: OtariConfig | None = None,
 ) -> ProviderResponse:
     """Send a prompt to a single provider.
 
-    When ``gateway`` is set and ``config.local`` is False, the call is routed
-    through the gateway using the gateway's api_base/api_key instead of the
-    provider's own routing. Local providers always bypass the gateway.
+    When ``otari`` is set and ``config.local`` is False, the call is routed
+    through Otari using Otari's api_base/api_key instead of the provider's own
+    routing. Local providers always bypass Otari.
 
     Args:
         config: Provider configuration.
         prompt: The prompt to send.
         timeout: Optional per-call timeout in seconds.
-        gateway: Optional gateway routing configuration.
+        otari: Optional Otari gateway routing configuration.
 
     Returns:
         A ProviderResponse indicating success or failure.
@@ -103,8 +103,8 @@ async def send_to_provider(
 
     max_tok = config.max_tokens or DEFAULT_MAX_TOKENS
 
-    routed_via_gateway = gateway is not None and not config.local
-    effective_provider = "gateway" if routed_via_gateway else config.provider
+    routed_via_otari = otari is not None and not config.local
+    effective_provider = "otari" if routed_via_otari else config.provider
 
     kwargs: dict[str, object] = {
         "model": config.model,
@@ -112,18 +112,18 @@ async def send_to_provider(
         "messages": [{"role": "user", "content": prompt}],
     }
 
-    # OpenAI uses max_completion_tokens; others (including the gateway) use max_tokens.
+    # OpenAI uses max_completion_tokens; others (including Otari) use max_tokens.
     if effective_provider == "openai":
         kwargs["max_completion_tokens"] = max_tok
     else:
         kwargs["max_tokens"] = max_tok
 
-    if routed_via_gateway:
-        assert gateway is not None  # narrowing for type checker
-        if gateway.api_key is not None:
-            kwargs["api_key"] = gateway.api_key
-        if gateway.api_base is not None:
-            kwargs["api_base"] = gateway.api_base
+    if routed_via_otari:
+        assert otari is not None  # narrowing for type checker
+        if otari.api_key is not None:
+            kwargs["api_key"] = otari.api_key
+        if otari.api_base is not None:
+            kwargs["api_base"] = otari.api_base
     else:
         if config.api_key is not None:
             kwargs["api_key"] = config.api_key
@@ -145,13 +145,18 @@ async def send_to_provider(
     except Exception as exc:
         error_msg = str(exc)
         if _is_auth_error(error_msg):
-            location = "locally" if config.local else "for cloud provider"
             sanitized = _sanitize_error(error_msg)
+            if routed_via_otari:
+                detail = "Authentication failed at the Otari gateway. Check your Otari API key"
+            elif config.local:
+                detail = f"Authentication failed locally. Check your API key for {config.provider}"
+            else:
+                detail = f"Authentication failed for cloud provider. Check your API key for {config.provider}"
             return ProviderResponse(
                 provider=config.provider,
                 model=config.model,
                 success=False,
-                error=f"Authentication failed {location}. Check your API key for {config.provider}: {sanitized}",
+                error=f"{detail}: {sanitized}",
             )
         return ProviderResponse(
             provider=config.provider,
@@ -181,7 +186,7 @@ async def fan_out(
     configs: tuple[ProviderConfig, ...],
     prompt: str,
     timeout: float | None = None,
-    gateway: GatewayConfig | None = None,
+    otari: OtariConfig | None = None,
 ) -> list[ProviderResponse]:
     """Send a prompt to all providers in parallel.
 
@@ -189,12 +194,12 @@ async def fan_out(
         configs: Tuple of provider configurations.
         prompt: The prompt to broadcast.
         timeout: Optional per-provider timeout in seconds.
-        gateway: Optional gateway routing configuration.
+        otari: Optional otari routing configuration.
 
     Returns:
         List of ProviderResponse objects, one per provider.
     """
-    tasks = [send_to_provider(cfg, prompt, timeout=timeout, gateway=gateway) for cfg in configs]
+    tasks = [send_to_provider(cfg, prompt, timeout=timeout, otari=otari) for cfg in configs]
     return list(await asyncio.gather(*tasks))
 
 
@@ -229,24 +234,32 @@ def resolve_api_keys(
     return tuple(resolved)
 
 
-def resolve_gateway(gateway: GatewayConfig | None) -> GatewayConfig | None:
-    """Resolve ``${ENV_VAR}`` references in a gateway configuration.
+def resolve_otari(otari: OtariConfig | None) -> OtariConfig | None:
+    """Resolve an Otari configuration against the environment.
 
-    Returns a new GatewayConfig with api_key expanded; never mutates input.
-    Returns None when ``gateway`` is None.
+    Returns a new OtariConfig; never mutates input.  Returns None when
+    ``otari`` is None.  An explicit ``api_key`` may use a ``${ENV_VAR}``
+    reference, which is expanded.  When ``api_base`` or ``api_key`` is None,
+    it falls back to the ``OTARI_API_BASE`` / ``OTARI_API_KEY``
+    environment variable; an unset variable leaves the field None.
 
     Args:
-        gateway: Optional gateway configuration.
+        otari: Optional Otari configuration.
 
     Returns:
-        A new GatewayConfig with resolved api_key, or None.
+        A new OtariConfig with resolved fields, or None.
     """
-    if gateway is None:
+    if otari is None:
         return None
-    api_key = gateway.api_key
-    if api_key is not None:
-        api_key = _expand_env_var(api_key)
-    return GatewayConfig(api_base=gateway.api_base, api_key=api_key)
+
+    api_base = otari.api_base
+    if api_base is None:
+        api_base = os.environ.get("OTARI_API_BASE")
+
+    api_key = otari.api_key
+    api_key = os.environ.get("OTARI_API_KEY") if api_key is None else _expand_env_var(api_key)
+
+    return OtariConfig(api_base=api_base, api_key=api_key)
 
 
 def _expand_env_var(value: str) -> str:

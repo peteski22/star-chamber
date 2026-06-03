@@ -52,7 +52,7 @@ Instead of managing API keys per provider, you can route all non-local providers
 
 In Otari mode, Otari — not the SDK — picks the upstream provider, so the per-provider `provider` field becomes a label. Otari expects the `model` field to use a `provider:model` prefix such as `"openai:gpt-4o"`; consult Otari's documentation for its model-naming convention.
 
-`api_base` and `api_key` may also be omitted from the config, in which case they are resolved from the `OTARI_API_BASE` and `OTARI_API_KEY` environment variables. The `api_key` field supports `${ENV_VAR}` references.
+`api_base` and `api_key` may also be omitted from the config, in which case they are resolved from the `OTARI_API_BASE` and `OTARI_API_KEY` environment variables. Both fields also support `${ENV_VAR}` references.
 
 For Bearer-token auth against a hosted Otari platform, omit `api_key` and set the `OTARI_PLATFORM_TOKEN` environment variable instead — the Otari client detects it and switches to platform mode automatically.
 

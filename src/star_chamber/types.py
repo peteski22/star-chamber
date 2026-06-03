@@ -35,8 +35,8 @@ class OtariConfig:
     all routed providers.
 
     Attributes:
-        api_base: Otari base URL. Falls back to the OTARI_API_BASE
-            environment variable when None.
+        api_base: Otari base URL or ${ENV_VAR} reference. Falls back to the
+            OTARI_API_BASE environment variable when None.
         api_key: Otari API key or ${ENV_VAR} reference. Falls back to the
             OTARI_API_KEY environment variable when None.
     """

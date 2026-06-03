@@ -20,7 +20,7 @@
       "properties": {
         "api_base": {
           "type": "string",
-          "description": "Otari base URL. Falls back to the OTARI_API_BASE environment variable when omitted."
+          "description": "Otari base URL or ${ENV_VAR} reference. Falls back to the OTARI_API_BASE environment variable when omitted."
         },
         "api_key": {
           "type": "string",

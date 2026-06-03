@@ -387,6 +387,15 @@ class TestResolveOtari:
         assert result.api_base == "https://gw.example/v1"
         assert result.api_key == "resolved-gw-key"  # pragma: allowlist secret
 
+    def test_api_base_env_var_expansion(self, monkeypatch):
+        monkeypatch.setenv("OTARI_BASE_URL", "https://resolved-gw.example/v1")
+        gw = OtariConfig(api_base="${OTARI_BASE_URL}", api_key="literal")  # pragma: allowlist secret
+
+        result = resolve_otari(gw)
+
+        assert result is not None
+        assert result.api_base == "https://resolved-gw.example/v1"
+
     def test_returns_new_object(self):
         gw = OtariConfig(api_base="https://gw.example/v1", api_key="literal")  # pragma: allowlist secret
         result = resolve_otari(gw)

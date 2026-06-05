@@ -56,6 +56,30 @@ def _parse_provider(raw: dict) -> ProviderConfig:
     )
 
 
+def _validate_distinct_identities(providers: tuple[ProviderConfig, ...]) -> None:
+    """Reject labels that collide with another member's display name.
+
+    Unlabelled members sharing a provider keep loading (pre-label behaviour),
+    but an explicit label must yield a unique identity — colliding members
+    would silently merge again in consensus classification and the
+    aggregation maps, which is exactly what labels exist to prevent.
+
+    Args:
+        providers: Parsed provider configurations.
+
+    Raises:
+        ConfigError: If an explicit label collides with another member's
+            display name.
+    """
+    display_names = [p.display_name for p in providers]
+    duplicates = sorted(
+        {p.label for p in providers if p.label is not None and display_names.count(p.label) > 1}
+    )
+    if duplicates:
+        msg = f"Duplicate provider identities are not allowed: {', '.join(duplicates)}"
+        raise ConfigError(msg)
+
+
 def _parse_otari(raw: dict) -> OtariConfig:
     """Build an OtariConfig from a raw dict.
 
@@ -128,6 +152,7 @@ def load_config(path: Path | None = None) -> CouncilConfig:
         raise ConfigError(msg)
 
     providers = tuple(_parse_provider(p) for p in providers_raw)
+    _validate_distinct_identities(providers)
 
     otari_raw = raw.get("otari")
     if otari_raw is not None and not isinstance(otari_raw, dict):

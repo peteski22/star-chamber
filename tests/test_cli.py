@@ -524,3 +524,28 @@ class TestProviderLabels:
         configs_arg = call_kwargs.kwargs.get("configs") or call_kwargs[0][0]
         assert len(configs_arg) == 1
         assert configs_arg[0].label == "gemini-3.1-pro"
+
+    def test_ask_provider_flag_matches_label(self):
+        gemini = ProviderConfig(
+            provider="openrouter", model="google/gemini-3.1-pro-preview", label="gemini-3.1-pro"
+        )
+        grok = ProviderConfig(provider="openrouter", model="x-ai/grok-4.3", label="grok-4.3")
+        config = CouncilConfig(providers=(gemini, grok), timeout_seconds=30, consensus_threshold=2)
+
+        responses = [
+            _success_response("gemini-3.1-pro", "google/gemini-3.1-pro-preview", _design_json()),
+        ]
+
+        with (
+            patch("star_chamber.cli._load_config", return_value=config),
+            patch("star_chamber.council.resolve_api_keys", side_effect=lambda configs: configs),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+        ):
+            runner = CliRunner()
+            result = runner.invoke(main, ["ask", "-p", "gemini-3.1-pro", "Should we use Redis?"])
+
+        assert result.exit_code == 0
+        call_kwargs = mock_fan_out.call_args
+        configs_arg = call_kwargs.kwargs.get("configs") or call_kwargs[0][0]
+        assert len(configs_arg) == 1
+        assert configs_arg[0].label == "gemini-3.1-pro"

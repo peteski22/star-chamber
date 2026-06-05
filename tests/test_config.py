@@ -178,3 +178,45 @@ class TestProviderLabel:
         assert cfg.providers[0].display_name == "gpt-5.2"
         assert cfg.providers[1].label is None
         assert cfg.providers[1].display_name == "openai"
+
+    def test_duplicate_labels_rejected(self, tmp_path):
+        config = {
+            "providers": [
+                {"provider": "openrouter", "model": "openai/gpt-5.2", "label": "member-a"},
+                {"provider": "openrouter", "model": "x-ai/grok-4.3", "label": "member-a"},
+            ]
+        }
+        path = tmp_path / "providers.json"
+        path.write_text(json.dumps(config))
+
+        with pytest.raises(ConfigError, match="member-a"):
+            load_config(path)
+
+    def test_label_colliding_with_unlabelled_provider_rejected(self, tmp_path):
+        config = {
+            "providers": [
+                {"provider": "openai", "model": "gpt-4o"},
+                {"provider": "openrouter", "model": "openai/gpt-5.2", "label": "openai"},
+            ]
+        }
+        path = tmp_path / "providers.json"
+        path.write_text(json.dumps(config))
+
+        with pytest.raises(ConfigError, match="openai"):
+            load_config(path)
+
+    def test_unlabelled_same_provider_members_still_load(self, tmp_path):
+        # Pre-label behaviour stays intact: same provider twice without labels.
+        config = {
+            "providers": [
+                {"provider": "openrouter", "model": "openai/gpt-5.2"},
+                {"provider": "openrouter", "model": "x-ai/grok-4.3"},
+            ]
+        }
+        path = tmp_path / "providers.json"
+        path.write_text(json.dumps(config))
+
+        cfg = load_config(path)
+
+        assert len(cfg.providers) == 2
+        assert cfg.providers[0].display_name == cfg.providers[1].display_name == "openrouter"

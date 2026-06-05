@@ -33,7 +33,7 @@ API keys can be literal values or `${ENV_VAR}` references that are resolved at r
 
 ### Provider labels
 
-When several council members share one provider — for example multiple models behind an OpenAI-compatible gateway such as OpenRouter — give each entry a unique `label`. The label becomes that member's identity in council output (consensus classification, `flagged_by`, quality ratings, individual issues) and is matched by `--provider` filters. Without labels, same-provider members collapse into a single vote and unanimous consensus becomes unreachable:
+When several council members share one provider — for example, multiple models behind an OpenAI-compatible gateway such as OpenRouter — give each entry a unique `label`. The label becomes that member's identity in council output (consensus classification, `flagged_by`, quality ratings, individual issues) and is matched by `--provider` filters. Without labels, same-provider members collapse into a single vote and unanimous consensus becomes unreachable:
 
 ```json
 {

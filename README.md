@@ -31,6 +31,21 @@ Create `~/.config/star-chamber/providers.json`:
 
 API keys can be literal values or `${ENV_VAR}` references that are resolved at runtime.
 
+### Provider labels
+
+When several council members share one provider — for example multiple models behind an OpenAI-compatible gateway such as OpenRouter — give each entry a unique `label`. The label becomes that member's identity in council output (consensus classification, `flagged_by`, quality ratings, individual issues) and is matched by `--provider` filters. Without labels, same-provider members collapse into a single vote and unanimous consensus becomes unreachable:
+
+```json
+{
+  "providers": [
+    {"provider": "openrouter", "label": "gpt-5.2", "model": "openai/gpt-5.2", "api_key": "${OPENROUTER_API_KEY}"},
+    {"provider": "openrouter", "label": "gemini-3.1-pro", "model": "google/gemini-3.1-pro-preview", "api_key": "${OPENROUTER_API_KEY}"},
+    {"provider": "openrouter", "label": "grok-4.3", "model": "x-ai/grok-4.3", "api_key": "${OPENROUTER_API_KEY}"}
+  ],
+  "consensus_threshold": 2
+}
+```
+
 ### Otari gateway
 
 Instead of managing API keys per provider, you can route all non-local providers through [Otari](https://github.com/mozilla-ai/otari), Mozilla AI's OpenAI-compatible LLM gateway, by adding a top-level `otari` object:

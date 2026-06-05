@@ -29,6 +29,10 @@
       "format": "uri",
       "description": "Custom base URL for local/self-hosted LLMs. Omit for cloud providers."
     },
+    "label": {
+      "type": "string",
+      "description": "Optional unique display name for council output. Allows multiple entries sharing one provider (e.g. an OpenAI-compatible gateway) to stay distinct in consensus classification."
+    },
     "local": {
       "type": "boolean",
       "description": "Set to true for local/self-hosted providers. Affects failure path tolerance.",

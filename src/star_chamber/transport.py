@@ -96,7 +96,7 @@ async def send_to_provider(
         import any_llm  # noqa: F811
     except ImportError:
         return ProviderResponse(
-            provider=config.provider,
+            provider=config.display_name,
             model=config.model,
             success=False,
             error="any_llm package is not installed. Install it with: pip install any-llm-sdk",
@@ -138,7 +138,7 @@ async def send_to_provider(
         response = await any_llm.acompletion(**kwargs)
     except TimeoutError:
         return ProviderResponse(
-            provider=config.provider,
+            provider=config.display_name,
             model=config.model,
             success=False,
             error=f"Timeout: provider {config.provider} did not respond in time.",
@@ -154,13 +154,13 @@ async def send_to_provider(
             else:
                 detail = f"Authentication failed for cloud provider. Check your API key for {config.provider}"
             return ProviderResponse(
-                provider=config.provider,
+                provider=config.display_name,
                 model=config.model,
                 success=False,
                 error=f"{detail}: {sanitized}",
             )
         return ProviderResponse(
-            provider=config.provider,
+            provider=config.display_name,
             model=config.model,
             success=False,
             error=_sanitize_error(error_msg),
@@ -168,7 +168,7 @@ async def send_to_provider(
 
     if not response.choices:
         return ProviderResponse(
-            provider=config.provider,
+            provider=config.display_name,
             model=config.model,
             success=False,
             error=f"No response content (empty choices) from {config.provider}.",
@@ -176,7 +176,7 @@ async def send_to_provider(
 
     content = response.choices[0].message.content
     return ProviderResponse(
-        provider=config.provider,
+        provider=config.display_name,
         model=config.model,
         success=True,
         content=content,

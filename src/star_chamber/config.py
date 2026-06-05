@@ -52,6 +52,7 @@ def _parse_provider(raw: dict) -> ProviderConfig:
         api_base=raw.get("api_base"),
         max_tokens=raw.get("max_tokens"),
         local=raw.get("local", False),
+        label=raw.get("label"),
     )
 
 

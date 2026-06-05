@@ -159,3 +159,22 @@ class TestDefaults:
 
         assert len(cfg.providers) == 1
         assert cfg.providers[0].provider == "openai"
+
+
+class TestProviderLabel:
+    def test_label_parsed_and_optional(self, tmp_path):
+        config = {
+            "providers": [
+                {"provider": "openrouter", "model": "openai/gpt-5.2", "label": "gpt-5.2"},
+                {"provider": "openai", "model": "gpt-4o"},
+            ]
+        }
+        path = tmp_path / "providers.json"
+        path.write_text(json.dumps(config))
+
+        cfg = load_config(path)
+
+        assert cfg.providers[0].label == "gpt-5.2"
+        assert cfg.providers[0].display_name == "gpt-5.2"
+        assert cfg.providers[1].label is None
+        assert cfg.providers[1].display_name == "openai"

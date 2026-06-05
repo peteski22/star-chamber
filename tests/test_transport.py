@@ -524,3 +524,27 @@ class TestOtariRouting:
         # Two calls were dispatched; the cloud one through Otari, the local one direct.
         providers_used = [call.kwargs["provider"] for call in mock_module.acompletion.call_args_list]
         assert sorted(providers_used) == ["ollama", "otari"]
+
+
+# -- resolve_api_keys field preservation --------------------------------------
+
+
+class TestResolveApiKeysPreservesFields:
+    def test_label_and_optional_fields_survive(self, monkeypatch):
+        monkeypatch.setenv("MY_API_KEY", "resolved-key-value")
+        cfg = ProviderConfig(
+            provider="openrouter",
+            model="openai/gpt-5.2",
+            api_key="${MY_API_KEY}",
+            api_base="https://gw.example/v1",
+            max_tokens=1024,
+            label="gpt-5.2",
+        )
+
+        result = resolve_api_keys((cfg,))
+
+        assert result[0].api_key == "resolved-key-value"  # pragma: allowlist secret
+        assert result[0].label == "gpt-5.2"
+        assert result[0].display_name == "gpt-5.2"
+        assert result[0].api_base == "https://gw.example/v1"
+        assert result[0].max_tokens == 1024

@@ -669,3 +669,17 @@ class TestDesignQuestionResult:
         }
         assert set(data.keys()) == expected_keys
         assert data["approaches"][0]["name"] == "Option A"
+
+
+# -- ProviderConfig.display_name ----------------------------------------------
+
+
+class TestProviderConfigDisplayName:
+    def test_falls_back_to_provider(self):
+        cfg = ProviderConfig(provider="openai", model="gpt-4o")
+        assert cfg.label is None
+        assert cfg.display_name == "openai"
+
+    def test_uses_label_when_set(self):
+        cfg = ProviderConfig(provider="openrouter", model="openai/gpt-5.2", label="gpt-5.2")
+        assert cfg.display_name == "gpt-5.2"

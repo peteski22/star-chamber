@@ -159,7 +159,7 @@ def review(
 
     # Filter providers if requested.
     if providers:
-        filtered = tuple(p for p in config.providers if p.provider in providers)
+        filtered = tuple(p for p in config.providers if p.provider in providers or p.display_name in providers)
         if not filtered:
             click.echo(f"Error: no configured providers match: {', '.join(providers)}", err=True)
             sys.exit(2)
@@ -253,7 +253,7 @@ def ask(
 
     # Filter providers if requested.
     if providers:
-        filtered = tuple(p for p in config.providers if p.provider in providers)
+        filtered = tuple(p for p in config.providers if p.provider in providers or p.display_name in providers)
         if not filtered:
             click.echo(f"Error: no configured providers match: {', '.join(providers)}", err=True)
             sys.exit(2)
@@ -319,7 +319,8 @@ def list_providers(config_path: str | None) -> None:
             status = "otari"
         else:
             status = "direct"
-        click.echo(f"  {provider.provider} — {provider.model} [{status}]")
+        via = f", via {provider.provider}" if provider.label else ""
+        click.echo(f"  {provider.display_name} — {provider.model} [{status}{via}]")
     click.echo("")
 
 

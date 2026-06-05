@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 
-from star_chamber.types import CouncilConfig, ProviderConfig
+from star_chamber.types import CouncilConfig, OtariConfig, ProviderConfig
 
 
 class ConfigError(Exception):
@@ -55,6 +55,26 @@ def _parse_provider(raw: dict) -> ProviderConfig:
     )
 
 
+def _parse_otari(raw: dict) -> OtariConfig:
+    """Build an OtariConfig from a raw dict.
+
+    Args:
+        raw: Dictionary parsed from the top-level "otari" key.
+
+    Returns:
+        A validated OtariConfig instance.
+
+    Raises:
+        ConfigError: If unexpected fields are present.
+    """
+    allowed = {"api_base", "api_key"}
+    extra = set(raw) - allowed
+    if extra:
+        msg = f"Unknown 'otari' fields: {', '.join(sorted(extra))}"
+        raise ConfigError(msg)
+    return OtariConfig(api_base=raw.get("api_base"), api_key=raw.get("api_key"))
+
+
 def load_config(path: Path | None = None) -> CouncilConfig:
     """Load and validate a providers.json configuration file.
 
@@ -82,6 +102,17 @@ def load_config(path: Path | None = None) -> CouncilConfig:
         msg = f"Invalid JSON in {path}: {exc}"
         raise ConfigError(msg) from exc
 
+    if not isinstance(raw, dict):
+        msg = f"Config must be a JSON object in {path}"
+        raise ConfigError(msg)
+
+    if "platform" in raw:
+        msg = (
+            f"'platform' is no longer supported in {path}. "
+            "Replace it with a top-level 'otari' object — see the README and SPEC for the migration."
+        )
+        raise ConfigError(msg)
+
     if "providers" not in raw:
         msg = f"Config missing required key 'providers' in {path}"
         raise ConfigError(msg)
@@ -97,9 +128,15 @@ def load_config(path: Path | None = None) -> CouncilConfig:
 
     providers = tuple(_parse_provider(p) for p in providers_raw)
 
+    otari_raw = raw.get("otari")
+    if otari_raw is not None and not isinstance(otari_raw, dict):
+        msg = f"'otari' must be an object in {path}"
+        raise ConfigError(msg)
+    otari = _parse_otari(otari_raw) if otari_raw is not None else None
+
     return CouncilConfig(
         providers=providers,
         timeout_seconds=raw.get("timeout_seconds", 60),
         consensus_threshold=raw.get("consensus_threshold", 2),
-        platform=raw.get("platform"),
+        otari=otari,
     )

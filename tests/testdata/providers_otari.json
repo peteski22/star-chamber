@@ -1,5 +1,8 @@
 {
-  "platform": "any-llm",
+  "otari": {
+    "api_base": "https://otari.example/v1",
+    "api_key": "${OTARI_API_KEY}"
+  },
   "providers": [
     {"provider": "openai", "model": "gpt-4o"},
     {"provider": "anthropic", "model": "claude-sonnet-4-20250514"}

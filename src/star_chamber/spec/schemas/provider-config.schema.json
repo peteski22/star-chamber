@@ -16,7 +16,7 @@
     },
     "api_key": {
       "type": "string",
-      "description": "API key or ${ENV_VAR} reference. Omit for platform mode or keyless local providers."
+      "description": "API key or ${ENV_VAR} reference. Omit when routing through Otari or for keyless local providers."
     },
     "max_tokens": {
       "type": "integer",

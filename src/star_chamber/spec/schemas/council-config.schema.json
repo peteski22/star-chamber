@@ -14,15 +14,31 @@
       },
       "minItems": 1
     },
-    "platform": {
-      "type": "string",
-      "enum": ["any-llm"],
-      "description": "Platform for centralised key management. When set, API keys are fetched from the platform service."
+    "otari": {
+      "type": "object",
+      "description": "Route all non-local providers through Otari, an OpenAI-compatible LLM gateway. When set, each provider call is dispatched through the `otari` provider with the shared api_base/api_key; the per-provider `provider` field is treated as a label.",
+      "properties": {
+        "api_base": {
+          "type": "string",
+          "description": "Otari base URL or ${ENV_VAR} reference. Falls back to the OTARI_API_BASE environment variable when omitted."
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Otari API key or ${ENV_VAR} reference. Falls back to the OTARI_API_KEY environment variable when omitted."
+        }
+      },
+      "additionalProperties": false
     },
     "timeout_seconds": {
       "type": "integer",
       "description": "Default per-provider timeout in seconds.",
       "default": 60,
+      "minimum": 1
+    },
+    "consensus_threshold": {
+      "type": "integer",
+      "description": "Minimum number of providers that must agree for consensus.",
+      "default": 2,
       "minimum": 1
     }
   },

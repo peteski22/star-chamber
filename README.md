@@ -14,12 +14,6 @@ Or with [uv](https://docs.astral.sh/uv/):
 uv add star-chamber
 ```
 
-For platform-managed API key resolution, install the optional `platform` extra:
-
-```bash
-pip install star-chamber[platform]
-```
-
 ## Configuration
 
 Create `~/.config/star-chamber/providers.json`:
@@ -37,23 +31,32 @@ Create `~/.config/star-chamber/providers.json`:
 
 API keys can be literal values or `${ENV_VAR}` references that are resolved at runtime.
 
-### Platform mode (any-llm)
+### Otari gateway
 
-Instead of managing API keys per provider, you can use [Mozilla AI's any-llm platform](https://github.com/mozilla-ai/any-llm) for centralised key management. Set `ANY_LLM_KEY` in your environment and add `"platform": "any-llm"` to your config:
+Instead of managing API keys per provider, you can route all non-local providers through [Otari](https://github.com/mozilla-ai/otari), Mozilla AI's OpenAI-compatible LLM gateway, by adding a top-level `otari` object:
 
 ```json
 {
   "providers": [
-    {"provider": "openai", "model": "gpt-4o"},
-    {"provider": "anthropic", "model": "claude-sonnet-4-20250514"}
+    {"provider": "openai", "model": "openai:gpt-4o"},
+    {"provider": "anthropic", "model": "anthropic:claude-sonnet-4-20250514"}
   ],
-  "platform": "any-llm",
+  "otari": {
+    "api_base": "https://your-gateway.example/v1",
+    "api_key": "${OTARI_API_KEY}"
+  },
   "timeout_seconds": 90,
   "consensus_threshold": 2
 }
 ```
 
-When `platform` is set, API keys are fetched from the platform service — no `api_key` fields needed. Install the platform extra: `pip install star-chamber[platform]`.
+In Otari mode, Otari — not the SDK — picks the upstream provider, so the per-provider `provider` field becomes a label. Otari expects the `model` field to use a `provider:model` prefix such as `"openai:gpt-4o"`; consult Otari's documentation for its model-naming convention.
+
+`api_base` and `api_key` may also be omitted from the config, in which case they are resolved from the `OTARI_API_BASE` and `OTARI_API_KEY` environment variables. Both fields also support `${ENV_VAR}` references.
+
+For Bearer-token auth against a hosted Otari platform, omit `api_key` and set the `OTARI_PLATFORM_TOKEN` environment variable instead — the Otari client detects it and switches to platform mode automatically.
+
+Providers marked `"local": true` always bypass Otari and continue to use their own `api_base`.
 
 Override the config path with the `STAR_CHAMBER_CONFIG` environment variable.
 

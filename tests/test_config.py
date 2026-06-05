@@ -26,10 +26,12 @@ class TestLoadValidConfig:
         assert cfg.timeout_seconds == 90
         assert cfg.consensus_threshold == 2
 
-    def test_load_platform_config(self):
-        cfg = load_config(TESTDATA / "providers_platform.json")
+    def test_load_otari_config(self):
+        cfg = load_config(TESTDATA / "providers_otari.json")
 
-        assert cfg.platform == "any-llm"
+        assert cfg.otari is not None
+        assert cfg.otari.api_base == "https://otari.example/v1"
+        assert cfg.otari.api_key == "${OTARI_API_KEY}"
         assert len(cfg.providers) == 2
         assert cfg.providers[0].provider == "openai"
         assert cfg.providers[1].provider == "anthropic"
@@ -65,6 +67,13 @@ class TestConfigErrors:
         with pytest.raises(ConfigError, match="providers"):
             load_config(no_providers)
 
+    @pytest.mark.parametrize("root", ["null", "42", '"a string"', "[]"])
+    def test_non_object_root_raises(self, tmp_path, root):
+        bad = tmp_path / "non_object.json"
+        bad.write_text(root)
+        with pytest.raises(ConfigError, match="must be a JSON object"):
+            load_config(bad)
+
     def test_providers_not_array_raises(self):
         with pytest.raises(ConfigError, match="must be a list"):
             load_config(TESTDATA / "invalid_config.json")
@@ -81,6 +90,45 @@ class TestConfigErrors:
         with pytest.raises(ConfigError, match="model"):
             load_config(missing_model)
 
+    def test_legacy_platform_key_rejected(self, tmp_path):
+        legacy = tmp_path / "legacy.json"
+        legacy.write_text(
+            json.dumps(
+                {
+                    "platform": "any-llm",
+                    "providers": [{"provider": "openai", "model": "gpt-4o"}],
+                }
+            )
+        )
+        with pytest.raises(ConfigError, match="'platform' is no longer supported"):
+            load_config(legacy)
+
+    def test_otari_unknown_field_rejected(self, tmp_path):
+        bad = tmp_path / "bad_gw.json"
+        bad.write_text(
+            json.dumps(
+                {
+                    "otari": {"api_base": "https://x", "extra_field": 1},
+                    "providers": [{"provider": "openai", "model": "gpt-4o"}],
+                }
+            )
+        )
+        with pytest.raises(ConfigError, match="Unknown 'otari' fields"):
+            load_config(bad)
+
+    def test_otari_not_object_rejected(self, tmp_path):
+        bad = tmp_path / "bad_gw_type.json"
+        bad.write_text(
+            json.dumps(
+                {
+                    "otari": "not-an-object",
+                    "providers": [{"provider": "openai", "model": "gpt-4o"}],
+                }
+            )
+        )
+        with pytest.raises(ConfigError, match="'otari' must be an object"):
+            load_config(bad)
+
 
 class TestDefaults:
     def test_defaults_applied(self, tmp_path):
@@ -90,7 +138,7 @@ class TestDefaults:
 
         assert cfg.timeout_seconds == 60
         assert cfg.consensus_threshold == 2
-        assert cfg.platform is None
+        assert cfg.otari is None
 
     def test_default_config_path(self, monkeypatch):
         # When STAR_CHAMBER_CONFIG is set, use it.

@@ -13,6 +13,7 @@ from star_chamber.types import (
     DesignQuestionResult,
     Issue,
     MajorityIssue,
+    OtariConfig,
     ProviderConfig,
     ProviderDesignAdvice,
     ProviderError,
@@ -86,23 +87,24 @@ class TestCouncilConfig:
     def test_all_fields_set(self):
         p1 = ProviderConfig(provider="openai", model="gpt-4")
         p2 = ProviderConfig(provider="anthropic", model="claude-3")
+        gw = OtariConfig(api_base="https://gw.example/v1", api_key="${OTARI_API_KEY}")
         cc = CouncilConfig(
             providers=(p1, p2),
             timeout_seconds=120,
             consensus_threshold=3,
-            platform="my-platform",
+            otari=gw,
         )
         assert cc.providers == (p1, p2)
         assert cc.timeout_seconds == 120
         assert cc.consensus_threshold == 3
-        assert cc.platform == "my-platform"
+        assert cc.otari == gw
 
     def test_defaults(self):
         p1 = ProviderConfig(provider="openai", model="gpt-4")
         cc = CouncilConfig(providers=(p1,))
         assert cc.timeout_seconds == 60
         assert cc.consensus_threshold == 2
-        assert cc.platform is None
+        assert cc.otari is None
 
     def test_frozen(self):
         p1 = ProviderConfig(provider="openai", model="gpt-4")
@@ -112,16 +114,29 @@ class TestCouncilConfig:
 
     def test_json_round_trip(self):
         p1 = ProviderConfig(provider="openai", model="gpt-4", api_key="test-key-not-real")  # pragma: allowlist secret
-        cc = CouncilConfig(providers=(p1,), timeout_seconds=90)
+        gw = OtariConfig(api_base="https://gw.example/v1", api_key="${OTARI_API_KEY}")
+        cc = CouncilConfig(providers=(p1,), timeout_seconds=90, otari=gw)
         data = _round_trip(cc)
         # Providers come back as list-of-dicts; rebuild manually.
         rebuilt = CouncilConfig(
             providers=tuple(ProviderConfig(**p) for p in data["providers"]),
             timeout_seconds=data["timeout_seconds"],
             consensus_threshold=data["consensus_threshold"],
-            platform=data["platform"],
+            otari=OtariConfig(**data["otari"]),
         )
         assert rebuilt == cc
+
+
+class TestOtariConfig:
+    def test_defaults(self):
+        gw = OtariConfig()
+        assert gw.api_base is None
+        assert gw.api_key is None
+
+    def test_frozen(self):
+        gw = OtariConfig(api_base="x", api_key="y")
+        with pytest.raises(AttributeError):
+            gw.api_base = "z"  # type: ignore[misc]
 
 
 # -- Issue ---------------------------------------------------------------------

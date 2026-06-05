@@ -13,9 +13,10 @@ from star_chamber.transport import (
     _sanitize_error,
     fan_out,
     resolve_api_keys,
+    resolve_otari,
     send_to_provider,
 )
-from star_chamber.types import ProviderConfig
+from star_chamber.types import OtariConfig, ProviderConfig
 
 # -- helpers ------------------------------------------------------------------
 
@@ -119,7 +120,7 @@ class TestSendToProvider:
         assert result.model == "claude-3"
 
     def test_provider_passed_as_separate_kwarg(self):
-        """The any-llm SDK uses a separate provider kwarg for routing."""
+        """The SDK uses a separate provider kwarg for routing."""
         mock_module = _make_mock_any_llm("Looks good.")
         config = ProviderConfig(provider="openai", model="gpt-4o")
 
@@ -240,7 +241,7 @@ class TestSendToProvider:
         assert "no response" in result.error.lower() or "empty" in result.error.lower()
 
     def test_gemini_timeout_passed_as_kwarg(self):
-        """Gemini receives timeout as a direct request kwarg (fixed in any-llm-sdk 1.11.0)."""
+        """Gemini receives timeout as a direct request kwarg."""
         mock_module = _make_mock_any_llm()
         config = ProviderConfig(provider="gemini", model="gemini-2.0-flash")
 
@@ -324,7 +325,7 @@ class TestResolveApiKeys:
             ),
         )
 
-        result = resolve_api_keys(configs, use_platform=False)
+        result = resolve_api_keys(configs)
 
         assert result[0].api_key == "resolved-key-value"  # pragma: allowlist secret
 
@@ -338,7 +339,7 @@ class TestResolveApiKeys:
             ),
         )
 
-        result = resolve_api_keys(configs, use_platform=False)
+        result = resolve_api_keys(configs)
 
         # Missing env var should result in empty string or None.
         assert result[0].api_key == "" or result[0].api_key is None
@@ -352,7 +353,7 @@ class TestResolveApiKeys:
             ),
         )
 
-        result = resolve_api_keys(configs, use_platform=False)
+        result = resolve_api_keys(configs)
 
         assert result[0].api_key == "literal-key-value"  # pragma: allowlist secret
 
@@ -365,23 +366,161 @@ class TestResolveApiKeys:
             ),
         )
 
-        result = resolve_api_keys(configs, use_platform=False)
+        result = resolve_api_keys(configs)
 
         # Must return new objects, never mutate originals.
         assert result is not configs
         assert result[0] is not configs[0]
 
-    def test_platform_mode_skips_expansion(self, monkeypatch):
-        monkeypatch.setenv("MY_API_KEY", "resolved-key-value")
-        configs = (
-            ProviderConfig(
-                provider="openai",
-                model="gpt-4",
-                api_key="${MY_API_KEY}",
-            ),
+
+class TestResolveOtari:
+    def test_none_passes_through(self):
+        assert resolve_otari(None) is None
+
+    def test_env_var_expansion(self, monkeypatch):
+        monkeypatch.setenv("OTARI_API_KEY", "resolved-gw-key")
+        gw = OtariConfig(api_base="https://gw.example/v1", api_key="${OTARI_API_KEY}")
+
+        result = resolve_otari(gw)
+
+        assert result is not None
+        assert result.api_base == "https://gw.example/v1"
+        assert result.api_key == "resolved-gw-key"  # pragma: allowlist secret
+
+    def test_api_base_env_var_expansion(self, monkeypatch):
+        monkeypatch.setenv("OTARI_BASE_URL", "https://resolved-gw.example/v1")
+        gw = OtariConfig(api_base="${OTARI_BASE_URL}", api_key="literal")  # pragma: allowlist secret
+
+        result = resolve_otari(gw)
+
+        assert result is not None
+        assert result.api_base == "https://resolved-gw.example/v1"
+
+    def test_returns_new_object(self):
+        gw = OtariConfig(api_base="https://gw.example/v1", api_key="literal")  # pragma: allowlist secret
+        result = resolve_otari(gw)
+        assert result is not gw
+
+    def test_api_base_falls_back_to_env_when_none(self, monkeypatch):
+        monkeypatch.setenv("OTARI_API_BASE", "https://env-gw.example/v1")
+        gw = OtariConfig(api_base=None, api_key="literal")  # pragma: allowlist secret
+
+        result = resolve_otari(gw)
+
+        assert result is not None
+        assert result.api_base == "https://env-gw.example/v1"
+
+    def test_api_key_falls_back_to_env_when_none(self, monkeypatch):
+        monkeypatch.setenv("OTARI_API_KEY", "env-gw-key")
+        gw = OtariConfig(api_base="https://gw.example/v1", api_key=None)
+
+        result = resolve_otari(gw)
+
+        assert result is not None
+        assert result.api_key == "env-gw-key"  # pragma: allowlist secret
+
+    def test_unset_env_leaves_fields_none(self, monkeypatch):
+        monkeypatch.delenv("OTARI_API_BASE", raising=False)
+        monkeypatch.delenv("OTARI_API_KEY", raising=False)
+        gw = OtariConfig()  # both None
+
+        result = resolve_otari(gw)
+
+        assert result is not None
+        assert result.api_base is None
+        assert result.api_key is None
+
+    def test_explicit_values_take_precedence_over_env(self, monkeypatch):
+        monkeypatch.setenv("OTARI_API_BASE", "https://env-gw.example/v1")
+        monkeypatch.setenv("OTARI_API_KEY", "env-gw-key")
+        gw = OtariConfig(api_base="https://explicit.example/v1", api_key="explicit-key")  # pragma: allowlist secret
+
+        result = resolve_otari(gw)
+
+        assert result is not None
+        assert result.api_base == "https://explicit.example/v1"
+        assert result.api_key == "explicit-key"  # pragma: allowlist secret
+
+
+class TestOtariRouting:
+    def test_otari_overrides_provider_routing(self):
+        mock_module = _make_mock_any_llm("ok")
+        config = ProviderConfig(provider="anthropic", model="claude-3")
+        gw = OtariConfig(api_base="https://gw.example/v1", api_key="gw-key")  # pragma: allowlist secret
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            asyncio.run(send_to_provider(config, "Review this.", otari=gw))
+
+        call_kwargs = mock_module.acompletion.call_args.kwargs
+        assert call_kwargs["provider"] == "otari"
+        assert call_kwargs["model"] == "claude-3"
+        assert call_kwargs["api_base"] == "https://gw.example/v1"
+        assert call_kwargs["api_key"] == "gw-key"  # pragma: allowlist secret
+
+    def test_local_provider_bypasses_otari(self):
+        mock_module = _make_mock_any_llm("ok")
+        config = ProviderConfig(
+            provider="ollama",
+            model="llama3",
+            api_base="http://localhost:11434",
+            local=True,
         )
+        gw = OtariConfig(api_base="https://gw.example/v1", api_key="gw-key")  # pragma: allowlist secret
 
-        result = resolve_api_keys(configs, use_platform=True)
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            asyncio.run(send_to_provider(config, "Review this.", otari=gw))
 
-        # In platform mode, keys are not expanded.
-        assert result[0].api_key == "${MY_API_KEY}"
+        call_kwargs = mock_module.acompletion.call_args.kwargs
+        # Local providers keep their own routing even when a otari is configured.
+        assert call_kwargs["provider"] == "ollama"
+        assert call_kwargs["api_base"] == "http://localhost:11434"
+        assert "api_key" not in call_kwargs
+
+    def test_otari_with_none_fields_omits_overrides(self):
+        """send_to_provider omits None otari fields from the call kwargs.
+
+        Env-var resolution happens upstream in resolve_otari; by the time a
+        field is still None here, it is left to the SDK's own resolution."""
+        mock_module = _make_mock_any_llm("ok")
+        config = ProviderConfig(provider="anthropic", model="claude-3")
+        gw = OtariConfig()  # both None
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            asyncio.run(send_to_provider(config, "Review this.", otari=gw))
+
+        call_kwargs = mock_module.acompletion.call_args.kwargs
+        assert call_kwargs["provider"] == "otari"
+        assert "api_base" not in call_kwargs
+        assert "api_key" not in call_kwargs
+
+    def test_otari_auth_error_points_at_otari(self):
+        """An auth failure on a otari-routed call blames the otari, not the provider."""
+        mock_module = _make_mock_any_llm()
+        mock_module.acompletion = AsyncMock(  # type: ignore[attr-defined]
+            side_effect=Exception("Unauthorized: invalid api_key")
+        )
+        config = ProviderConfig(provider="anthropic", model="claude-3")
+        gw = OtariConfig(api_base="https://gw.example/v1", api_key="gw-key")  # pragma: allowlist secret
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            result = asyncio.run(send_to_provider(config, "Review this.", otari=gw))
+
+        assert result.success is False
+        assert "otari" in result.error.lower()
+        # Must not misdirect users to the upstream provider's own key.
+        assert "key for anthropic" not in result.error.lower()
+
+    def test_fan_out_forwards_otari(self):
+        mock_module = _make_mock_any_llm("ok")
+        configs = (
+            ProviderConfig(provider="openai", model="gpt-4"),
+            ProviderConfig(provider="ollama", model="llama3", local=True, api_base="http://localhost:11434"),
+        )
+        gw = OtariConfig(api_base="https://gw.example/v1", api_key="gw-key")  # pragma: allowlist secret
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            asyncio.run(fan_out(configs, "Review this.", timeout=30.0, otari=gw))
+
+        # Two calls were dispatched; the cloud one through Otari, the local one direct.
+        providers_used = [call.kwargs["provider"] for call in mock_module.acompletion.call_args_list]
+        assert sorted(providers_used) == ["ollama", "otari"]

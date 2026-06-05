@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import dataclasses
 from dataclasses import dataclass
 
 from star_chamber.types import OtariConfig, ProviderConfig
@@ -221,16 +222,7 @@ def resolve_api_keys(
         api_key = cfg.api_key
         if api_key is not None:
             api_key = _expand_env_var(api_key)
-        resolved.append(
-            ProviderConfig(
-                provider=cfg.provider,
-                model=cfg.model,
-                api_key=api_key,
-                api_base=cfg.api_base,
-                max_tokens=cfg.max_tokens,
-                local=cfg.local,
-            )
-        )
+        resolved.append(dataclasses.replace(cfg, api_key=api_key))
     return tuple(resolved)
 
 

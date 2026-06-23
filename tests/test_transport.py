@@ -401,27 +401,8 @@ class TestResolveOtari:
         result = resolve_otari(gw)
         assert result is not gw
 
-    def test_api_base_falls_back_to_env_when_none(self, monkeypatch):
-        monkeypatch.setenv("OTARI_API_BASE", "https://env-gw.example/v1")
-        gw = OtariConfig(api_base=None, api_key="literal")  # pragma: allowlist secret
-
-        result = resolve_otari(gw)
-
-        assert result is not None
-        assert result.api_base == "https://env-gw.example/v1"
-
-    def test_api_key_falls_back_to_env_when_none(self, monkeypatch):
-        monkeypatch.setenv("OTARI_API_KEY", "env-gw-key")
-        gw = OtariConfig(api_base="https://gw.example/v1", api_key=None)
-
-        result = resolve_otari(gw)
-
-        assert result is not None
-        assert result.api_key == "env-gw-key"  # pragma: allowlist secret
-
-    def test_unset_env_leaves_fields_none(self, monkeypatch):
-        monkeypatch.delenv("OTARI_API_BASE", raising=False)
-        monkeypatch.delenv("OTARI_API_KEY", raising=False)
+    def test_none_fields_stay_none_for_sdk_auto_detection(self):
+        """None fields are left for the SDK's OtariProvider to resolve."""
         gw = OtariConfig()  # both None
 
         result = resolve_otari(gw)
@@ -430,9 +411,7 @@ class TestResolveOtari:
         assert result.api_base is None
         assert result.api_key is None
 
-    def test_explicit_values_take_precedence_over_env(self, monkeypatch):
-        monkeypatch.setenv("OTARI_API_BASE", "https://env-gw.example/v1")
-        monkeypatch.setenv("OTARI_API_KEY", "env-gw-key")
+    def test_explicit_values_are_preserved(self):
         gw = OtariConfig(api_base="https://explicit.example/v1", api_key="explicit-key")  # pragma: allowlist secret
 
         result = resolve_otari(gw)

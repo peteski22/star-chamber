@@ -239,9 +239,10 @@ def resolve_otari(otari: OtariConfig | None) -> OtariConfig | None:
 
     Returns a new OtariConfig; never mutates input.  Returns None when
     ``otari`` is None.  An explicit ``api_base`` or ``api_key`` may use a
-    ``${ENV_VAR}`` reference, which is expanded.  When either is None, it
-    falls back to the ``OTARI_API_BASE`` / ``OTARI_API_KEY`` environment
-    variable; an unset variable leaves the field None.
+    ``${ENV_VAR}`` reference, which is expanded.  When either field is
+    None, it stays None so the SDK's OtariProvider can auto-detect
+    credentials from its own env vars (OTARI_AI_TOKEN, GATEWAY_API_KEY,
+    etc.).
 
     Args:
         otari: Optional Otari configuration.
@@ -252,11 +253,8 @@ def resolve_otari(otari: OtariConfig | None) -> OtariConfig | None:
     if otari is None:
         return None
 
-    api_base = otari.api_base
-    api_base = os.environ.get("OTARI_API_BASE") if api_base is None else _expand_env_var(api_base)
-
-    api_key = otari.api_key
-    api_key = os.environ.get("OTARI_API_KEY") if api_key is None else _expand_env_var(api_key)
+    api_base = None if otari.api_base is None else _expand_env_var(otari.api_base)
+    api_key = None if otari.api_key is None else _expand_env_var(otari.api_key)
 
     return OtariConfig(api_base=api_base, api_key=api_key)
 

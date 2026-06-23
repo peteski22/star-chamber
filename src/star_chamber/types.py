@@ -35,10 +35,12 @@ class OtariConfig:
     all routed providers.
 
     Attributes:
-        api_base: Otari base URL or ${ENV_VAR} reference. Falls back to the
-            OTARI_API_BASE environment variable when None.
-        api_key: Otari API key or ${ENV_VAR} reference. Falls back to the
-            OTARI_API_KEY environment variable when None.
+        api_base: Otari base URL or ${ENV_VAR} reference. When None, the
+            SDK's OtariProvider resolves the base URL from its own env vars.
+        api_key: Otari API key or ${ENV_VAR} reference. When None, the
+            SDK's OtariProvider auto-detects credentials from its own env
+            vars (OTARI_AI_TOKEN for platform mode, GATEWAY_API_KEY for
+            self-hosted mode).
     """
 
     api_base: str | None = None

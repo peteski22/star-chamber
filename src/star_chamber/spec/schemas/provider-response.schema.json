@@ -4,11 +4,15 @@
   "title": "Provider Response",
   "description": "Raw response wrapper from a single provider. Contains either content (success) or error (failure).",
   "type": "object",
-  "required": ["provider", "model", "success"],
+  "required": ["provider", "display_name", "model", "success"],
   "properties": {
     "provider": {
       "type": "string",
-      "description": "Provider name."
+      "description": "Underlying provider that served the call — the routing target."
+    },
+    "display_name": {
+      "type": "string",
+      "description": "Member identity used as the key in council output. Equals the configured display_name, or the provider name when none is set."
     },
     "model": {
       "type": "string",

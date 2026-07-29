@@ -31,20 +31,22 @@ Create `~/.config/star-chamber/providers.json`:
 
 API keys can be literal values or `${ENV_VAR}` references that are resolved at runtime.
 
-### Provider labels
+### Provider display names
 
-When several council members share one provider — for example, multiple models behind an OpenAI-compatible gateway such as OpenRouter — give each entry a unique `label`. The label becomes that member's identity in council output (consensus classification, `flagged_by`, quality ratings, individual issues) and is matched by `--provider` filters. Without labels, same-provider members collapse into a single vote and unanimous consensus becomes unreachable:
+When several council members share one provider — for example, multiple models behind an OpenAI-compatible gateway such as OpenRouter — give each entry a unique `display_name`. It becomes that member's identity in council output (consensus classification, `flagged_by`, quality ratings, individual issues) and is matched by `--provider` filters. Without it, same-provider members collapse into a single vote and unanimous consensus becomes unreachable:
 
 ```json
 {
   "providers": [
-    {"provider": "openrouter", "label": "gpt-5.2", "model": "openai/gpt-5.2", "api_key": "${OPENROUTER_API_KEY}"},
-    {"provider": "openrouter", "label": "gemini-3.1-pro", "model": "google/gemini-3.1-pro-preview", "api_key": "${OPENROUTER_API_KEY}"},
-    {"provider": "openrouter", "label": "grok-4.3", "model": "x-ai/grok-4.3", "api_key": "${OPENROUTER_API_KEY}"}
+    {"provider": "openrouter", "display_name": "gpt-5.2", "model": "openai/gpt-5.2", "api_key": "${OPENROUTER_API_KEY}"},
+    {"provider": "openrouter", "display_name": "gemini-3.1-pro", "model": "google/gemini-3.1-pro-preview", "api_key": "${OPENROUTER_API_KEY}"},
+    {"provider": "openrouter", "display_name": "grok-4.3", "model": "x-ai/grok-4.3", "api_key": "${OPENROUTER_API_KEY}"}
   ],
   "consensus_threshold": 2
 }
 ```
+
+In the JSON output, each provider response carries both the underlying `provider` (the routing target) and this `display_name`, and the display name is the key used throughout the aggregated result — `providers_used`, `quality_ratings`, `individual_issues`, `flagged_by`, and `failed_providers`. A member with no `display_name` falls back to the provider name.
 
 ### Otari gateway
 

@@ -18,7 +18,7 @@
     },
     "providers_used": {
       "type": "array",
-      "description": "All providers consulted (including failed ones).",
+      "description": "All council members consulted (including failed ones), identified by display name.",
       "items": { "type": "string" }
     },
     "failed_providers": {
@@ -30,7 +30,7 @@
         "properties": {
           "provider": {
             "type": "string",
-            "description": "Provider name."
+            "description": "Member display name."
           },
           "error": {
             "type": "string",
@@ -87,7 +87,7 @@
           },
           "flagged_by": {
             "type": "array",
-            "description": "Names of providers that flagged this issue.",
+            "description": "Display names of members that flagged this issue.",
             "items": { "type": "string" },
             "minItems": 2
           }
@@ -97,7 +97,7 @@
     },
     "individual_issues": {
       "type": "object",
-      "description": "Issues flagged by a single provider, keyed by provider name (code-review mode).",
+      "description": "Issues flagged by a single member, keyed by member display name (code-review mode).",
       "additionalProperties": {
         "type": "array",
         "items": {
@@ -122,7 +122,7 @@
     },
     "quality_ratings": {
       "type": "object",
-      "description": "Per-provider quality rating (code-review mode).",
+      "description": "Per-member quality rating, keyed by display name (code-review mode).",
       "additionalProperties": {
         "type": "string",
         "enum": ["excellent", "good", "fair", "needs-work"]

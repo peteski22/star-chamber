@@ -8,7 +8,7 @@
   "properties": {
     "provider": {
       "type": "string",
-      "description": "Provider name."
+      "description": "Provider name as reported by the model. Not authoritative: orchestrators identify members by the display name in the response wrapper (see provider-response.schema.json) and MAY ignore this field. See SPEC section 8."
     },
     "quality_rating": {
       "type": "string",

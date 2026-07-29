@@ -63,8 +63,14 @@ def _design_json(
     )
 
 
-def _success_response(provider: str, model: str, content: str) -> ProviderResponse:
-    return ProviderResponse(provider=provider, model=model, success=True, content=content)
+def _success_response(provider: str, model: str, content: str, display_name: str | None = None) -> ProviderResponse:
+    return ProviderResponse(
+        provider=provider,
+        display_name=display_name or provider,
+        model=model,
+        success=True,
+        content=content,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -477,3 +483,75 @@ class TestSchemaCommand:
         result = runner.invoke(main, ["schema", "nonexistent"])
         assert result.exit_code != 0
         assert "not found" in result.output.lower() or "Error" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Provider display names.
+# ---------------------------------------------------------------------------
+
+
+class TestProviderDisplayNames:
+    def test_list_providers_shows_display_name_and_underlying_provider(self):
+        member = ProviderConfig(provider="openrouter", model="openai/gpt-5.2", display_name="gpt-5.2")
+        config = CouncilConfig(providers=(member,))
+
+        with patch("star_chamber.cli._load_config", return_value=config):
+            runner = CliRunner()
+            result = runner.invoke(main, ["list-providers"])
+
+        assert result.exit_code == 0
+        assert "gpt-5.2" in result.output
+        assert "via openrouter" in result.output
+
+    def test_review_provider_flag_matches_display_name(self, tmp_path: Path):
+        src = tmp_path / "member.py"
+        src.write_text("z = 3\n")
+
+        gemini = ProviderConfig(
+            provider="openrouter", model="google/gemini-3.1-pro-preview", display_name="gemini-3.1-pro"
+        )
+        grok = ProviderConfig(provider="openrouter", model="x-ai/grok-4.3", display_name="grok-4.3")
+        config = CouncilConfig(providers=(gemini, grok), timeout_seconds=30, consensus_threshold=2)
+
+        responses = [
+            _success_response("openrouter", "google/gemini-3.1-pro-preview", _code_review_json(), "gemini-3.1-pro"),
+        ]
+
+        with (
+            patch("star_chamber.cli._load_config", return_value=config),
+            patch("star_chamber.council.resolve_api_keys", side_effect=lambda configs: configs),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+        ):
+            runner = CliRunner()
+            result = runner.invoke(main, ["review", "-p", "gemini-3.1-pro", str(src)])
+
+        assert result.exit_code == 0
+        call_kwargs = mock_fan_out.call_args
+        configs_arg = call_kwargs.kwargs.get("configs") or call_kwargs[0][0]
+        assert len(configs_arg) == 1
+        assert configs_arg[0].display_name == "gemini-3.1-pro"
+
+    def test_ask_provider_flag_matches_display_name(self):
+        gemini = ProviderConfig(
+            provider="openrouter", model="google/gemini-3.1-pro-preview", display_name="gemini-3.1-pro"
+        )
+        grok = ProviderConfig(provider="openrouter", model="x-ai/grok-4.3", display_name="grok-4.3")
+        config = CouncilConfig(providers=(gemini, grok), timeout_seconds=30, consensus_threshold=2)
+
+        responses = [
+            _success_response("openrouter", "google/gemini-3.1-pro-preview", _design_json(), "gemini-3.1-pro"),
+        ]
+
+        with (
+            patch("star_chamber.cli._load_config", return_value=config),
+            patch("star_chamber.council.resolve_api_keys", side_effect=lambda configs: configs),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+        ):
+            runner = CliRunner()
+            result = runner.invoke(main, ["ask", "-p", "gemini-3.1-pro", "Should we use Redis?"])
+
+        assert result.exit_code == 0
+        call_kwargs = mock_fan_out.call_args
+        configs_arg = call_kwargs.kwargs.get("configs") or call_kwargs[0][0]
+        assert len(configs_arg) == 1
+        assert configs_arg[0].display_name == "gemini-3.1-pro"

@@ -52,12 +52,12 @@ def _make_empty_response_module():
 
 class TestProviderResponse:
     def test_frozen(self):
-        pr = ProviderResponse(provider="openai", model="gpt-4", success=True, content="ok")
+        pr = ProviderResponse(provider="openai", display_name="openai", model="gpt-4", success=True, content="ok")
         with pytest.raises(AttributeError):
             pr.content = "changed"  # type: ignore[misc]
 
     def test_defaults(self):
-        pr = ProviderResponse(provider="openai", model="gpt-4", success=False)
+        pr = ProviderResponse(provider="openai", display_name="openai", model="gpt-4", success=False)
         assert pr.content == ""
         assert pr.error == ""
 
@@ -118,6 +118,44 @@ class TestSendToProvider:
         assert result.content == "Great code!"
         assert result.provider == "anthropic"
         assert result.model == "claude-3"
+
+    def test_display_name_defaults_to_provider(self):
+        mock_module = _make_mock_any_llm("ok")
+        config = ProviderConfig(provider="openrouter", model="x-ai/grok-4.3")
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            result = asyncio.run(send_to_provider(config, "Review this."))
+
+        assert result.provider == "openrouter"
+        assert result.display_name == "openrouter"
+
+    def test_display_name_carries_configured_value(self):
+        """The response keeps the underlying provider AND the display identity."""
+        mock_module = _make_mock_any_llm("ok")
+        config = ProviderConfig(provider="openrouter", model="openai/gpt-5.2", display_name="gpt-5.2")
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            result = asyncio.run(send_to_provider(config, "Review this."))
+
+        assert result.provider == "openrouter"  # underlying provider preserved
+        assert result.display_name == "gpt-5.2"  # identity carries the display name
+
+    def test_failure_keeps_provider_and_display_name_aligned(self):
+        """On failure, the response provider and the diagnostic name the same underlying provider."""
+        mock_module = _make_mock_any_llm()
+        mock_module.acompletion = AsyncMock(  # type: ignore[attr-defined]
+            side_effect=TimeoutError("timed out")
+        )
+        config = ProviderConfig(provider="openrouter", model="openai/gpt-5.2", display_name="gpt-5.2")
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            result = asyncio.run(send_to_provider(config, "Review this.", timeout=5.0))
+
+        assert result.success is False
+        assert result.provider == "openrouter"
+        assert result.display_name == "gpt-5.2"
+        # The diagnostic names the underlying provider, matching result.provider.
+        assert "openrouter" in result.error
 
     def test_provider_passed_as_separate_kwarg(self):
         """The SDK uses a separate provider kwarg for routing."""
@@ -503,3 +541,26 @@ class TestOtariRouting:
         # Two calls were dispatched; the cloud one through Otari, the local one direct.
         providers_used = [call.kwargs["provider"] for call in mock_module.acompletion.call_args_list]
         assert sorted(providers_used) == ["ollama", "otari"]
+
+
+# -- resolve_api_keys field preservation --------------------------------------
+
+
+class TestResolveApiKeysPreservesFields:
+    def test_display_name_and_optional_fields_survive(self, monkeypatch):
+        monkeypatch.setenv("MY_API_KEY", "resolved-key-value")
+        cfg = ProviderConfig(
+            provider="openrouter",
+            model="openai/gpt-5.2",
+            api_key="${MY_API_KEY}",
+            api_base="https://gw.example/v1",
+            max_tokens=1024,
+            display_name="gpt-5.2",
+        )
+
+        result = resolve_api_keys((cfg,))
+
+        assert result[0].api_key == "resolved-key-value"  # pragma: allowlist secret
+        assert result[0].display_name == "gpt-5.2"
+        assert result[0].api_base == "https://gw.example/v1"
+        assert result[0].max_tokens == 1024

@@ -121,7 +121,9 @@ def main() -> None:
 
 @main.command()
 @click.argument("files", nargs=-1, required=True, type=click.Path(exists=True))
-@click.option("-p", "--provider", "providers", multiple=True, help="Provider name to include (repeatable).")
+@click.option(
+    "-p", "--provider", "providers", multiple=True, help="Provider name or display name to include (repeatable)."
+)
 @click.option("--config", "config_path", type=click.Path(), default=None, help="Path to providers.json.")
 @click.option("--timeout", type=int, default=None, help="Per-provider timeout in seconds.")
 @click.option(
@@ -159,7 +161,7 @@ def review(
 
     # Filter providers if requested.
     if providers:
-        filtered = tuple(p for p in config.providers if p.provider in providers)
+        filtered = tuple(p for p in config.providers if p.provider in providers or p.display_name in providers)
         if not filtered:
             click.echo(f"Error: no configured providers match: {', '.join(providers)}", err=True)
             sys.exit(2)
@@ -215,7 +217,9 @@ def review(
 
 @main.command()
 @click.argument("question")
-@click.option("-p", "--provider", "providers", multiple=True, help="Provider name to include (repeatable).")
+@click.option(
+    "-p", "--provider", "providers", multiple=True, help="Provider name or display name to include (repeatable)."
+)
 @click.option("--config", "config_path", type=click.Path(), default=None, help="Path to providers.json.")
 @click.option("--timeout", type=int, default=None, help="Per-provider timeout in seconds.")
 @click.option(
@@ -253,7 +257,7 @@ def ask(
 
     # Filter providers if requested.
     if providers:
-        filtered = tuple(p for p in config.providers if p.provider in providers)
+        filtered = tuple(p for p in config.providers if p.provider in providers or p.display_name in providers)
         if not filtered:
             click.echo(f"Error: no configured providers match: {', '.join(providers)}", err=True)
             sys.exit(2)
@@ -319,7 +323,9 @@ def list_providers(config_path: str | None) -> None:
             status = "otari"
         else:
             status = "direct"
-        click.echo(f"  {provider.provider} — {provider.model} [{status}]")
+        identity = provider.display_name or provider.provider
+        via = f", via {provider.provider}" if provider.display_name else ""
+        click.echo(f"  {identity} — {provider.model} [{status}{via}]")
     click.echo("")
 
 

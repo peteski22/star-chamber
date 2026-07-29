@@ -41,15 +41,15 @@ def _build_code_review_result(
     providers_used: list[str] = []
 
     for response in responses:
-        providers_used.append(response.provider)
+        providers_used.append(response.display_name)
         if not response.success:
-            failed.append(ProviderError(provider=response.provider, error=response.error))
+            failed.append(ProviderError(provider=response.display_name, error=response.error))
             continue
         try:
-            review = parse_code_review(response.content, response.provider, response.model)
+            review = parse_code_review(response.content, response.display_name, response.model)
             reviews.append(review)
         except ParseError as exc:
-            failed.append(ProviderError(provider=response.provider, error=str(exc)))
+            failed.append(ProviderError(provider=response.display_name, error=str(exc)))
 
     # Classify issues across all successful reviews.
     classification = classify(reviews, threshold=threshold)
@@ -92,15 +92,15 @@ def _build_design_result(
     providers_used: list[str] = []
 
     for response in responses:
-        providers_used.append(response.provider)
+        providers_used.append(response.display_name)
         if not response.success:
-            failed.append(ProviderError(provider=response.provider, error=response.error))
+            failed.append(ProviderError(provider=response.display_name, error=response.error))
             continue
         try:
-            advice = parse_design_advice(response.content, response.provider, response.model)
+            advice = parse_design_advice(response.content, response.display_name, response.model)
             advices.append(advice)
         except ParseError as exc:
-            failed.append(ProviderError(provider=response.provider, error=str(exc)))
+            failed.append(ProviderError(provider=response.display_name, error=str(exc)))
 
     # Aggregate all approaches from all successful providers.
     all_approaches: list[Approach] = []

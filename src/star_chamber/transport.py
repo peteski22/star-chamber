@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import os
 import re
 from dataclasses import dataclass
@@ -27,7 +28,13 @@ class ProviderResponse:
     """Response from a single LLM provider.
 
     Attributes:
-        provider: Provider identifier.
+        provider: The provider configured for this member (e.g. "openai",
+            "openrouter"), preserved from the request. Not necessarily the
+            effective route: under Otari routing the call is dispatched through
+            Otari while this field keeps the configured provider.
+        display_name: Member identity used as the key in council output.
+            Equals the configured display name, or the provider name when none
+            is configured.
         model: Model name used.
         success: Whether the call succeeded.
         content: Response content on success.
@@ -35,6 +42,7 @@ class ProviderResponse:
     """
 
     provider: str
+    display_name: str
     model: str
     success: bool
     content: str = ""
@@ -91,11 +99,15 @@ async def send_to_provider(
     Returns:
         A ProviderResponse indicating success or failure.
     """
+    # The output identity: the configured display name, or the provider name.
+    identity = config.display_name or config.provider
+
     try:
         import any_llm  # noqa: F811
     except ImportError:
         return ProviderResponse(
             provider=config.provider,
+            display_name=identity,
             model=config.model,
             success=False,
             error="any_llm package is not installed. Install it with: pip install any-llm-sdk",
@@ -138,6 +150,7 @@ async def send_to_provider(
     except TimeoutError:
         return ProviderResponse(
             provider=config.provider,
+            display_name=identity,
             model=config.model,
             success=False,
             error=f"Timeout: provider {config.provider} did not respond in time.",
@@ -154,12 +167,14 @@ async def send_to_provider(
                 detail = f"Authentication failed for cloud provider. Check your API key for {config.provider}"
             return ProviderResponse(
                 provider=config.provider,
+                display_name=identity,
                 model=config.model,
                 success=False,
                 error=f"{detail}: {sanitized}",
             )
         return ProviderResponse(
             provider=config.provider,
+            display_name=identity,
             model=config.model,
             success=False,
             error=_sanitize_error(error_msg),
@@ -168,6 +183,7 @@ async def send_to_provider(
     if not response.choices:
         return ProviderResponse(
             provider=config.provider,
+            display_name=identity,
             model=config.model,
             success=False,
             error=f"No response content (empty choices) from {config.provider}.",
@@ -176,6 +192,7 @@ async def send_to_provider(
     content = response.choices[0].message.content
     return ProviderResponse(
         provider=config.provider,
+        display_name=identity,
         model=config.model,
         success=True,
         content=content,
@@ -221,16 +238,7 @@ def resolve_api_keys(
         api_key = cfg.api_key
         if api_key is not None:
             api_key = _expand_env_var(api_key)
-        resolved.append(
-            ProviderConfig(
-                provider=cfg.provider,
-                model=cfg.model,
-                api_key=api_key,
-                api_base=cfg.api_base,
-                max_tokens=cfg.max_tokens,
-                local=cfg.local,
-            )
-        )
+        resolved.append(dataclasses.replace(cfg, api_key=api_key))
     return tuple(resolved)
 
 

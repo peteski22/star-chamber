@@ -315,3 +315,42 @@ class TestClassify:
 
         assert len(result.consensus_issues) == 1
         assert result.consensus_issues[0].location == "backend/app/auth.py:23"
+
+
+# ---------------------------------------------------------------------------
+# Labelled gateway members.
+# ---------------------------------------------------------------------------
+
+
+class TestLabelledGatewayMembers:
+    """Members routed through one gateway provider stay distinct via display names.
+
+    When multiple council members share a single provider (e.g. several models
+    behind an OpenAI-compatible gateway such as OpenRouter), the per-entry
+    display name becomes the review identity, so each member counts as a
+    separate voter instead of collapsing into one provider-name vote.
+    """
+
+    def test_distinct_labels_are_distinct_voters(self):
+        reviews = [
+            _review("gpt-5.2", [_issue("app.py:10", "bug")]),
+            _review("gemini-3.1-pro", [_issue("app.py:12", "bug")]),
+            _review("grok-4.3", [_issue("app.py:11", "bug")]),
+        ]
+
+        result = classify(reviews, threshold=2)
+
+        assert len(result.consensus_issues) == 1
+        assert result.majority_issues == ()
+
+    def test_two_of_three_labelled_members_form_majority(self):
+        reviews = [
+            _review("gpt-5.2", [_issue("other.py:5", "bug")]),
+            _review("gemini-3.1-pro", [_issue("app.py:12", "bug")]),
+            _review("grok-4.3", [_issue("app.py:11", "bug")]),
+        ]
+
+        result = classify(reviews, threshold=2)
+
+        assert len(result.majority_issues) == 1
+        assert result.majority_issues[0].flagged_by == ("gemini-3.1-pro", "grok-4.3")

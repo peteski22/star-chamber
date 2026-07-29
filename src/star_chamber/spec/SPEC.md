@@ -70,6 +70,7 @@ Provider configuration defines which LLM providers the council consults and how 
 | `max_tokens` | No | Max response tokens. Default: 16384. |
 | `api_base` | No | Custom base URL. Use for local/self-hosted LLMs. Omit for cloud providers — SDKs use built-in defaults. |
 | `local` | No | Set to `true` for local/self-hosted providers. Default: `false`. |
+| `display_name` | No | Unique identity for this member in council output, used in place of the provider name. Lets several entries share one provider (e.g. an OpenAI-compatible gateway) while staying distinct voters. Defaults to the provider name. |
 
 ### API Key Resolution
 
@@ -274,7 +275,7 @@ If validation fails, the orchestrator SHOULD still attempt to use the response (
 
 ### Provider Identity
 
-The `provider` field appears in both the response wrapper ([`provider-response.schema.json`](schemas/provider-response.schema.json)) and the parsed result body ([`code-review-result.schema.json`](schemas/code-review-result.schema.json), [`design-advice-result.schema.json`](schemas/design-advice-result.schema.json)). The wrapper value is authoritative — it is set by the orchestrator. The inner value is set by the LLM and may not match. Orchestrators SHOULD use the wrapper `provider` for all classification and reporting, and MAY ignore the inner `provider` field.
+The response wrapper ([`provider-response.schema.json`](schemas/provider-response.schema.json)) carries two identity fields: `provider` is the provider configured for the member, preserved from the request (not necessarily the effective route — under Otari routing the call is dispatched through Otari while this field keeps the configured provider), and `display_name` is the member identity — set by the orchestrator, equal to the configured `display_name` or the provider name when none is set. The parsed result body ([`code-review-result.schema.json`](schemas/code-review-result.schema.json), [`design-advice-result.schema.json`](schemas/design-advice-result.schema.json)) also carries a `provider` field, but that inner value is set by the LLM and may not match. Orchestrators SHOULD key all classification and reporting on the wrapper `display_name`, and MAY ignore the inner `provider` field. Keying on `display_name` is what lets several members share one provider (e.g. behind an OpenAI-compatible gateway) while remaining distinct voters.
 
 ## 9. Consensus Classification
 
@@ -319,12 +320,12 @@ The structured output includes:
 
 - `mode`: `"code-review"`
 - `files_reviewed[]`: List of reviewed file paths.
-- `providers_used[]`: List of all providers consulted.
-- `failed_providers[]`: Providers that failed or returned malformed responses.
+- `providers_used[]`: List of all council members consulted, by display name.
+- `failed_providers[]`: Members that failed or returned malformed responses, by display name.
 - `consensus_issues[]`: Issues flagged by all successful providers.
-- `majority_issues[]`: Issues flagged by more than one provider. Each item includes `provider_count` and `flagged_by` (array of provider names) to identify which providers raised it.
-- `individual_issues{}`: Issues keyed by provider name.
-- `quality_ratings{}`: Per-provider quality rating.
+- `majority_issues[]`: Issues flagged by more than one member. Each item includes `provider_count` and `flagged_by` (array of member display names) to identify which members raised it.
+- `individual_issues{}`: Issues keyed by member display name.
+- `quality_ratings{}`: Per-member quality rating, keyed by display name.
 - `summary{}`: Counts (`total_issues`, `consensus_count`, `majority_count`) and `synthesis` (1-2 sentence overall assessment).
 - `debate{}` (optional): Debate metadata (rounds_completed, converged).
 
@@ -371,8 +372,8 @@ The structured output includes:
 
 - `mode`: `"design-question"`
 - `prompt`: The original design question (enables rendering the Markdown template without external context).
-- `providers_used[]`: List of all providers consulted.
-- `failed_providers[]`: Providers that failed or returned malformed responses.
+- `providers_used[]`: List of all council members consulted, by display name.
+- `failed_providers[]`: Members that failed or returned malformed responses, by display name.
 - `consensus_recommendation` (optional): High-level directional agreement when all providers agree, even if they differ on specifics.
 - `approaches[]`: All approaches mentioned by any provider, with `recommended_by` count, merged pros/cons, `risk_level`, and optional `fit_rating` (omitted when no provider assessed fit for the approach; when providers disagree, use the most common rating).
 - `summary{}`: Contains `synthesis` (1-2 sentence overall assessment).

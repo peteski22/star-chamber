@@ -28,8 +28,10 @@ class ProviderResponse:
     """Response from a single LLM provider.
 
     Attributes:
-        provider: Underlying provider that served the call — the routing
-            target, e.g. "openai" or "openrouter".
+        provider: The provider configured for this member (e.g. "openai",
+            "openrouter"), preserved from the request. Not necessarily the
+            effective route: under Otari routing the call is dispatched through
+            Otari while this field keeps the configured provider.
         display_name: Member identity used as the key in council output.
             Equals the configured display name, or the provider name when none
             is configured.

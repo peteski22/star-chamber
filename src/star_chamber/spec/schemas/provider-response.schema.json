@@ -8,7 +8,7 @@
   "properties": {
     "provider": {
       "type": "string",
-      "description": "Underlying provider that served the call — the routing target."
+      "description": "The provider configured for this member (e.g. openai, openrouter), preserved from the request. Not necessarily the effective route: under Otari routing the call is dispatched through Otari while this field keeps the configured provider."
     },
     "display_name": {
       "type": "string",

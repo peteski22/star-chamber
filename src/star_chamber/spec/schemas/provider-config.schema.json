@@ -31,6 +31,7 @@
     },
     "display_name": {
       "type": "string",
+      "minLength": 1,
       "description": "Optional unique identity for this member in council output, used in place of the provider name. Allows multiple entries sharing one provider (e.g. an OpenAI-compatible gateway) to stay distinct in consensus classification, flagging, and quality ratings."
     },
     "local": {

@@ -219,3 +219,27 @@ class TestProviderDisplayName:
         assert len(cfg.providers) == 2
         assert cfg.providers[0].display_name is None
         assert cfg.providers[1].display_name is None
+
+    def test_blank_display_name_rejected(self, tmp_path):
+        config = {
+            "providers": [
+                {"provider": "openrouter", "model": "openai/gpt-5.2", "display_name": "   "},
+            ]
+        }
+        path = tmp_path / "providers.json"
+        path.write_text(json.dumps(config))
+
+        with pytest.raises(ConfigError, match="display_name"):
+            load_config(path)
+
+    def test_non_string_display_name_rejected(self, tmp_path):
+        config = {
+            "providers": [
+                {"provider": "openrouter", "model": "openai/gpt-5.2", "display_name": ["gpt-5.2"]},
+            ]
+        }
+        path = tmp_path / "providers.json"
+        path.write_text(json.dumps(config))
+
+        with pytest.raises(ConfigError, match="display_name"):
+            load_config(path)

@@ -38,11 +38,16 @@ def _parse_provider(raw: dict) -> ProviderConfig:
         A validated ProviderConfig instance.
 
     Raises:
-        ConfigError: If required fields are missing.
+        ConfigError: If required fields are missing or display_name is invalid.
     """
     missing = [f for f in ("provider", "model") if f not in raw]
     if missing:
         msg = f"Provider entry missing required fields: {', '.join(missing)}"
+        raise ConfigError(msg)
+
+    display_name = raw.get("display_name")
+    if display_name is not None and (not isinstance(display_name, str) or not display_name.strip()):
+        msg = "Provider entry has an invalid 'display_name': must be a non-empty string"
         raise ConfigError(msg)
 
     return ProviderConfig(
@@ -52,7 +57,7 @@ def _parse_provider(raw: dict) -> ProviderConfig:
         api_base=raw.get("api_base"),
         max_tokens=raw.get("max_tokens"),
         local=raw.get("local", False),
-        display_name=raw.get("display_name"),
+        display_name=display_name,
     )
 
 

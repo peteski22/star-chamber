@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import os
 import re
-import dataclasses
 from dataclasses import dataclass
 
 from star_chamber.types import OtariConfig, ProviderConfig
@@ -28,7 +28,11 @@ class ProviderResponse:
     """Response from a single LLM provider.
 
     Attributes:
-        provider: Provider identifier.
+        provider: Underlying provider that served the call — the routing
+            target, e.g. "openai" or "openrouter".
+        display_name: Member identity used as the key in council output.
+            Equals the configured display name, or the provider name when none
+            is configured.
         model: Model name used.
         success: Whether the call succeeded.
         content: Response content on success.
@@ -36,6 +40,7 @@ class ProviderResponse:
     """
 
     provider: str
+    display_name: str
     model: str
     success: bool
     content: str = ""
@@ -92,11 +97,15 @@ async def send_to_provider(
     Returns:
         A ProviderResponse indicating success or failure.
     """
+    # The output identity: the configured display name, or the provider name.
+    identity = config.display_name or config.provider
+
     try:
         import any_llm  # noqa: F811
     except ImportError:
         return ProviderResponse(
-            provider=config.display_name,
+            provider=config.provider,
+            display_name=identity,
             model=config.model,
             success=False,
             error="any_llm package is not installed. Install it with: pip install any-llm-sdk",
@@ -138,7 +147,8 @@ async def send_to_provider(
         response = await any_llm.acompletion(**kwargs)
     except TimeoutError:
         return ProviderResponse(
-            provider=config.display_name,
+            provider=config.provider,
+            display_name=identity,
             model=config.model,
             success=False,
             error=f"Timeout: provider {config.provider} did not respond in time.",
@@ -154,13 +164,15 @@ async def send_to_provider(
             else:
                 detail = f"Authentication failed for cloud provider. Check your API key for {config.provider}"
             return ProviderResponse(
-                provider=config.display_name,
+                provider=config.provider,
+                display_name=identity,
                 model=config.model,
                 success=False,
                 error=f"{detail}: {sanitized}",
             )
         return ProviderResponse(
-            provider=config.display_name,
+            provider=config.provider,
+            display_name=identity,
             model=config.model,
             success=False,
             error=_sanitize_error(error_msg),
@@ -168,7 +180,8 @@ async def send_to_provider(
 
     if not response.choices:
         return ProviderResponse(
-            provider=config.display_name,
+            provider=config.provider,
+            display_name=identity,
             model=config.model,
             success=False,
             error=f"No response content (empty choices) from {config.provider}.",
@@ -176,7 +189,8 @@ async def send_to_provider(
 
     content = response.choices[0].message.content
     return ProviderResponse(
-        provider=config.display_name,
+        provider=config.provider,
+        display_name=identity,
         model=config.model,
         success=True,
         content=content,

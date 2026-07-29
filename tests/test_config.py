@@ -161,11 +161,11 @@ class TestDefaults:
         assert cfg.providers[0].provider == "openai"
 
 
-class TestProviderLabel:
-    def test_label_parsed_and_optional(self, tmp_path):
+class TestProviderDisplayName:
+    def test_display_name_parsed_and_optional(self, tmp_path):
         config = {
             "providers": [
-                {"provider": "openrouter", "model": "openai/gpt-5.2", "label": "gpt-5.2"},
+                {"provider": "openrouter", "model": "openai/gpt-5.2", "display_name": "gpt-5.2"},
                 {"provider": "openai", "model": "gpt-4o"},
             ]
         }
@@ -174,16 +174,14 @@ class TestProviderLabel:
 
         cfg = load_config(path)
 
-        assert cfg.providers[0].label == "gpt-5.2"
         assert cfg.providers[0].display_name == "gpt-5.2"
-        assert cfg.providers[1].label is None
-        assert cfg.providers[1].display_name == "openai"
+        assert cfg.providers[1].display_name is None
 
-    def test_duplicate_labels_rejected(self, tmp_path):
+    def test_duplicate_display_names_rejected(self, tmp_path):
         config = {
             "providers": [
-                {"provider": "openrouter", "model": "openai/gpt-5.2", "label": "member-a"},
-                {"provider": "openrouter", "model": "x-ai/grok-4.3", "label": "member-a"},
+                {"provider": "openrouter", "model": "openai/gpt-5.2", "display_name": "member-a"},
+                {"provider": "openrouter", "model": "x-ai/grok-4.3", "display_name": "member-a"},
             ]
         }
         path = tmp_path / "providers.json"
@@ -192,11 +190,11 @@ class TestProviderLabel:
         with pytest.raises(ConfigError, match="member-a"):
             load_config(path)
 
-    def test_label_colliding_with_unlabelled_provider_rejected(self, tmp_path):
+    def test_display_name_colliding_with_bare_provider_rejected(self, tmp_path):
         config = {
             "providers": [
                 {"provider": "openai", "model": "gpt-4o"},
-                {"provider": "openrouter", "model": "openai/gpt-5.2", "label": "openai"},
+                {"provider": "openrouter", "model": "openai/gpt-5.2", "display_name": "openai"},
             ]
         }
         path = tmp_path / "providers.json"
@@ -205,8 +203,8 @@ class TestProviderLabel:
         with pytest.raises(ConfigError, match="openai"):
             load_config(path)
 
-    def test_unlabelled_same_provider_members_still_load(self, tmp_path):
-        # Pre-label behaviour stays intact: same provider twice without labels.
+    def test_same_provider_members_without_display_name_still_load(self, tmp_path):
+        # Pre-existing behaviour stays intact: same provider twice, no display names.
         config = {
             "providers": [
                 {"provider": "openrouter", "model": "openai/gpt-5.2"},
@@ -219,4 +217,5 @@ class TestProviderLabel:
         cfg = load_config(path)
 
         assert len(cfg.providers) == 2
-        assert cfg.providers[0].display_name == cfg.providers[1].display_name == "openrouter"
+        assert cfg.providers[0].display_name is None
+        assert cfg.providers[1].display_name is None

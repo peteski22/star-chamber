@@ -63,8 +63,14 @@ def _design_json(
     )
 
 
-def _success_response(provider: str, model: str, content: str) -> ProviderResponse:
-    return ProviderResponse(provider=provider, model=model, success=True, content=content)
+def _success_response(provider: str, model: str, content: str, display_name: str | None = None) -> ProviderResponse:
+    return ProviderResponse(
+        provider=provider,
+        display_name=display_name or provider,
+        model=model,
+        success=True,
+        content=content,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -480,14 +486,14 @@ class TestSchemaCommand:
 
 
 # ---------------------------------------------------------------------------
-# Provider labels.
+# Provider display names.
 # ---------------------------------------------------------------------------
 
 
-class TestProviderLabels:
-    def test_list_providers_shows_label_and_underlying_provider(self):
-        labelled = ProviderConfig(provider="openrouter", model="openai/gpt-5.2", label="gpt-5.2")
-        config = CouncilConfig(providers=(labelled,))
+class TestProviderDisplayNames:
+    def test_list_providers_shows_display_name_and_underlying_provider(self):
+        member = ProviderConfig(provider="openrouter", model="openai/gpt-5.2", display_name="gpt-5.2")
+        config = CouncilConfig(providers=(member,))
 
         with patch("star_chamber.cli._load_config", return_value=config):
             runner = CliRunner()
@@ -497,18 +503,18 @@ class TestProviderLabels:
         assert "gpt-5.2" in result.output
         assert "via openrouter" in result.output
 
-    def test_review_provider_flag_matches_label(self, tmp_path: Path):
-        src = tmp_path / "labelled.py"
+    def test_review_provider_flag_matches_display_name(self, tmp_path: Path):
+        src = tmp_path / "member.py"
         src.write_text("z = 3\n")
 
         gemini = ProviderConfig(
-            provider="openrouter", model="google/gemini-3.1-pro-preview", label="gemini-3.1-pro"
+            provider="openrouter", model="google/gemini-3.1-pro-preview", display_name="gemini-3.1-pro"
         )
-        grok = ProviderConfig(provider="openrouter", model="x-ai/grok-4.3", label="grok-4.3")
+        grok = ProviderConfig(provider="openrouter", model="x-ai/grok-4.3", display_name="grok-4.3")
         config = CouncilConfig(providers=(gemini, grok), timeout_seconds=30, consensus_threshold=2)
 
         responses = [
-            _success_response("gemini-3.1-pro", "google/gemini-3.1-pro-preview", _code_review_json()),
+            _success_response("openrouter", "google/gemini-3.1-pro-preview", _code_review_json(), "gemini-3.1-pro"),
         ]
 
         with (
@@ -523,17 +529,17 @@ class TestProviderLabels:
         call_kwargs = mock_fan_out.call_args
         configs_arg = call_kwargs.kwargs.get("configs") or call_kwargs[0][0]
         assert len(configs_arg) == 1
-        assert configs_arg[0].label == "gemini-3.1-pro"
+        assert configs_arg[0].display_name == "gemini-3.1-pro"
 
-    def test_ask_provider_flag_matches_label(self):
+    def test_ask_provider_flag_matches_display_name(self):
         gemini = ProviderConfig(
-            provider="openrouter", model="google/gemini-3.1-pro-preview", label="gemini-3.1-pro"
+            provider="openrouter", model="google/gemini-3.1-pro-preview", display_name="gemini-3.1-pro"
         )
-        grok = ProviderConfig(provider="openrouter", model="x-ai/grok-4.3", label="grok-4.3")
+        grok = ProviderConfig(provider="openrouter", model="x-ai/grok-4.3", display_name="grok-4.3")
         config = CouncilConfig(providers=(gemini, grok), timeout_seconds=30, consensus_threshold=2)
 
         responses = [
-            _success_response("gemini-3.1-pro", "google/gemini-3.1-pro-preview", _design_json()),
+            _success_response("openrouter", "google/gemini-3.1-pro-preview", _design_json(), "gemini-3.1-pro"),
         ]
 
         with (
@@ -548,4 +554,4 @@ class TestProviderLabels:
         call_kwargs = mock_fan_out.call_args
         configs_arg = call_kwargs.kwargs.get("configs") or call_kwargs[0][0]
         assert len(configs_arg) == 1
-        assert configs_arg[0].label == "gemini-3.1-pro"
+        assert configs_arg[0].display_name == "gemini-3.1-pro"

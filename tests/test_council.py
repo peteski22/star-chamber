@@ -71,14 +71,18 @@ def _design_json(
     )
 
 
-def _success_response(provider: str, model: str, content: str) -> ProviderResponse:
+def _success_response(provider: str, model: str, content: str, display_name: str | None = None) -> ProviderResponse:
     """Build a successful ProviderResponse."""
-    return ProviderResponse(provider=provider, model=model, success=True, content=content)
+    return ProviderResponse(
+        provider=provider, display_name=display_name or provider, model=model, success=True, content=content
+    )
 
 
-def _error_response(provider: str, model: str, error: str) -> ProviderResponse:
+def _error_response(provider: str, model: str, error: str, display_name: str | None = None) -> ProviderResponse:
     """Build a failed ProviderResponse."""
-    return ProviderResponse(provider=provider, model=model, success=False, error=error)
+    return ProviderResponse(
+        provider=provider, display_name=display_name or provider, model=model, success=False, error=error
+    )
 
 
 # ---------------------------------------------------------------------------

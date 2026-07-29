@@ -46,6 +46,7 @@ class TestProviderConfig:
             api_base="https://api.openai.com",
             max_tokens=4096,
             local=True,
+            display_name="primary",
         )
         assert pc.provider == "openai"
         assert pc.model == "gpt-4"
@@ -53,6 +54,7 @@ class TestProviderConfig:
         assert pc.api_base == "https://api.openai.com"
         assert pc.max_tokens == 4096
         assert pc.local is True
+        assert pc.display_name == "primary"
 
     def test_defaults(self):
         pc = ProviderConfig(provider="anthropic", model="claude-3")
@@ -60,6 +62,7 @@ class TestProviderConfig:
         assert pc.api_base is None
         assert pc.max_tokens is None
         assert pc.local is False
+        assert pc.display_name is None
 
     def test_frozen(self):
         pc = ProviderConfig(provider="openai", model="gpt-4")
@@ -675,11 +678,10 @@ class TestDesignQuestionResult:
 
 
 class TestProviderConfigDisplayName:
-    def test_falls_back_to_provider(self):
+    def test_none_by_default(self):
         cfg = ProviderConfig(provider="openai", model="gpt-4o")
-        assert cfg.label is None
-        assert cfg.display_name == "openai"
+        assert cfg.display_name is None
 
-    def test_uses_label_when_set(self):
-        cfg = ProviderConfig(provider="openrouter", model="openai/gpt-5.2", label="gpt-5.2")
+    def test_holds_configured_value(self):
+        cfg = ProviderConfig(provider="openrouter", model="openai/gpt-5.2", display_name="gpt-5.2")
         assert cfg.display_name == "gpt-5.2"

@@ -52,28 +52,29 @@ def _parse_provider(raw: dict) -> ProviderConfig:
         api_base=raw.get("api_base"),
         max_tokens=raw.get("max_tokens"),
         local=raw.get("local", False),
-        label=raw.get("label"),
+        display_name=raw.get("display_name"),
     )
 
 
 def _validate_distinct_identities(providers: tuple[ProviderConfig, ...]) -> None:
-    """Reject labels that collide with another member's display name.
+    """Reject a display name that collides with another member's identity.
 
-    Unlabelled members sharing a provider keep loading (pre-label behaviour),
-    but an explicit label must yield a unique identity — colliding members
-    would silently merge again in consensus classification and the
-    aggregation maps, which is exactly what labels exist to prevent.
+    Members sharing a provider without a display name keep loading (pre-existing
+    behaviour), but an explicit display name must yield a unique identity —
+    colliding members would silently merge again in consensus classification
+    and the aggregation maps, which is exactly what display names exist to
+    prevent.
 
     Args:
         providers: Parsed provider configurations.
 
     Raises:
-        ConfigError: If an explicit label collides with another member's
-            display name.
+        ConfigError: If an explicit display name collides with another
+            member's identity.
     """
-    display_names = [p.display_name for p in providers]
+    identities = [p.display_name or p.provider for p in providers]
     duplicates = sorted(
-        {p.label for p in providers if p.label is not None and display_names.count(p.label) > 1}
+        {p.display_name for p in providers if p.display_name is not None and identities.count(p.display_name) > 1}
     )
     if duplicates:
         msg = f"Duplicate provider identities are not allowed: {', '.join(duplicates)}"

@@ -16,11 +16,12 @@ class ProviderConfig:
         api_base: Optional base URL override.
         max_tokens: Optional maximum token limit.
         local: Whether this provider runs locally.
-        label: Optional unique display name for council output. Lets multiple
-            entries share one provider (e.g. several models behind an
-            OpenAI-compatible gateway) while remaining distinct voters in
-            consensus classification, quality ratings, and individual-issue
-            buckets.
+        display_name: Optional unique identity for council output, used in
+            place of the provider name. Lets multiple entries share one
+            provider (e.g. several models behind an OpenAI-compatible gateway)
+            while remaining distinct voters in consensus classification,
+            quality ratings, and individual-issue buckets. When unset, output
+            falls back to the provider name.
     """
 
     provider: str
@@ -29,12 +30,7 @@ class ProviderConfig:
     api_base: str | None = None
     max_tokens: int | None = None
     local: bool = False
-    label: str | None = None
-
-    @property
-    def display_name(self) -> str:
-        """Identity used in council output; falls back to the provider name."""
-        return self.label or self.provider
+    display_name: str | None = None
 
 
 @dataclass(frozen=True)

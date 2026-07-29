@@ -121,7 +121,9 @@ def main() -> None:
 
 @main.command()
 @click.argument("files", nargs=-1, required=True, type=click.Path(exists=True))
-@click.option("-p", "--provider", "providers", multiple=True, help="Provider name or label to include (repeatable).")
+@click.option(
+    "-p", "--provider", "providers", multiple=True, help="Provider name or display name to include (repeatable)."
+)
 @click.option("--config", "config_path", type=click.Path(), default=None, help="Path to providers.json.")
 @click.option("--timeout", type=int, default=None, help="Per-provider timeout in seconds.")
 @click.option(
@@ -215,7 +217,9 @@ def review(
 
 @main.command()
 @click.argument("question")
-@click.option("-p", "--provider", "providers", multiple=True, help="Provider name or label to include (repeatable).")
+@click.option(
+    "-p", "--provider", "providers", multiple=True, help="Provider name or display name to include (repeatable)."
+)
 @click.option("--config", "config_path", type=click.Path(), default=None, help="Path to providers.json.")
 @click.option("--timeout", type=int, default=None, help="Per-provider timeout in seconds.")
 @click.option(
@@ -319,8 +323,9 @@ def list_providers(config_path: str | None) -> None:
             status = "otari"
         else:
             status = "direct"
-        via = f", via {provider.provider}" if provider.label else ""
-        click.echo(f"  {provider.display_name} — {provider.model} [{status}{via}]")
+        identity = provider.display_name or provider.provider
+        via = f", via {provider.provider}" if provider.display_name else ""
+        click.echo(f"  {identity} — {provider.model} [{status}{via}]")
     click.echo("")
 
 

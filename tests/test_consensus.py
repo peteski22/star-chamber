@@ -317,16 +317,18 @@ class TestClassify:
         assert result.consensus_issues[0].location == "backend/app/auth.py:23"
 
 
-# -- labelled gateway members --------------------------------------------------
+# ---------------------------------------------------------------------------
+# Labelled gateway members.
+# ---------------------------------------------------------------------------
 
 
 class TestLabelledGatewayMembers:
-    """Members routed through one gateway provider stay distinct via labels.
+    """Members routed through one gateway provider stay distinct via display names.
 
     When multiple council members share a single provider (e.g. several models
     behind an OpenAI-compatible gateway such as OpenRouter), the per-entry
-    label becomes the review identity, so each member counts as a separate
-    voter instead of collapsing into one provider-name vote.
+    display name becomes the review identity, so each member counts as a
+    separate voter instead of collapsing into one provider-name vote.
     """
 
     def test_distinct_labels_are_distinct_voters(self):

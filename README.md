@@ -14,6 +14,18 @@ Or with [uv](https://docs.astral.sh/uv/):
 uv add star-chamber
 ```
 
+### Otari extra
+
+Routing through an [Otari](#otari-gateway) gateway needs the `otari` extra, because the gateway client ships outside the base install:
+
+```bash
+pip install 'star-chamber[otari]'
+uv add 'star-chamber[otari]'
+uvx --from 'star-chamber[otari]' star-chamber list-providers
+```
+
+Without the extra, an Otari-mode council still starts, but every non-local provider fails on its first call reporting that the Otari packages are missing. Direct-key councils never need the extra.
+
 ## Configuration
 
 Create `~/.config/star-chamber/providers.json`:
@@ -50,7 +62,7 @@ In the JSON output, each provider response carries both the underlying `provider
 
 ### Otari gateway
 
-Instead of managing API keys per provider, you can route all non-local providers through [Otari](https://github.com/mozilla-ai/otari), Mozilla AI's OpenAI-compatible LLM gateway, by adding a top-level `otari` object:
+Instead of managing API keys per provider, you can route all non-local providers through [Otari](https://github.com/mozilla-ai/otari), Mozilla AI's OpenAI-compatible LLM gateway, by adding a top-level `otari` object. This mode requires the [`otari` extra](#otari-extra):
 
 ```json
 {

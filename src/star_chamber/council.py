@@ -156,6 +156,7 @@ async def run_council(
     Raises:
         ValueError: If required parameters for the chosen mode are missing, or
             if an invalid mode is specified.
+        ConfigError: If the config cannot be loaded, or its Otari base URL ends in an API path.
     """
     # Validate mode.
     if mode not in _VALID_MODES:

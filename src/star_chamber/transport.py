@@ -7,7 +7,9 @@ import dataclasses
 import os
 import re
 from dataclasses import dataclass
+from urllib.parse import urlsplit, urlunsplit
 
+from star_chamber.config import ConfigError
 from star_chamber.types import OtariConfig, ProviderConfig
 
 # Default maximum token limit when none is configured.
@@ -21,6 +23,14 @@ _API_KEY_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"api[_-]?key[=:]\s*\S+", re.IGNORECASE),
     re.compile(r"x{0}[A-Za-z0-9]{32,}", re.IGNORECASE),
 ]
+
+_ENV_VAR_REFERENCE = re.compile(r"\$\{([^}]+)}")
+
+# The gateway client reads these, in order, when it receives no base URL.
+_OTARI_API_BASE_ENV_VARS = ("OTARI_API_BASE", "GATEWAY_API_BASE")
+
+# Longest first, so a base that ends in /api/v1 loses the whole API path.
+_OTARI_API_PATHS = ("/api/v1", "/v1")
 
 
 @dataclass(frozen=True)
@@ -257,14 +267,80 @@ def resolve_otari(otari: OtariConfig | None) -> OtariConfig | None:
 
     Returns:
         A new OtariConfig with resolved fields, or None.
+
+    Raises:
+        ConfigError: If the effective base URL ends in an API path.
     """
     if otari is None:
         return None
+
+    validate_otari_api_base(otari)
 
     api_base = None if otari.api_base is None else _expand_env_var(otari.api_base)
     api_key = None if otari.api_key is None else _expand_env_var(otari.api_key)
 
     return OtariConfig(api_base=api_base, api_key=api_key)
+
+
+def validate_otari_api_base(otari: OtariConfig | None) -> None:
+    """Reject an Otari base URL that already ends in an API path.
+
+    The gateway client adds the API path itself, so such a base fails every call as not found.
+    Rejecting it up front gives one error that names the setting to change and its corrected value.
+    The check applies to the base the gateway client would use, including one read from the environment.
+
+    Args:
+        otari: Optional Otari configuration, before environment expansion.
+
+    Raises:
+        ConfigError: If the effective base URL ends in an API path.
+    """
+    if otari is None:
+        return
+
+    source = _otari_api_base_source(otari)
+    if source is None:
+        return
+
+    setting, api_base = source
+    origin = _without_api_path(api_base)
+    if origin is None:
+        return
+
+    msg = (
+        f"Otari API base '{api_base}' from {setting} ends in an API path. "
+        "The gateway client adds the API path itself, so the base must be the gateway origin. "
+        f"Set {setting} to '{origin}'."
+    )
+    raise ConfigError(msg)
+
+
+def _otari_api_base_source(otari: OtariConfig) -> tuple[str, str] | None:
+    """Return the setting that supplies the Otari base URL and its value, or None when none does."""
+    if otari.api_base:
+        reference = _ENV_VAR_REFERENCE.fullmatch(otari.api_base)
+        if reference is None:
+            return "'otari.api_base' in the config", otari.api_base
+        value = os.environ.get(reference.group(1))
+        if value:
+            return reference.group(1), value
+
+    # An empty base, including an unset reference, leaves the gateway client to read the environment.
+    for name in _OTARI_API_BASE_ENV_VARS:
+        value = os.environ.get(name)
+        if value:
+            return name, value
+    return None
+
+
+def _without_api_path(url: str) -> str | None:
+    """Return ``url`` without its trailing API path, or None when it has none."""
+    parts = urlsplit(url)
+    path = parts.path.rstrip("/")
+    for api_path in _OTARI_API_PATHS:
+        if path.endswith(api_path):
+            return urlunsplit(parts._replace(path=path.removesuffix(api_path)))
+    return None
 
 
 def _expand_env_var(value: str) -> str:
@@ -277,7 +353,7 @@ def _expand_env_var(value: str) -> str:
         The resolved value, or an empty string if the variable is not set.
         Non-template strings are returned unchanged.
     """
-    match = re.fullmatch(r"\$\{([^}]+)}", value)
+    match = _ENV_VAR_REFERENCE.fullmatch(value)
     if match:
         return os.environ.get(match.group(1), "")
     return value

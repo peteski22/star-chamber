@@ -10,6 +10,7 @@ from pathlib import Path
 import click
 
 from star_chamber.config import ConfigError, load_config
+from star_chamber.transport import validate_otari_api_base
 from star_chamber.types import CodeReviewResult, CouncilConfig, DesignQuestionResult
 
 
@@ -24,10 +25,12 @@ def _load_config(config_path: str | None) -> CouncilConfig:
         A validated CouncilConfig.
 
     Raises:
-        ConfigError: If the config cannot be loaded.
+        ConfigError: If the config cannot be loaded, or its Otari base URL ends in an API path.
     """
     path = Path(config_path) if config_path else None
-    return load_config(path)
+    config = load_config(path)
+    validate_otari_api_base(config.otari)
+    return config
 
 
 def _print_code_review_result(result: CodeReviewResult) -> None:

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from star_chamber.config import ConfigError
 from star_chamber.transport import (
     ProviderResponse,
     _is_auth_error,
@@ -15,6 +16,7 @@ from star_chamber.transport import (
     resolve_api_keys,
     resolve_otari,
     send_to_provider,
+    validate_otari_api_base,
 )
 from star_chamber.types import OtariConfig, ProviderConfig
 
@@ -457,6 +459,63 @@ class TestResolveOtari:
         assert result is not None
         assert result.api_base == "https://explicit.example"
         assert result.api_key == "explicit-key"  # pragma: allowlist secret
+
+    def test_api_path_in_base_is_rejected(self):
+        with pytest.raises(ConfigError, match="ends in an API path"):
+            resolve_otari(OtariConfig(api_base="https://gw.example/v1"))
+
+
+class TestValidateOtariApiBase:
+    @pytest.mark.parametrize(
+        ("api_base", "origin"),
+        [
+            ("https://api.otari.ai/v1", "https://api.otari.ai"),
+            ("https://api.otari.ai/v1/", "https://api.otari.ai"),
+            ("https://api.otari.ai/api/v1", "https://api.otari.ai"),
+            ("https://proxy.example/otari/v1", "https://proxy.example/otari"),
+        ],
+    )
+    def test_config_value_with_api_path_names_the_origin(self, api_base, origin):
+        with pytest.raises(ConfigError) as exc_info:
+            validate_otari_api_base(OtariConfig(api_base=api_base))
+
+        assert f"Set 'otari.api_base' in the config to '{origin}'." in str(exc_info.value)
+
+    def test_referenced_env_var_with_api_path_is_named(self, monkeypatch):
+        monkeypatch.setenv("OTARI_API_BASE", "https://api.otari.ai/v1")
+
+        with pytest.raises(ConfigError, match=r"Set OTARI_API_BASE to 'https://api\.otari\.ai'\."):
+            validate_otari_api_base(OtariConfig(api_base="${OTARI_API_BASE}"))
+
+    @pytest.mark.parametrize("name", ["OTARI_API_BASE", "GATEWAY_API_BASE"])
+    def test_fallback_env_var_with_api_path_is_named(self, monkeypatch, name):
+        monkeypatch.setenv(name, "https://gw.example/v1")
+
+        with pytest.raises(ConfigError, match=rf"Set {name} to 'https://gw\.example'\."):
+            validate_otari_api_base(OtariConfig())
+
+    @pytest.mark.parametrize("api_base", ["${UNSET_OTARI_BASE}", ""])
+    def test_empty_base_falls_back_to_env_var(self, monkeypatch, api_base):
+        monkeypatch.delenv("UNSET_OTARI_BASE", raising=False)
+        monkeypatch.setenv("GATEWAY_API_BASE", "https://gw.example/v1")
+
+        with pytest.raises(ConfigError, match="Set GATEWAY_API_BASE"):
+            validate_otari_api_base(OtariConfig(api_base=api_base))
+
+    def test_config_value_takes_precedence_over_env_var(self, monkeypatch):
+        monkeypatch.setenv("OTARI_API_BASE", "https://gw.example/v1")
+
+        validate_otari_api_base(OtariConfig(api_base="https://gw.example"))
+
+    @pytest.mark.parametrize(
+        "api_base",
+        [None, "https://api.otari.ai", "https://api.otari.ai/", "https://proxy.example/otari"],
+    )
+    def test_base_without_api_path_is_accepted(self, api_base):
+        validate_otari_api_base(OtariConfig(api_base=api_base))
+
+    def test_missing_otari_config_is_accepted(self):
+        validate_otari_api_base(None)
 
 
 class TestOtariRouting:

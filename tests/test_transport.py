@@ -517,6 +517,12 @@ class TestValidateOtariApiBase:
     def test_missing_otari_config_is_accepted(self):
         validate_otari_api_base(None)
 
+    def test_malformed_base_is_a_config_error_naming_its_setting(self, monkeypatch):
+        monkeypatch.setenv("OTARI_API_BASE", "https://[::1/v1")
+
+        with pytest.raises(ConfigError, match=r"from OTARI_API_BASE is not a valid URL"):
+            validate_otari_api_base(OtariConfig())
+
 
 class TestOtariRouting:
     def test_otari_overrides_provider_routing(self):

@@ -25,7 +25,7 @@ def _load_config(config_path: str | None) -> CouncilConfig:
         A validated CouncilConfig.
 
     Raises:
-        ConfigError: If the config cannot be loaded, or its Otari base URL ends in an API path.
+        ConfigError: If the config cannot be loaded, or its Otari base URL is malformed or ends in an API path.
     """
     path = Path(config_path) if config_path else None
     config = load_config(path)

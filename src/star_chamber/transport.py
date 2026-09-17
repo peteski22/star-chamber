@@ -269,7 +269,7 @@ def resolve_otari(otari: OtariConfig | None) -> OtariConfig | None:
         A new OtariConfig with resolved fields, or None.
 
     Raises:
-        ConfigError: If the effective base URL ends in an API path.
+        ConfigError: If the effective base URL is malformed or ends in an API path.
     """
     if otari is None:
         return None
@@ -293,7 +293,7 @@ def validate_otari_api_base(otari: OtariConfig | None) -> None:
         otari: Optional Otari configuration, before environment expansion.
 
     Raises:
-        ConfigError: If the effective base URL ends in an API path.
+        ConfigError: If the effective base URL is malformed or ends in an API path.
     """
     if otari is None:
         return
@@ -303,7 +303,14 @@ def validate_otari_api_base(otari: OtariConfig | None) -> None:
         return
 
     setting, api_base = source
-    origin = _without_api_path(api_base)
+    try:
+        origin = _without_api_path(api_base)
+    except ValueError as exc:
+        msg = (
+            f"Otari API base '{api_base}' from {setting} is not a valid URL ({exc}). "
+            f"Set {setting} to the gateway origin."
+        )
+        raise ConfigError(msg) from exc
     if origin is None:
         return
 

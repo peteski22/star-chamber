@@ -90,7 +90,7 @@ class TestCouncilConfig:
     def test_all_fields_set(self):
         p1 = ProviderConfig(provider="openai", model="gpt-4")
         p2 = ProviderConfig(provider="anthropic", model="claude-3")
-        gw = OtariConfig(api_base="https://gw.example/v1", api_key="${OTARI_API_KEY}")
+        gw = OtariConfig(api_base="https://gw.example", api_key="${OTARI_API_KEY}")
         cc = CouncilConfig(
             providers=(p1, p2),
             timeout_seconds=120,
@@ -117,7 +117,7 @@ class TestCouncilConfig:
 
     def test_json_round_trip(self):
         p1 = ProviderConfig(provider="openai", model="gpt-4", api_key="test-key-not-real")  # pragma: allowlist secret
-        gw = OtariConfig(api_base="https://gw.example/v1", api_key="${OTARI_API_KEY}")
+        gw = OtariConfig(api_base="https://gw.example", api_key="${OTARI_API_KEY}")
         cc = CouncilConfig(providers=(p1,), timeout_seconds=90, otari=gw)
         data = _round_trip(cc)
         # Providers come back as list-of-dicts; rebuild manually.

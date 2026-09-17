@@ -6,6 +6,7 @@ from packaging.requirements import Requirement
 
 PACKAGE = "star-chamber"
 PROVIDER_DEPENDENCY = "any-llm-sdk"
+GATEWAY_CLIENT_DEPENDENCY = "otari"
 
 
 def _requirements() -> list[Requirement]:
@@ -57,3 +58,10 @@ class TestOtariExtra:
         gated = _requirement_for_extra(PROVIDER_DEPENDENCY, "otari")
 
         assert gated.specifier == base.specifier, f"extra {gated.specifier} drifted from base {base.specifier}"
+
+    def test_otari_extra_excludes_clients_that_predate_the_gateway_api_root(self):
+        # Gateways from 0.6.0 serve only /api/v1. Clients before 0.4.0 append /v1 and get a 404.
+        gated = _requirement_for_extra(GATEWAY_CLIENT_DEPENDENCY, "otari")
+
+        assert not gated.specifier.contains("0.3.0")
+        assert gated.specifier.contains("0.4.0")

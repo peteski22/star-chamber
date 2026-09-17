@@ -20,11 +20,11 @@
       "properties": {
         "api_base": {
           "type": "string",
-          "description": "Otari base URL or ${ENV_VAR} reference. Falls back to the OTARI_API_BASE environment variable when omitted."
+          "description": "Otari gateway origin with no path, or ${ENV_VAR} reference. The client adds the API path. When omitted, falls back to the OTARI_API_BASE environment variable, then GATEWAY_API_BASE."
         },
         "api_key": {
           "type": "string",
-          "description": "Otari API key or ${ENV_VAR} reference. Falls back to the OTARI_API_KEY environment variable when omitted."
+          "description": "Otari API key or ${ENV_VAR} reference. When omitted, falls back to the OTARI_API_KEY environment variable for the hosted otari.ai platform, or GATEWAY_API_KEY for a self-hosted gateway."
         }
       },
       "additionalProperties": false

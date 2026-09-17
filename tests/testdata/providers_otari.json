@@ -1,6 +1,6 @@
 {
   "otari": {
-    "api_base": "https://otari.example/v1",
+    "api_base": "https://otari.example",
     "api_key": "${OTARI_API_KEY}"
   },
   "providers": [

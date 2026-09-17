@@ -71,7 +71,7 @@ Instead of managing API keys per provider, you can route all non-local providers
     {"provider": "anthropic", "model": "anthropic:claude-sonnet-4-20250514"}
   ],
   "otari": {
-    "api_base": "https://your-gateway.example/v1",
+    "api_base": "https://your-gateway.example",
     "api_key": "${OTARI_API_KEY}"
   },
   "timeout_seconds": 90,
@@ -80,6 +80,8 @@ Instead of managing API keys per provider, you can route all non-local providers
 ```
 
 In Otari mode, Otari — not the SDK — picks the upstream provider, so the per-provider `provider` field becomes a label. Otari expects the `model` field to use a `provider:model` prefix such as `"openai:gpt-4o"`; consult Otari's documentation for its model-naming convention.
+
+`api_base` is the gateway origin with no path, such as `https://api.otari.ai`, because the client adds the API path itself. Every command rejects a base that ends in an API path, such as `/v1`, before it calls any provider. The error names the setting that supplied the base, whether the config or `OTARI_API_BASE`/`GATEWAY_API_BASE`, and the corrected value to set.
 
 `api_base` and `api_key` may be omitted from the config; when omitted, the SDK's OtariProvider auto-detects credentials from its own env vars: `OTARI_API_KEY` for the hosted otari.ai platform (`Authorization: Bearer`, matching otari.ai's docs), or `GATEWAY_API_KEY` for a self-hosted gateway (`Otari-Key` header). `OTARI_AI_TOKEN` is also accepted as a platform-token alias. Both fields also support `${ENV_VAR}` references.
 

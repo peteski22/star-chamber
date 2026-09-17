@@ -30,7 +30,7 @@ class TestLoadValidConfig:
         cfg = load_config(TESTDATA / "providers_otari.json")
 
         assert cfg.otari is not None
-        assert cfg.otari.api_base == "https://otari.example/v1"
+        assert cfg.otari.api_base == "https://otari.example"
         assert cfg.otari.api_key == "${OTARI_API_KEY}"
         assert len(cfg.providers) == 2
         assert cfg.providers[0].provider == "openai"

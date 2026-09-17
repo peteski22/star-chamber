@@ -335,7 +335,7 @@ class TestListProvidersCommand:
     def test_list_providers_shows_otari_status(self):
         config = CouncilConfig(
             providers=(_OPENAI_CONFIG,),
-            otari=OtariConfig(api_base="https://gw.example/v1", api_key="${OTARI_API_KEY}"),
+            otari=OtariConfig(api_base="https://gw.example", api_key="${OTARI_API_KEY}"),
         )
 
         with patch("star_chamber.cli._load_config", return_value=config):
@@ -374,6 +374,61 @@ class TestConfigErrorHandling:
 
         assert result.exit_code != 0
         assert "Bad config" in result.output
+
+
+class TestOtariApiBaseCheck:
+    @staticmethod
+    def _write_otari_config(tmp_path: Path, api_base: str) -> Path:
+        config_file = tmp_path / "providers.json"
+        config_file.write_text(
+            json.dumps(
+                {
+                    "providers": [{"provider": "openai", "model": "openai:gpt-4o"}],
+                    "otari": {"api_base": api_base},
+                }
+            )
+        )
+        return config_file
+
+    def test_list_providers_reports_the_corrected_base(self, tmp_path: Path):
+        config_file = self._write_otari_config(tmp_path, "https://api.otari.ai/v1")
+
+        result = CliRunner().invoke(main, ["list-providers", "--config", str(config_file)])
+
+        assert result.exit_code == 2
+        assert "Set 'otari.api_base' in the config to 'https://api.otari.ai'." in result.output
+
+    def test_review_stops_before_calling_providers(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setenv("OTARI_API_BASE", "https://api.otari.ai/v1")
+        config_file = self._write_otari_config(tmp_path, "${OTARI_API_BASE}")
+        src = tmp_path / "hello.py"
+        src.write_text("print('hello')\n")
+
+        with patch("star_chamber.council.fan_out", new_callable=AsyncMock) as mock_fan_out:
+            result = CliRunner().invoke(main, ["review", "--config", str(config_file), str(src)])
+
+        assert result.exit_code == 2
+        assert "Set OTARI_API_BASE to 'https://api.otari.ai'." in result.output
+        mock_fan_out.assert_not_called()
+
+    def test_ask_stops_before_calling_providers(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setenv("OTARI_API_BASE", "https://api.otari.ai/v1")
+        config_file = self._write_otari_config(tmp_path, "${OTARI_API_BASE}")
+
+        with patch("star_chamber.council.fan_out", new_callable=AsyncMock) as mock_fan_out:
+            result = CliRunner().invoke(main, ["ask", "--config", str(config_file), "Redis or Memcached?"])
+
+        assert result.exit_code == 2
+        assert "Set OTARI_API_BASE to 'https://api.otari.ai'." in result.output
+        mock_fan_out.assert_not_called()
+
+    def test_origin_base_loads(self, tmp_path: Path):
+        config_file = self._write_otari_config(tmp_path, "https://api.otari.ai")
+
+        result = CliRunner().invoke(main, ["list-providers", "--config", str(config_file)])
+
+        assert result.exit_code == 0
+        assert "otari" in result.output
 
 
 # ---------------------------------------------------------------------------

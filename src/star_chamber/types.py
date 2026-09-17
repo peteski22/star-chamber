@@ -46,7 +46,7 @@ class OtariConfig:
             When None, the SDK's OtariProvider resolves it from its own env vars.
         api_key: Otari API key or ${ENV_VAR} reference. When None, the
             SDK's OtariProvider auto-detects credentials from its own env
-            vars (OTARI_AI_TOKEN for platform mode, GATEWAY_API_KEY for
+            vars (OTARI_API_KEY for platform mode, GATEWAY_API_KEY for
             self-hosted mode).
     """
 

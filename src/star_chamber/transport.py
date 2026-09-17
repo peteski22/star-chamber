@@ -249,7 +249,7 @@ def resolve_otari(otari: OtariConfig | None) -> OtariConfig | None:
     ``otari`` is None.  An explicit ``api_base`` or ``api_key`` may use a
     ``${ENV_VAR}`` reference, which is expanded.  When either field is
     None, it stays None so the SDK's OtariProvider can auto-detect
-    credentials from its own env vars (OTARI_AI_TOKEN, GATEWAY_API_KEY,
+    credentials from its own env vars (OTARI_API_KEY, GATEWAY_API_KEY,
     etc.).
 
     Args:

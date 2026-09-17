@@ -17,8 +17,9 @@ dependencies = [
 [project.optional-dependencies]
 # Otari-mode councils dispatch through any-llm's otari provider, whose client
 # package the base install omits. Mirror the base any-llm-sdk pin so the two
-# constraints cannot drift.
-otari = ["any-llm-sdk[otari]>=1.23.0,<2.0.0"]
+# constraints cannot drift. Gateways from 0.6.0 serve only /api/v1, which the
+# otari client reaches from 0.4.0; any-llm-sdk's own floor still admits older clients.
+otari = ["any-llm-sdk[otari]>=1.23.0,<2.0.0", "otari>=0.4.0"]
 
 [project.scripts]
 star-chamber = "star_chamber.cli:main"

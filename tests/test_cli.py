@@ -335,7 +335,7 @@ class TestListProvidersCommand:
     def test_list_providers_shows_otari_status(self):
         config = CouncilConfig(
             providers=(_OPENAI_CONFIG,),
-            otari=OtariConfig(api_base="https://gw.example/v1", api_key="${OTARI_API_KEY}"),
+            otari=OtariConfig(api_base="https://gw.example", api_key="${OTARI_API_KEY}"),
         )
 
         with patch("star_chamber.cli._load_config", return_value=config):

@@ -81,7 +81,7 @@ Keys are resolved in this order:
 
 ### Otari Gateway
 
-When the top-level `otari` object is set, non-local providers are dispatched through [Otari](https://github.com/mozilla-ai/otari), an OpenAI-compatible gateway. Every non-local provider entry is routed to the same `api_base` with the same `api_key`; the per-provider `provider` field is treated as an identifier label rather than as the routing target. `api_base` and `api_key` may be specified inline in the config or omitted and resolved from the `OTARI_API_BASE` and `OTARI_API_KEY` environment variables. Both fields support `${ENV_VAR}` references.
+When the top-level `otari` object is set, non-local providers are dispatched through [Otari](https://github.com/mozilla-ai/otari), an OpenAI-compatible gateway. Every non-local provider entry is routed to the same `api_base` with the same `api_key`; the per-provider `provider` field is treated as an identifier label rather than as the routing target. `api_base` and `api_key` may be specified inline in the config or omitted and resolved from the `OTARI_API_BASE` and `OTARI_API_KEY` environment variables. Both fields support `${ENV_VAR}` references. `api_base` is the gateway origin with no path, because the client adds the API path.
 
 ### Local Provider Semantics
 

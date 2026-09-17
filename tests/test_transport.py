@@ -417,25 +417,25 @@ class TestResolveOtari:
 
     def test_env_var_expansion(self, monkeypatch):
         monkeypatch.setenv("OTARI_API_KEY", "resolved-gw-key")
-        gw = OtariConfig(api_base="https://gw.example/v1", api_key="${OTARI_API_KEY}")
+        gw = OtariConfig(api_base="https://gw.example", api_key="${OTARI_API_KEY}")
 
         result = resolve_otari(gw)
 
         assert result is not None
-        assert result.api_base == "https://gw.example/v1"
+        assert result.api_base == "https://gw.example"
         assert result.api_key == "resolved-gw-key"  # pragma: allowlist secret
 
     def test_api_base_env_var_expansion(self, monkeypatch):
-        monkeypatch.setenv("OTARI_BASE_URL", "https://resolved-gw.example/v1")
-        gw = OtariConfig(api_base="${OTARI_BASE_URL}", api_key="literal")  # pragma: allowlist secret
+        monkeypatch.setenv("OTARI_API_BASE", "https://resolved-gw.example")
+        gw = OtariConfig(api_base="${OTARI_API_BASE}", api_key="literal")  # pragma: allowlist secret
 
         result = resolve_otari(gw)
 
         assert result is not None
-        assert result.api_base == "https://resolved-gw.example/v1"
+        assert result.api_base == "https://resolved-gw.example"
 
     def test_returns_new_object(self):
-        gw = OtariConfig(api_base="https://gw.example/v1", api_key="literal")  # pragma: allowlist secret
+        gw = OtariConfig(api_base="https://gw.example", api_key="literal")  # pragma: allowlist secret
         result = resolve_otari(gw)
         assert result is not gw
 
@@ -450,12 +450,12 @@ class TestResolveOtari:
         assert result.api_key is None
 
     def test_explicit_values_are_preserved(self):
-        gw = OtariConfig(api_base="https://explicit.example/v1", api_key="explicit-key")  # pragma: allowlist secret
+        gw = OtariConfig(api_base="https://explicit.example", api_key="explicit-key")  # pragma: allowlist secret
 
         result = resolve_otari(gw)
 
         assert result is not None
-        assert result.api_base == "https://explicit.example/v1"
+        assert result.api_base == "https://explicit.example"
         assert result.api_key == "explicit-key"  # pragma: allowlist secret
 
 
@@ -463,7 +463,7 @@ class TestOtariRouting:
     def test_otari_overrides_provider_routing(self):
         mock_module = _make_mock_any_llm("ok")
         config = ProviderConfig(provider="anthropic", model="claude-3")
-        gw = OtariConfig(api_base="https://gw.example/v1", api_key="gw-key")  # pragma: allowlist secret
+        gw = OtariConfig(api_base="https://gw.example", api_key="gw-key")  # pragma: allowlist secret
 
         with patch.dict(sys.modules, {"any_llm": mock_module}):
             asyncio.run(send_to_provider(config, "Review this.", otari=gw))
@@ -471,7 +471,7 @@ class TestOtariRouting:
         call_kwargs = mock_module.acompletion.call_args.kwargs
         assert call_kwargs["provider"] == "otari"
         assert call_kwargs["model"] == "claude-3"
-        assert call_kwargs["api_base"] == "https://gw.example/v1"
+        assert call_kwargs["api_base"] == "https://gw.example"
         assert call_kwargs["api_key"] == "gw-key"  # pragma: allowlist secret
 
     def test_local_provider_bypasses_otari(self):
@@ -482,7 +482,7 @@ class TestOtariRouting:
             api_base="http://localhost:11434",
             local=True,
         )
-        gw = OtariConfig(api_base="https://gw.example/v1", api_key="gw-key")  # pragma: allowlist secret
+        gw = OtariConfig(api_base="https://gw.example", api_key="gw-key")  # pragma: allowlist secret
 
         with patch.dict(sys.modules, {"any_llm": mock_module}):
             asyncio.run(send_to_provider(config, "Review this.", otari=gw))
@@ -517,7 +517,7 @@ class TestOtariRouting:
             side_effect=Exception("Unauthorized: invalid api_key")
         )
         config = ProviderConfig(provider="anthropic", model="claude-3")
-        gw = OtariConfig(api_base="https://gw.example/v1", api_key="gw-key")  # pragma: allowlist secret
+        gw = OtariConfig(api_base="https://gw.example", api_key="gw-key")  # pragma: allowlist secret
 
         with patch.dict(sys.modules, {"any_llm": mock_module}):
             result = asyncio.run(send_to_provider(config, "Review this.", otari=gw))
@@ -533,7 +533,7 @@ class TestOtariRouting:
             ProviderConfig(provider="openai", model="gpt-4"),
             ProviderConfig(provider="ollama", model="llama3", local=True, api_base="http://localhost:11434"),
         )
-        gw = OtariConfig(api_base="https://gw.example/v1", api_key="gw-key")  # pragma: allowlist secret
+        gw = OtariConfig(api_base="https://gw.example", api_key="gw-key")  # pragma: allowlist secret
 
         with patch.dict(sys.modules, {"any_llm": mock_module}):
             asyncio.run(fan_out(configs, "Review this.", timeout=30.0, otari=gw))
@@ -553,7 +553,7 @@ class TestResolveApiKeysPreservesFields:
             provider="openrouter",
             model="openai/gpt-5.2",
             api_key="${MY_API_KEY}",
-            api_base="https://gw.example/v1",
+            api_base="https://gw.example",
             max_tokens=1024,
             display_name="gpt-5.2",
         )
@@ -562,5 +562,5 @@ class TestResolveApiKeysPreservesFields:
 
         assert result[0].api_key == "resolved-key-value"  # pragma: allowlist secret
         assert result[0].display_name == "gpt-5.2"
-        assert result[0].api_base == "https://gw.example/v1"
+        assert result[0].api_base == "https://gw.example"
         assert result[0].max_tokens == 1024

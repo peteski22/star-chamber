@@ -35,6 +35,9 @@ def _build_code_review_result(
 
     Returns:
         A fully populated CodeReviewResult.
+
+    NOTE: Every response must land in either failed_providers or reviews, never both and never neither.
+    providers_responded is therefore the exact complement of failed_providers within providers_used.
     """
     reviews: list[ProviderReview] = []
     failed: list[ProviderError] = []
@@ -87,6 +90,9 @@ def _build_design_result(
 
     Returns:
         A fully populated DesignQuestionResult.
+
+    NOTE: Every response must land in either failed_providers or the parsed advice, never both and never neither.
+    providers_responded is therefore the exact complement of failed_providers within providers_used.
     """
     advices: list[ProviderDesignAdvice] = []
     failed: list[ProviderError] = []

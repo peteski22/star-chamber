@@ -702,3 +702,86 @@ class TestAnsweringRoster:
             result = await run_council(files={"app.py": "x = 1"}, config=_TWO_PROVIDER_CONFIG, mode="code-review")
 
         assert result.providers_responded == ()
+
+
+class TestRosterComplement:
+    """Each response lands in exactly one roster, so the two rosters stay complementary."""
+
+    @pytest.mark.parametrize(
+        "responses",
+        [
+            pytest.param(
+                [
+                    _success_response("openai", "gpt-4o", _code_review_json()),
+                    _error_response("anthropic", "claude-3", "Timeout."),
+                    _success_response("gemini", "gemini-2.0", _code_review_json()),
+                ],
+                id="transport-failure",
+            ),
+            pytest.param(
+                [
+                    _success_response("openai", "gpt-4o", _code_review_json()),
+                    _success_response("anthropic", "claude-3", '{"quality_rating": "go'),
+                ],
+                id="reply-cut-off-mid-json",
+            ),
+            pytest.param(
+                [
+                    _success_response("openai", "gpt-4o", _code_review_json()),
+                    _success_response("anthropic", "claude-3", "I cannot answer that."),
+                ],
+                id="prose-instead-of-json",
+            ),
+            pytest.param(
+                [
+                    _success_response("openai", "gpt-4o", _code_review_json()),
+                    _success_response("anthropic", "claude-3", json.dumps({"issues": []})),
+                ],
+                id="missing-required-field",
+            ),
+            pytest.param(
+                [_error_response("openai", "gpt-4o", "Timeout.")],
+                id="every-member-fails",
+            ),
+            pytest.param(
+                [_success_response("openai", "gpt-4o", _code_review_json())],
+                id="every-member-answers",
+            ),
+        ],
+    )
+    def test_code_review_rosters_partition_the_members_asked(self, responses):
+        result = _build_code_review_result(responses)
+
+        failed = {f.provider for f in result.failed_providers}
+        assert tuple(p for p in result.providers_used if p not in failed) == result.providers_responded
+        assert len(result.providers_responded) + len(result.failed_providers) == len(result.providers_used)
+
+    @pytest.mark.parametrize(
+        "responses",
+        [
+            pytest.param(
+                [
+                    _success_response("openai", "gpt-4o", _design_json()),
+                    _error_response("anthropic", "claude-3", "Connection refused."),
+                ],
+                id="transport-failure",
+            ),
+            pytest.param(
+                [
+                    _success_response("openai", "gpt-4o", _design_json()),
+                    _success_response("anthropic", "claude-3", '{"recommendation": "re'),
+                ],
+                id="reply-cut-off-mid-json",
+            ),
+            pytest.param(
+                [_error_response("openai", "gpt-4o", "Timeout.")],
+                id="every-member-fails",
+            ),
+        ],
+    )
+    def test_design_rosters_partition_the_members_asked(self, responses):
+        result = _build_design_result(responses, prompt="Monorepo?")
+
+        failed = {f.provider for f in result.failed_providers}
+        assert tuple(p for p in result.providers_used if p not in failed) == result.providers_responded
+        assert len(result.providers_responded) + len(result.failed_providers) == len(result.providers_used)

@@ -2,6 +2,7 @@
   "mode": "design-question",
   "prompt": "Should we use event sourcing or CRUD for our order management system? We expect ~1000 orders/day, need audit trails, and may add a recommendation engine later.",
   "providers_used": ["openai", "anthropic"],
+  "providers_responded": ["openai", "anthropic"],
   "failed_providers": [],
   "consensus_recommendation": "Use CRUD (not event sourcing) as the foundation. Both providers agree event sourcing is over-engineered for the current scale and team experience, though they differ on the specific CRUD variant.",
   "approaches": [

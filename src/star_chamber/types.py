@@ -207,11 +207,40 @@ class ClassificationResult:
 
 
 @dataclass(frozen=True)
+class CodeReviewSummary:
+    """Counts and prose summarizing a code review council session.
+
+    Attributes:
+        total_issues: Number of distinct issues found, across every bucket.
+        consensus_count: Number of issues every member that answered flagged.
+        majority_count: Number of issues more than one but not all of them flagged.
+        synthesis: Overall assessment in prose.
+    """
+
+    total_issues: int
+    consensus_count: int
+    majority_count: int
+    synthesis: str
+
+
+@dataclass(frozen=True)
+class DesignSummary:
+    """Prose summarizing a design question council session.
+
+    Attributes:
+        synthesis: Overall assessment in prose.
+    """
+
+    synthesis: str
+
+
+@dataclass(frozen=True)
 class CodeReviewResult:
     """Final aggregated result from a code review council.
 
     Attributes:
         mode: Council mode (e.g. "code-review").
+        files_reviewed: Paths of the files sent for review.
         providers_used: Names of every council member consulted, including those that failed.
         providers_responded: Names of the members that returned a usable review.
             Consensus, majority, and individual classifications were computed
@@ -222,10 +251,11 @@ class CodeReviewResult:
         majority_issues: Issues flagged by most providers.
         individual_issues: Issues keyed by provider name.
         quality_ratings: Quality ratings keyed by provider name.
-        summary: Aggregated summary of all reviews.
+        summary: Counts and prose for the session.
     """
 
     mode: str
+    files_reviewed: tuple[str, ...]
     providers_used: tuple[str, ...]
     providers_responded: tuple[str, ...]
     failed_providers: tuple[ProviderError, ...]
@@ -234,7 +264,7 @@ class CodeReviewResult:
     majority_issues: tuple[MajorityIssue, ...]
     individual_issues: dict[str, tuple[Issue, ...]]
     quality_ratings: dict[str, str]
-    summary: str
+    summary: CodeReviewSummary
 
 
 @dataclass(frozen=True)
@@ -250,7 +280,7 @@ class DesignQuestionResult:
         failed_providers: Providers that failed during the session.
         approaches: Aggregated design approaches.
         consensus_recommendation: Recommendation all providers agreed on.
-        summary: Aggregated summary of design advice.
+        summary: Prose for the session.
     """
 
     mode: str
@@ -259,5 +289,5 @@ class DesignQuestionResult:
     providers_responded: tuple[str, ...]
     failed_providers: tuple[ProviderError, ...]
     approaches: tuple[Approach, ...]
+    summary: DesignSummary
     consensus_recommendation: str | None = None
-    summary: str = ""

@@ -21,6 +21,47 @@
       "description": "The roster that was asked: all council members consulted, including those that failed, identified by display name. This is not the roster that answered; see providers_responded.",
       "items": { "type": "string" }
     },
+    "reviews": {
+      "type": "array",
+      "description": "Each answering member's parsed review, in full (code-review mode).",
+      "items": {
+        "type": "object",
+        "required": ["provider", "model", "quality_rating", "issues", "praise", "summary", "raw_content"],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "description": "Member display name."
+          },
+          "model": {
+            "type": "string",
+            "description": "Model that produced this review."
+          },
+          "quality_rating": {
+            "type": "string",
+            "enum": ["excellent", "good", "fair", "needs-work"]
+          },
+          "issues": {
+            "type": "array",
+            "description": "Every issue this member raised, before classification.",
+            "items": { "$ref": "#/$defs/issue" }
+          },
+          "praise": {
+            "type": "array",
+            "description": "Positive observations from this member.",
+            "items": { "type": "string" }
+          },
+          "summary": {
+            "type": "string",
+            "description": "This member's own summary of its review."
+          },
+          "raw_content": {
+            "type": "string",
+            "description": "The member's unparsed response text."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
     "providers_responded": {
       "type": "array",
       "description": "The roster that answered: council members that returned a usable response, identified by display name. This is the denominator the consensus, majority, and individual classifications were computed over.",
@@ -48,24 +89,7 @@
     "consensus_issues": {
       "type": "array",
       "description": "Issues flagged by every member in providers_responded (code-review mode).",
-      "items": {
-        "type": "object",
-        "required": ["severity", "location", "category", "description", "suggestion"],
-        "properties": {
-          "severity": {
-            "type": "string",
-            "enum": ["high", "medium", "low"]
-          },
-          "location": { "type": "string" },
-          "category": {
-            "type": "string",
-            "enum": ["craftsmanship", "architecture", "correctness", "invariants", "maintainability"]
-          },
-          "description": { "type": "string" },
-          "suggestion": { "type": "string" }
-        },
-        "additionalProperties": false
-      }
+      "items": { "$ref": "#/$defs/issue" }
     },
     "majority_issues": {
       "type": "array",
@@ -105,24 +129,7 @@
       "description": "Issues flagged by a single member, keyed by member display name (code-review mode).",
       "additionalProperties": {
         "type": "array",
-        "items": {
-          "type": "object",
-          "required": ["severity", "location", "category", "description", "suggestion"],
-          "properties": {
-            "severity": {
-              "type": "string",
-              "enum": ["high", "medium", "low"]
-            },
-            "location": { "type": "string" },
-            "category": {
-              "type": "string",
-              "enum": ["craftsmanship", "architecture", "correctness", "invariants", "maintainability"]
-            },
-            "description": { "type": "string" },
-            "suggestion": { "type": "string" }
-          },
-          "additionalProperties": false
-        }
+        "items": { "$ref": "#/$defs/issue" }
       }
     },
     "quality_ratings": {
@@ -138,7 +145,7 @@
       "description": "The original design question (design-question mode). Enables rendering the markdown template without external context."
     },
     "consensus_recommendation": {
-      "type": "string",
+      "type": ["string", "null"],
       "description": "High-level consensus recommendation when all providers agree on a general direction, even if they differ on specifics (design-question mode)."
     },
     "approaches": {
@@ -164,12 +171,13 @@
           },
           "risk_level": {
             "type": "string",
-            "enum": ["low", "medium", "high"]
+            "enum": ["low", "medium", "high", "unknown"],
+            "description": "Aggregated risk level. 'unknown' when no provider stated one."
           },
           "fit_rating": {
-            "type": "string",
-            "enum": ["excellent", "good", "fair", "poor"],
-            "description": "Aggregated fit rating. When providers disagree, use the most common rating. Omitted when no provider assessed fit for this approach."
+            "type": ["string", "null"],
+            "enum": ["excellent", "good", "fair", "poor", null],
+            "description": "Aggregated fit rating. When providers disagree, use the most common rating. Null when no provider assessed fit for this approach."
           }
         },
         "additionalProperties": false
@@ -222,7 +230,7 @@
         "properties": { "mode": { "const": "code-review" } }
       },
       "then": {
-        "required": ["files_reviewed", "consensus_issues", "majority_issues", "individual_issues", "quality_ratings"],
+        "required": ["files_reviewed", "reviews", "consensus_issues", "majority_issues", "individual_issues", "quality_ratings"],
         "not": {
           "anyOf": [
             { "required": ["prompt"] },
@@ -246,6 +254,7 @@
         "not": {
           "anyOf": [
             { "required": ["files_reviewed"] },
+            { "required": ["reviews"] },
             { "required": ["consensus_issues"] },
             { "required": ["majority_issues"] },
             { "required": ["individual_issues"] },
@@ -260,5 +269,26 @@
       }
     }
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "issue": {
+      "description": "One issue as a member reported it. majority_issues declares this shape inline because it adds two fields, and additionalProperties:false does not compose through a $ref.",
+      "type": "object",
+      "required": ["severity", "location", "category", "description", "suggestion"],
+      "properties": {
+        "severity": {
+          "type": "string",
+          "enum": ["high", "medium", "low"]
+        },
+        "location": { "type": "string" },
+        "category": {
+          "type": "string",
+          "enum": ["craftsmanship", "architecture", "correctness", "invariants", "maintainability"]
+        },
+        "description": { "type": "string" },
+        "suggestion": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  }
 }

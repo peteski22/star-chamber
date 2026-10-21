@@ -13,8 +13,10 @@ from star_chamber.transport import ProviderResponse, fan_out, resolve_api_keys, 
 from star_chamber.types import (
     Approach,
     CodeReviewResult,
+    CodeReviewSummary,
     CouncilConfig,
     DesignQuestionResult,
+    DesignSummary,
     ProviderDesignAdvice,
     ProviderError,
     ProviderReview,
@@ -25,12 +27,14 @@ _VALID_MODES = frozenset({"code-review", "design-question"})
 
 def _build_code_review_result(
     responses: Sequence[ProviderResponse],
+    files_reviewed: tuple[str, ...],
     threshold: int = 2,
 ) -> CodeReviewResult:
     """Parse responses, classify issues, and build a CodeReviewResult.
 
     Args:
         responses: Provider responses from the fan-out round.
+        files_reviewed: Paths of the files sent for review.
         threshold: Consensus threshold for classification.
 
     Returns:
@@ -62,10 +66,17 @@ def _build_code_review_result(
 
     # Build summary from individual review summaries.
     summaries = [r.summary for r in reviews if r.summary]
-    summary = " ".join(summaries) if summaries else ""
+    synthesis = " ".join(summaries) if summaries else ""
+
+    total_issues = (
+        len(classification.consensus_issues)
+        + len(classification.majority_issues)
+        + sum(len(issues) for issues in classification.individual_issues.values())
+    )
 
     return CodeReviewResult(
         mode="code-review",
+        files_reviewed=files_reviewed,
         providers_used=tuple(providers_used),
         providers_responded=tuple(r.provider for r in reviews),
         failed_providers=tuple(failed),
@@ -74,7 +85,12 @@ def _build_code_review_result(
         majority_issues=classification.majority_issues,
         individual_issues=classification.individual_issues,
         quality_ratings=quality_ratings,
-        summary=summary,
+        summary=CodeReviewSummary(
+            total_issues=total_issues,
+            consensus_count=len(classification.consensus_issues),
+            majority_count=len(classification.majority_issues),
+            synthesis=synthesis,
+        ),
     )
 
 
@@ -122,7 +138,7 @@ def _build_design_result(
 
     # Build summary from individual advice summaries.
     summaries = [a.summary for a in advices if a.summary]
-    summary = " ".join(summaries) if summaries else ""
+    synthesis = " ".join(summaries) if summaries else ""
 
     return DesignQuestionResult(
         mode="design-question",
@@ -132,7 +148,7 @@ def _build_design_result(
         failed_providers=tuple(failed),
         approaches=tuple(all_approaches),
         consensus_recommendation=consensus_recommendation,
-        summary=summary,
+        summary=DesignSummary(synthesis=synthesis),
     )
 
 
@@ -209,6 +225,7 @@ async def run_council(
     if mode == "code-review":
         return _build_code_review_result(
             responses,
+            files_reviewed=tuple(files),  # type: ignore[arg-type]
             threshold=config.consensus_threshold,
         )
 

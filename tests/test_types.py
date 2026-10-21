@@ -9,8 +9,10 @@ from star_chamber.types import (
     Approach,
     ClassificationResult,
     CodeReviewResult,
+    CodeReviewSummary,
     CouncilConfig,
     DesignQuestionResult,
+    DesignSummary,
     Issue,
     MajorityIssue,
     OtariConfig,
@@ -553,6 +555,7 @@ class TestCodeReviewResult:
         )
         return CodeReviewResult(
             mode="code-review",
+            files_reviewed=("app.py",),
             providers_used=("openai", "anthropic"),
             providers_responded=("openai",),
             failed_providers=(ProviderError(provider="local", error="crash"),),
@@ -561,7 +564,7 @@ class TestCodeReviewResult:
             majority_issues=(mi,),
             individual_issues={"openai": (issue,)},
             quality_ratings={"openai": "good"},
-            summary="Overall good",
+            summary=CodeReviewSummary(total_issues=1, consensus_count=1, majority_count=1, synthesis="Overall good"),
         )
 
     def test_all_fields_set(self, result):
@@ -574,11 +577,13 @@ class TestCodeReviewResult:
         assert len(result.majority_issues) == 1
         assert result.individual_issues == {"openai": result.consensus_issues}
         assert result.quality_ratings == {"openai": "good"}
-        assert result.summary == "Overall good"
+        assert result.summary.synthesis == "Overall good"
+        assert result.files_reviewed == ("app.py",)
 
     def test_defaults(self):
         CodeReviewResult(
             mode="code-review",
+            files_reviewed=(),
             providers_used=(),
             providers_responded=(),
             failed_providers=(),
@@ -587,7 +592,7 @@ class TestCodeReviewResult:
             majority_issues=(),
             individual_issues={},
             quality_ratings={},
-            summary="empty",
+            summary=CodeReviewSummary(total_issues=0, consensus_count=0, majority_count=0, synthesis=""),
         )
 
     def test_frozen(self, result):
@@ -599,6 +604,7 @@ class TestCodeReviewResult:
         # Verify the serialized JSON contains all top-level keys.
         expected_keys = {
             "mode",
+            "files_reviewed",
             "providers_used",
             "providers_responded",
             "failed_providers",
@@ -637,7 +643,7 @@ class TestDesignQuestionResult:
             failed_providers=(),
             approaches=(approach,),
             consensus_recommendation="Go with Option A",
-            summary="Option A is best",
+            summary=DesignSummary(synthesis="Option A is best"),
         )
 
     def test_all_fields_set(self, design_result):
@@ -648,7 +654,7 @@ class TestDesignQuestionResult:
         assert design_result.failed_providers == ()
         assert len(design_result.approaches) == 1
         assert design_result.consensus_recommendation == "Go with Option A"
-        assert design_result.summary == "Option A is best"
+        assert design_result.summary.synthesis == "Option A is best"
 
     def test_defaults(self):
         dr = DesignQuestionResult(
@@ -658,9 +664,10 @@ class TestDesignQuestionResult:
             providers_responded=(),
             failed_providers=(),
             approaches=(),
+            summary=DesignSummary(synthesis=""),
         )
         assert dr.consensus_recommendation is None
-        assert dr.summary == ""
+        assert dr.summary.synthesis == ""
 
     def test_frozen(self, design_result):
         with pytest.raises(AttributeError):

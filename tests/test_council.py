@@ -104,7 +104,7 @@ class TestBuildCodeReviewResult:
             _success_response("anthropic", "claude-3", _code_review_json(issues=[issue_data])),
         ]
 
-        result = _build_code_review_result(responses, threshold=2)
+        result = _build_code_review_result(responses, files_reviewed=("app.py",), threshold=2)
 
         assert isinstance(result.reviews, tuple)
         assert len(result.reviews) == 2
@@ -119,7 +119,7 @@ class TestBuildCodeReviewResult:
             _success_response("anthropic", "claude-3", "not valid json at all"),
         ]
 
-        result = _build_code_review_result(responses, threshold=2)
+        result = _build_code_review_result(responses, files_reviewed=("app.py",), threshold=2)
 
         assert len(result.reviews) == 1
         assert result.reviews[0].provider == "openai"
@@ -133,7 +133,7 @@ class TestBuildCodeReviewResult:
             _error_response("anthropic", "claude-3", "Timeout: provider anthropic did not respond in time."),
         ]
 
-        result = _build_code_review_result(responses, threshold=2)
+        result = _build_code_review_result(responses, files_reviewed=("app.py",), threshold=2)
 
         assert len(result.reviews) == 1
         assert len(result.failed_providers) == 1
@@ -146,7 +146,7 @@ class TestBuildCodeReviewResult:
             _success_response("anthropic", "claude-3", _code_review_json(quality="good")),
         ]
 
-        result = _build_code_review_result(responses, threshold=2)
+        result = _build_code_review_result(responses, files_reviewed=("app.py",), threshold=2)
 
         assert result.quality_ratings["openai"] == "excellent"
         assert result.quality_ratings["anthropic"] == "good"
@@ -750,7 +750,7 @@ class TestRosterComplement:
         ],
     )
     def test_code_review_rosters_partition_the_members_asked(self, responses):
-        result = _build_code_review_result(responses)
+        result = _build_code_review_result(responses, files_reviewed=("app.py",))
 
         failed = {f.provider for f in result.failed_providers}
         assert tuple(p for p in result.providers_used if p not in failed) == result.providers_responded

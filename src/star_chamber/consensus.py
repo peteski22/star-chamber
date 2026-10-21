@@ -1,17 +1,26 @@
-"""Consensus classification for multi-provider code review issues.
+"""Consensus algorithms that combine what several providers reported.
 
 Implements the grouping and classification algorithm from spec section 9.
 Issues from multiple providers are grouped by file, line proximity, and
 category, then classified as consensus, majority, or individual.
+Design approaches are grouped by name, and the count of providers that
+recommended each one is derived from the recommendation each provider gave.
 """
 
 from __future__ import annotations
 
 import re
-from collections import defaultdict
-from collections.abc import Sequence
+from collections import Counter, defaultdict
+from collections.abc import Iterable, Sequence
 
-from star_chamber.types import ClassificationResult, Issue, MajorityIssue, ProviderReview
+from star_chamber.types import (
+    Approach,
+    ClassificationResult,
+    Issue,
+    MajorityIssue,
+    ProviderDesignAdvice,
+    ProviderReview,
+)
 
 # Line numbers within this tolerance are considered the same location.
 _LINE_TOLERANCE = 5
@@ -222,3 +231,122 @@ def classify(reviews: Sequence[ProviderReview], threshold: int = 2) -> Classific
         majority_issues=tuple(majority),
         individual_issues={k: tuple(v) for k, v in individual_map.items()},
     )
+
+
+# Characters outside a name's words, so a name matches regardless of case and punctuation.
+_NON_WORD_RE = re.compile(r"[^a-z0-9]+", re.ASCII)
+
+# Fit ratings, most cautious first, so a tie resolves to the more cautious rating.
+_FIT_RATINGS_BY_CAUTION = ("poor", "fair", "good", "excellent")
+
+# Risk levels, most cautious first, so a tie resolves to the more cautious level.
+# "unknown" is absent because it means no provider stated a level, not that one was chosen.
+_RISK_LEVELS_BY_CAUTION = ("high", "medium", "low")
+
+
+def _approach_name_key(name: str) -> str:
+    """Reduce an approach name to the form two providers must share to mean the same approach."""
+    return _NON_WORD_RE.sub(" ", name.casefold()).strip()
+
+
+def _names_mentioned_in(text: str, name_keys: Iterable[str]) -> set[str]:
+    """Return the approach names the text names, matching whole words only."""
+    haystack = f" {_approach_name_key(text)} "
+    return {key for key in name_keys if f" {key} " in haystack}
+
+
+def _most_cautious_of_the_most_common(values: Sequence[str], by_caution: Sequence[str]) -> str | None:
+    """Return the value the most providers stated, resolving a tie toward the more cautious value.
+
+    Args:
+        values: What each provider stated, including repeats.
+        by_caution: The permitted values, most cautious first.
+
+    Returns:
+        The winning value, or None when no provider stated a permitted one.
+    """
+    counts = Counter(value for value in values if value in by_caution)
+    if not counts:
+        return None
+    most = max(counts.values())
+    return next(value for value in by_caution if counts.get(value) == most)
+
+
+def aggregate_approaches(advices: Sequence[ProviderDesignAdvice]) -> tuple[Approach, ...]:
+    """Group the approaches every provider named, and count who recommended each one.
+
+    A provider cannot report how many providers recommended an approach, so the
+    count is derived from the recommendation each provider gave.
+
+    Args:
+        advices: Parsed advice from every provider that answered.
+
+    Returns:
+        One approach per distinct name, ordered as the providers first named them.
+    """
+    display_names: dict[str, str] = {}
+    pros: dict[str, dict[str, None]] = {}
+    cons: dict[str, dict[str, None]] = {}
+    risk_levels: dict[str, list[str]] = defaultdict(list)
+    fit_ratings: dict[str, list[str]] = defaultdict(list)
+
+    for advice in advices:
+        for approach in advice.approaches:
+            key = _approach_name_key(approach.name)
+            if not key:
+                continue
+            display_names.setdefault(key, approach.name)
+            pros.setdefault(key, {}).update(dict.fromkeys(approach.pros))
+            cons.setdefault(key, {}).update(dict.fromkeys(approach.cons))
+            risk_levels[key].append(approach.risk_level)
+            if approach.fit_rating is not None:
+                fit_ratings[key].append(approach.fit_rating)
+
+    recommended_by = Counter[str]()
+    for advice in advices:
+        recommended_by.update(_names_mentioned_in(advice.recommendation, display_names))
+
+    return tuple(
+        Approach(
+            name=display_names[key],
+            recommended_by=recommended_by[key],
+            pros=tuple(pros[key]),
+            cons=tuple(cons[key]),
+            risk_level=_most_cautious_of_the_most_common(risk_levels[key], _RISK_LEVELS_BY_CAUTION) or "unknown",
+            fit_rating=_most_cautious_of_the_most_common(fit_ratings[key], _FIT_RATINGS_BY_CAUTION),
+        )
+        for key in display_names
+    )
+
+
+def consensus_recommendation(
+    advices: Sequence[ProviderDesignAdvice],
+    approaches: Sequence[Approach],
+) -> str | None:
+    """Report the one direction every provider that answered recommended.
+
+    Args:
+        advices: Parsed advice from every provider that answered.
+        approaches: The grouped approaches those providers named.
+
+    Returns:
+        The shared recommendation, or None when the providers named no single direction.
+
+    NOTE: Providers that recommend different variants of one direction yield None,
+    because recognizing the shared direction behind differing prose needs a synthesis step.
+    """
+    if not advices:
+        return None
+
+    recommendations = [advice.recommendation for advice in advices]
+    if all(text == recommendations[0] for text in recommendations):
+        return recommendations[0]
+
+    display_names = {_approach_name_key(approach.name): approach.name for approach in approaches}
+    picks = [_names_mentioned_in(advice.recommendation, display_names) for advice in advices]
+    if any(len(pick) != 1 for pick in picks):
+        return None
+    shared = {next(iter(pick)) for pick in picks}
+    if len(shared) != 1:
+        return None
+    return display_names[next(iter(shared))]

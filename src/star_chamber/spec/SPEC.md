@@ -27,7 +27,7 @@ The council protocol defines how multiple LLM providers are queried in parallel,
 
 ### Versioning
 
-This spec follows [Semantic Versioning](https://semver.org/). The current version is **0.3** (pre-stable). The version will advance to 1.0 when the schema and algorithm definitions are considered stable.
+This spec follows [Semantic Versioning](https://semver.org/). The current version is **0.4** (pre-stable). The version will advance to 1.0 when the schema and algorithm definitions are considered stable.
 
 ### Terminology
 
@@ -294,6 +294,12 @@ The approaches array includes all approaches mentioned by any provider — both 
 
 Approaches from different providers are grouped when they refer to the same approach (by name match or semantic similarity). The `recommended_by` count reflects how many providers selected that approach as their primary recommendation.
 
+Names MUST be matched with case, punctuation, and repeated spacing ignored, so `Repository` and `repository  layer` are the same name only if the remaining words match. Orchestrators MAY add semantic similarity on top, as in section 9.1. A grouped approach carries the union of the pros and the union of the cons, in the order providers first stated them, with duplicates removed.
+
+An aggregated `risk_level` is the level the most providers stated, and an aggregated `fit_rating` is the rating the most providers stated. A tie MUST resolve toward the more cautious value: the higher risk, or the lower fit. A provider that stated no level or no rating does not vote, so `risk_level` is `unknown` and `fit_rating` is null only when no provider stated one.
+
+Providers cannot report `recommended_by`, because the member output schema does not carry it. An orchestrator therefore derives it: a provider counts toward an approach when its `recommendation` names that approach as whole words. Two limits follow from naming alone. A recommendation that names an approach only to reject it is counted, and a recommendation that describes an approach without naming it is not.
+
 ### 9.3 Classification Buckets
 
 Issues/recommendations fall into mutually exclusive buckets:
@@ -307,6 +313,8 @@ Issues/recommendations fall into mutually exclusive buckets:
 Classification counts a member only when it returned a usable response. The denominator is therefore `providers_responded`, not `providers_used`. A consensus across two members when three were asked is a weaker signal than the same word across three, so consumers that report agreement MUST state which roster it was computed over.
 
 **Design question consensus:** For design questions, `consensus_recommendation` captures high-level directional agreement (e.g., "use CRUD, not event sourcing") even when providers recommend different specific variants. It is not populated when providers disagree on direction. Per-approach `recommended_by` counts track the specific variant each provider chose.
+
+Without a synthesis step an orchestrator MUST populate it in two cases: every provider gave the same recommendation text, or every provider named one and the same approach. It MUST be null otherwise. Directional agreement across differently named variants reads the shared direction out of differing prose, which needs synthesis, so an orchestrator that performs none reports null in that case rather than guessing.
 
 ### 9.4 Confidence Ordering
 

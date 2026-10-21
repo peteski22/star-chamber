@@ -176,7 +176,8 @@ class TestBuildDesignQuestionResult:
         result = _build_design_result(responses, prompt="How should we structure the API?")
 
         assert isinstance(result.approaches, tuple)
-        assert len(result.approaches) == 2
+        assert len(result.approaches) == 1
+        assert result.approaches[0].recommended_by == 1
         assert len(result.failed_providers) == 0
         assert result.prompt == "How should we structure the API?"
 
@@ -382,7 +383,7 @@ class TestRunCouncilDesignQuestion:
         assert result.mode == "design-question"
         assert result.prompt == "Should we use a monorepo?"
         assert set(result.providers_used) == {"openai", "anthropic"}
-        assert len(result.approaches) == 2
+        assert len(result.approaches) == 1
 
     async def test_design_question_partial_failure(self):
         mock_responses = [
@@ -866,3 +867,176 @@ class TestMalformedMemberFailsAlone:
 
         assert "location" in result.failed_providers[0].error
         assert "null" in result.failed_providers[0].error
+
+
+# ---------------------------------------------------------------------------
+# _build_design_result — approach aggregation.
+# ---------------------------------------------------------------------------
+
+
+def _approach(
+    name: str,
+    pros: list[str] | None = None,
+    cons: list[str] | None = None,
+    risk_level: str = "low",
+    fit_rating: str | None = "good",
+) -> dict:
+    approach: dict = {
+        "name": name,
+        "pros": pros if pros is not None else ["Simple"],
+        "cons": cons if cons is not None else ["Limited"],
+        "risk_level": risk_level,
+    }
+    if fit_rating is not None:
+        approach["fit_rating"] = fit_rating
+    return approach
+
+
+class TestDesignApproachAggregation:
+    """Members name the same approach, so the council must report it once.
+
+    A member cannot send recommended_by, so the council has to derive it from
+    the primary recommendation each member gave.
+    """
+
+    def _result(self, *bodies: str):
+        responses = [_success_response(f"member-{index}", "model", body) for index, body in enumerate(bodies)]
+        return _build_design_result(responses, prompt="Which data layer?")
+
+    def test_same_approach_from_two_members_merges(self):
+        result = self._result(
+            _design_json(approaches=[_approach("Repository")]),
+            _design_json(approaches=[_approach("Repository")]),
+        )
+
+        assert len(result.approaches) == 1
+        assert result.approaches[0].name == "Repository"
+
+    def test_merge_unions_pros_and_cons_without_duplicates(self):
+        result = self._result(
+            _design_json(approaches=[_approach("Repository", pros=["Testable"], cons=["Indirection"])]),
+            _design_json(approaches=[_approach("Repository", pros=["Testable", "Swappable"], cons=["Boilerplate"])]),
+        )
+
+        assert result.approaches[0].pros == ("Testable", "Swappable")
+        assert result.approaches[0].cons == ("Indirection", "Boilerplate")
+
+    def test_recommended_by_counts_members_that_recommended_it(self):
+        result = self._result(
+            _design_json(recommendation="Use the Repository pattern.", approaches=[_approach("Repository")]),
+            _design_json(recommendation="Go with Repository here.", approaches=[_approach("Repository")]),
+        )
+
+        assert result.approaches[0].recommended_by == 2
+
+    def test_discussed_but_unrecommended_approach_counts_zero(self):
+        result = self._result(
+            _design_json(
+                recommendation="Use the Repository pattern.",
+                approaches=[_approach("Repository"), _approach("Active Record")],
+            )
+        )
+
+        counts = {approach.name: approach.recommended_by for approach in result.approaches}
+        assert counts == {"Repository": 1, "Active Record": 0}
+
+    def test_name_match_ignores_case_and_spacing(self):
+        result = self._result(
+            _design_json(recommendation="use   a REPOSITORY layer", approaches=[_approach("Repository")])
+        )
+
+        assert result.approaches[0].recommended_by == 1
+
+    def test_name_matches_on_word_boundaries_only(self):
+        """An approach named ORM must not match the word normalize."""
+        result = self._result(_design_json(recommendation="Normalize the schema first.", approaches=[_approach("ORM")]))
+
+        assert result.approaches[0].recommended_by == 0
+
+    def test_member_listing_an_approach_twice_counts_once(self):
+        result = self._result(
+            _design_json(
+                recommendation="Use the Repository pattern.",
+                approaches=[_approach("Repository"), _approach("Repository")],
+            )
+        )
+
+        assert len(result.approaches) == 1
+        assert result.approaches[0].recommended_by == 1
+
+    def test_risk_level_takes_the_most_common_value(self):
+        result = self._result(
+            _design_json(approaches=[_approach("Repository", risk_level="low")]),
+            _design_json(approaches=[_approach("Repository", risk_level="high")]),
+            _design_json(approaches=[_approach("Repository", risk_level="high")]),
+        )
+
+        assert result.approaches[0].risk_level == "high"
+
+    def test_tied_risk_level_takes_the_more_cautious_value(self):
+        result = self._result(
+            _design_json(approaches=[_approach("Repository", risk_level="low")]),
+            _design_json(approaches=[_approach("Repository", risk_level="high")]),
+        )
+
+        assert result.approaches[0].risk_level == "high"
+
+    def test_risk_level_is_unknown_when_no_member_stated_one(self):
+        body = json.dumps(
+            {
+                "recommendation": "Use the Repository pattern.",
+                "approaches": [{"name": "Repository", "pros": ["Testable"], "cons": ["Indirection"]}],
+                "summary": "Repository fits.",
+            }
+        )
+
+        result = self._result(body)
+
+        assert result.approaches[0].risk_level == "unknown"
+
+    def test_fit_rating_takes_the_most_common_value(self):
+        result = self._result(
+            _design_json(approaches=[_approach("Repository", fit_rating="excellent")]),
+            _design_json(approaches=[_approach("Repository", fit_rating="good")]),
+            _design_json(approaches=[_approach("Repository", fit_rating="good")]),
+        )
+
+        assert result.approaches[0].fit_rating == "good"
+
+    def test_tied_fit_rating_takes_the_more_cautious_value(self):
+        result = self._result(
+            _design_json(approaches=[_approach("Repository", fit_rating="excellent")]),
+            _design_json(approaches=[_approach("Repository", fit_rating="fair")]),
+        )
+
+        assert result.approaches[0].fit_rating == "fair"
+
+    def test_fit_rating_is_null_when_no_member_assessed_fit(self):
+        result = self._result(
+            _design_json(approaches=[_approach("Repository", fit_rating=None)]),
+            _design_json(approaches=[_approach("Repository", fit_rating=None)]),
+        )
+
+        assert result.approaches[0].fit_rating is None
+
+    def test_consensus_fires_when_members_pick_the_same_approach_in_different_words(self):
+        result = self._result(
+            _design_json(recommendation="Use the Repository pattern.", approaches=[_approach("Repository")]),
+            _design_json(recommendation="I would reach for Repository.", approaches=[_approach("Repository")]),
+        )
+
+        assert result.consensus_recommendation == "Repository"
+
+    def test_no_consensus_when_members_pick_different_approaches(self):
+        result = self._result(
+            _design_json(
+                recommendation="Use Repository.",
+                approaches=[_approach("Repository"), _approach("Active Record")],
+            ),
+            _design_json(
+                recommendation="Use Active Record.",
+                approaches=[_approach("Repository"), _approach("Active Record")],
+            ),
+        )
+
+        assert result.consensus_recommendation is None

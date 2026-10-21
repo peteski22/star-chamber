@@ -1,10 +1,16 @@
 {
   "mode": "design-question",
   "prompt": "Should we use event sourcing or CRUD for our order management system? We expect ~1000 orders/day, need audit trails, and may add a recommendation engine later.",
-  "providers_used": ["openai", "anthropic"],
-  "providers_responded": ["openai", "anthropic"],
+  "providers_used": [
+    "openai",
+    "anthropic"
+  ],
+  "providers_responded": [
+    "openai",
+    "anthropic"
+  ],
   "failed_providers": [],
-  "consensus_recommendation": "Use CRUD (not event sourcing) as the foundation. Both providers agree event sourcing is over-engineered for the current scale and team experience, though they differ on the specific CRUD variant.",
+  "consensus_recommendation": null,
   "approaches": [
     {
       "name": "CRUD with audit log",
@@ -24,17 +30,41 @@
       "fit_rating": "excellent"
     },
     {
+      "name": "Event sourcing",
+      "recommended_by": 0,
+      "pros": [
+        "Complete audit trail is inherent — every state change is an event",
+        "Natural fit for the future recommendation engine (event stream as input)",
+        "Enables temporal queries and state reconstruction",
+        "Audit trail and event stream are first-class citizens",
+        "Natural fit for temporal queries and state reconstruction",
+        "Recommendation engine gets a native event stream"
+      ],
+      "cons": [
+        "Steep learning curve for a team with no ES experience",
+        "Requires new infrastructure (event store, projections, possibly CQRS)",
+        "Django ORM is not designed for event sourcing — fighting the framework",
+        "Significantly more complex for 1000 orders/day which doesn't demand it",
+        "Team has no ES experience — high ramp-up cost",
+        "Django and PostgreSQL are not natural ES tools",
+        "CQRS adds operational complexity (projections, eventual consistency)",
+        "Over-engineered for current scale"
+      ],
+      "risk_level": "high",
+      "fit_rating": "poor"
+    },
+    {
       "name": "CRUD with domain events",
       "recommended_by": 1,
       "pros": [
         "Keeps the familiar Django CRUD model the team knows",
-        "Domain events provide an event stream for the recommendation engine",
+        "Domain events (published via Celery) provide an event stream for the recommendation engine",
         "Audit trail via a changes table with before/after snapshots",
-        "Incremental path toward event sourcing if needed"
+        "Incremental path — can evolve toward event sourcing later if needed"
       ],
       "cons": [
-        "Dual-write concern: must ensure both CRUD update and event publish succeed",
-        "Audit trail is still a secondary concern",
+        "Dual-write concern: must ensure both the CRUD update and event publish succeed",
+        "Audit trail is still a secondary concern, not the primary data model",
         "Domain events need schema versioning as the system evolves"
       ],
       "risk_level": "low",
@@ -54,26 +84,9 @@
       ],
       "risk_level": "medium",
       "fit_rating": "fair"
-    },
-    {
-      "name": "Event sourcing",
-      "recommended_by": 0,
-      "pros": [
-        "Complete audit trail is inherent",
-        "Natural fit for temporal queries and recommendation engine",
-        "Enables state reconstruction"
-      ],
-      "cons": [
-        "Steep learning curve for the team",
-        "Django and PostgreSQL are not natural ES tools",
-        "Significantly more complex than needed at 1000 orders/day",
-        "Requires new infrastructure (event store, projections, CQRS)"
-      ],
-      "risk_level": "high",
-      "fit_rating": "poor"
     }
   ],
   "summary": {
-    "synthesis": "Both providers strongly recommend a CRUD-based approach over event sourcing, citing the team's Django expertise and the modest order volume. They differ on whether to add domain events now (Anthropic) or keep it simpler with just an audit log (OpenAI). The domain events approach offers a clearer path to the future recommendation engine but adds dual-write complexity."
+    "synthesis": "For a team of 3 with Django expertise and no event sourcing experience, CRUD with a dedicated audit log table is the pragmatic choice. The order volume (1000/day) doesn't justify the complexity of event sourcing. If the recommendation engine later needs an event stream, you can publish domain events from the CRUD layer without fully adopting event sourcing. CRUD with domain events strikes the best balance: it leverages the team's Django expertise, provides an audit trail, and creates the event stream the recommendation engine will need — all without the complexity of full event sourcing. Use Django signals to publish order events to a Celery queue, and store audit snapshots in a dedicated table. This positions you to evolve toward event sourcing incrementally if scale demands it."
   }
 }

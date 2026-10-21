@@ -6,12 +6,11 @@ import asyncio
 from collections.abc import Sequence
 
 from star_chamber.config import load_config
-from star_chamber.consensus import classify
+from star_chamber.consensus import aggregate_approaches, classify, consensus_recommendation
 from star_chamber.parsing import ParseError, parse_code_review, parse_design_advice
 from star_chamber.prompt import render_code_review_prompt, render_design_prompt
 from star_chamber.transport import ProviderResponse, fan_out, resolve_api_keys, resolve_otari
 from star_chamber.types import (
-    Approach,
     CodeReviewResult,
     CodeReviewSummary,
     CouncilConfig,
@@ -125,18 +124,8 @@ def _build_design_result(
         except ParseError as exc:
             failed.append(ProviderError(provider=response.display_name, error=str(exc)))
 
-    # Aggregate all approaches from all successful providers.
-    all_approaches: list[Approach] = []
-    for advice in advices:
-        all_approaches.extend(advice.approaches)
+    approaches = aggregate_approaches(advices)
 
-    # Check for consensus recommendation.
-    recommendations = [a.recommendation for a in advices]
-    consensus_recommendation: str | None = None
-    if recommendations and all(r == recommendations[0] for r in recommendations):
-        consensus_recommendation = recommendations[0]
-
-    # Build summary from individual advice summaries.
     summaries = [a.summary for a in advices if a.summary]
     synthesis = " ".join(summaries) if summaries else ""
 
@@ -146,8 +135,8 @@ def _build_design_result(
         providers_used=tuple(providers_used),
         providers_responded=tuple(a.provider for a in advices),
         failed_providers=tuple(failed),
-        approaches=tuple(all_approaches),
-        consensus_recommendation=consensus_recommendation,
+        approaches=approaches,
+        consensus_recommendation=consensus_recommendation(advices, approaches),
         summary=DesignSummary(synthesis=synthesis),
     )
 

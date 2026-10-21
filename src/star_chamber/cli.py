@@ -84,8 +84,8 @@ def _print_code_review_result(result: CodeReviewResult) -> None:
             click.echo(f"    {issue.description}")
             click.echo(f"    Suggestion: {issue.suggestion}")
 
-    if result.summary:
-        click.echo(f"\nSummary: {result.summary}")
+    if result.summary.synthesis:
+        click.echo(f"\nSummary: {result.summary.synthesis}")
 
     click.echo("")
 
@@ -129,8 +129,8 @@ def _print_design_result(result: DesignQuestionResult) -> None:
                 for con in approach.cons:
                     click.echo(f"      - {con}")
 
-    if result.summary:
-        click.echo(f"\nSummary: {result.summary}")
+    if result.summary.synthesis:
+        click.echo(f"\nSummary: {result.summary.synthesis}")
 
     click.echo("")
 

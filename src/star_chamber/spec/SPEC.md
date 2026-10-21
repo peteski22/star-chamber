@@ -27,7 +27,7 @@ The council protocol defines how multiple LLM providers are queried in parallel,
 
 ### Versioning
 
-This spec follows [Semantic Versioning](https://semver.org/). The current version is **0.2** (pre-stable). The version will advance to 1.0 when the schema and algorithm definitions are considered stable.
+This spec follows [Semantic Versioning](https://semver.org/). The current version is **0.3** (pre-stable). The version will advance to 1.0 when the schema and algorithm definitions are considered stable.
 
 ### Terminology
 
@@ -331,7 +331,8 @@ The structured output includes:
 - `majority_issues[]`: Issues flagged by more than one member in `providers_responded`. Each item includes `provider_count` and `flagged_by` (array of member display names) to identify which members raised it.
 - `individual_issues{}`: Issues keyed by member display name.
 - `quality_ratings{}`: Per-member quality rating, keyed by display name.
-- `summary{}`: Counts (`total_issues`, `consensus_count`, `majority_count`) and `synthesis` (1-2 sentence overall assessment).
+- `reviews[]`: Each answering member's parsed review in full, including its raw response text.
+- `summary{}`: Counts (`total_issues`, `consensus_count`, `majority_count`) and `synthesis` (1-2 sentence overall assessment). `total_issues` counts distinct issues across all three buckets.
 - `debate{}` (optional): Debate metadata (rounds_completed, converged).
 
 **Markdown presentation** (for human consumption):
@@ -381,8 +382,8 @@ The structured output includes:
 - `providers_used[]`: The roster asked. All council members consulted, including those that failed, by display name.
 - `providers_responded[]`: The roster that answered. Members that returned usable advice, by display name. This is the denominator `consensus_recommendation` was computed over.
 - `failed_providers[]`: Members that failed or returned malformed responses, by display name.
-- `consensus_recommendation` (optional): High-level directional agreement when every member that answered agrees, even if they differ on specifics.
-- `approaches[]`: All approaches mentioned by any provider, with `recommended_by` count, merged pros/cons, `risk_level`, and optional `fit_rating` (omitted when no provider assessed fit for the approach; when providers disagree, use the most common rating).
+- `consensus_recommendation`: High-level directional agreement when every member that answered agrees, even if they differ on specifics. Null when they do not agree on direction.
+- `approaches[]`: All approaches mentioned by any provider, with `recommended_by` count, merged pros/cons, `risk_level`, and `fit_rating`. `risk_level` is `unknown` when no provider stated one. `fit_rating` is null when no provider assessed fit for the approach; when providers disagree, use the most common rating.
 - `summary{}`: Contains `synthesis` (1-2 sentence overall assessment).
 - `debate{}` (optional): Debate metadata (rounds_completed, converged).
 

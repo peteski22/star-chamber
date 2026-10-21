@@ -17,7 +17,14 @@ from star_chamber.types import ClassificationResult, Issue, MajorityIssue, Provi
 _LINE_TOLERANCE = 5
 
 # Matches a location's trailing line number or line range, e.g. "23" or "203-207".
-_LINE_SPAN_RE = re.compile(r"(\d+)(?:-(\d+))?$")
+# The digit runs are bounded so the pattern cannot accept a number int() would reject.
+_LINE_SPAN_RE = re.compile(r"(\d{1,7})(?:-(\d{1,7}))?$", re.ASCII)
+
+# The most lines a span may cover, counting both ends, and still mean one place.
+# A wider span cites a file-level concern.
+# Grouping such a span by overlap would let it absorb unrelated findings, whose
+# descriptions the group then discards, so it is treated as no span instead.
+_MAX_SPAN_LINES = 50
 
 # An inclusive first and last line.  A single line is a span of one.
 _LineSpan = tuple[int, int]
@@ -37,6 +44,9 @@ def _parse_location(location: str) -> tuple[str, _LineSpan | None]:
     comparison covers both forms.  A trailing segment that is neither leaves the
     location whole, which keeps a path containing a colon intact.
 
+    A span wider than _MAX_SPAN_LINES yields the file path and no span, because
+    it cites the file rather than one place within it.
+
     Args:
         location: Location string such as "path/to/file.py:42" or "file.py:203-207".
 
@@ -53,7 +63,12 @@ def _parse_location(location: str) -> tuple[str, _LineSpan | None]:
 
     first = int(match.group(1))
     last = first if match.group(2) is None else int(match.group(2))
-    return (location[:idx], (min(first, last), max(first, last)))
+    first, last = min(first, last), max(first, last)
+
+    if last - first + 1 > _MAX_SPAN_LINES:
+        return (location[:idx], None)
+
+    return (location[:idx], (first, last))
 
 
 def _issue_key(issue: Issue) -> _IssueKey:

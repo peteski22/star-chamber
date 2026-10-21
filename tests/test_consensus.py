@@ -427,3 +427,69 @@ class TestLineSpans:
 
         assert len(result.consensus_issues) == 0
         assert {k: len(v) for k, v in result.individual_issues.items()} == {"openai": 1, "anthropic": 1}
+
+
+class TestSpanWidthLimit:
+    """A span too wide to be one place is a file-level citation, not a line-level one."""
+
+    def test_file_wide_span_yields_no_span(self):
+        assert _parse_location("app.py:1-9999") == ("app.py", None)
+
+    def test_file_wide_span_keeps_the_file_path_recoverable(self):
+        file, span = _parse_location("backend/app.py:1-9999")
+        assert file == "backend/app.py"
+        assert span is None
+
+    def test_span_at_the_limit_is_kept(self):
+        assert _parse_location("app.py:100-149") == ("app.py", (100, 149))
+
+    def test_span_past_the_limit_is_dropped(self):
+        assert _parse_location("app.py:100-150") == ("app.py", None)
+
+    def test_file_wide_span_does_not_absorb_a_specific_line(self):
+        assert not _issues_match(("app.py", None, "bug"), ("app.py", (50, 50), "bug"))
+
+    def test_file_wide_citations_still_group_together(self):
+        assert _issues_match(("app.py", None, "bug"), ("app.py", None, "bug"))
+
+    def test_a_wide_citation_cannot_suppress_other_findings(self):
+        reviews = [
+            _review("openai", [_issue("app.py:1-9999", "correctness")]),
+            _review("anthropic", [_issue("app.py:50", "correctness")]),
+            _review("gemini", [_issue("app.py:800", "correctness")]),
+        ]
+
+        result = classify(reviews, threshold=2)
+
+        surviving = (
+            len(result.consensus_issues)
+            + len(result.majority_issues)
+            + sum(len(v) for v in result.individual_issues.values())
+        )
+        assert surviving == 3
+        assert len(result.consensus_issues) == 0
+
+
+class TestPathologicalLocations:
+    """An unusable location must not take the run down with it."""
+
+    def test_absurdly_long_digit_run_does_not_raise(self):
+        location = "app.py:" + "1" * 5000
+        assert _parse_location(location) == (location, None)
+
+    def test_absurdly_long_range_does_not_raise(self):
+        location = "app.py:1-" + "9" * 5000
+        assert _parse_location(location) == (location, None)
+
+    def test_non_ascii_digits_are_not_treated_as_line_numbers(self):
+        assert _parse_location("app.py:٢٣") == ("app.py:٢٣", None)
+
+    def test_classify_survives_a_pathological_location(self):
+        reviews = [
+            _review("openai", [_issue("app.py:" + "1" * 5000, "correctness")]),
+            _review("anthropic", [_issue("app.py:50", "correctness")]),
+        ]
+
+        result = classify(reviews, threshold=2)
+
+        assert sum(len(v) for v in result.individual_issues.values()) == 2

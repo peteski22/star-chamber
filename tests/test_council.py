@@ -591,3 +591,114 @@ class TestRunCouncilValidation:
                 config=_TWO_PROVIDER_CONFIG,
                 mode="invalid-mode",
             )
+
+
+class TestAnsweringRoster:
+    """providers_responded must carry only the members that returned a usable answer."""
+
+    async def test_transport_failure_is_absent_from_the_answering_roster(self):
+        mock_responses = [
+            _success_response("openai", "gpt-4o", _code_review_json()),
+            _error_response("anthropic", "claude-3", "Rate limit exceeded."),
+        ]
+
+        with (
+            patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=mock_responses),
+        ):
+            result = await run_council(files={"app.py": "x = 1"}, config=_TWO_PROVIDER_CONFIG, mode="code-review")
+
+        assert set(result.providers_used) == {"openai", "anthropic"}
+        assert result.providers_responded == ("openai",)
+
+    async def test_unparsable_reply_is_absent_from_the_answering_roster(self):
+        mock_responses = [
+            _success_response("openai", "gpt-4o", _code_review_json()),
+            _success_response("anthropic", "claude-3", "I cannot answer that."),
+        ]
+
+        with (
+            patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=mock_responses),
+        ):
+            result = await run_council(files={"app.py": "x = 1"}, config=_TWO_PROVIDER_CONFIG, mode="code-review")
+
+        assert set(result.providers_used) == {"openai", "anthropic"}
+        assert result.providers_responded == ("openai",)
+
+    async def test_answering_roster_is_the_denominator_the_issues_were_classified_over(self):
+        issue_data = {
+            "severity": "high",
+            "location": "app.py:5",
+            "category": "style",
+            "description": "Unused import.",
+            "suggestion": "Remove the import.",
+        }
+        mock_responses = [
+            _success_response("openai", "gpt-4o", _code_review_json(issues=[issue_data])),
+            _success_response("anthropic", "claude-3", _code_review_json(issues=[issue_data])),
+            _error_response("gemini", "gemini-2.0", "Timeout."),
+        ]
+        config = CouncilConfig(
+            providers=(
+                ProviderConfig(provider="openai", model="gpt-4o"),
+                ProviderConfig(provider="anthropic", model="claude-3"),
+                ProviderConfig(provider="gemini", model="gemini-2.0"),
+            ),
+        )
+
+        with (
+            patch("star_chamber.council.resolve_api_keys", return_value=config.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=mock_responses),
+        ):
+            result = await run_council(files={"app.py": "x = 1"}, config=config, mode="code-review")
+
+        # Three members were asked, two answered, and both flagged the issue, so it is
+        # consensus across the two that answered rather than across the three asked.
+        assert len(result.providers_used) == 3
+        assert set(result.providers_responded) == {"openai", "anthropic"}
+        assert len(result.consensus_issues) == 1
+        assert len(result.providers_responded) == len(result.reviews)
+
+    async def test_answering_roster_uses_the_display_name(self):
+        mock_responses = [
+            _success_response("openai", "gpt-4o", _code_review_json(), display_name="scribe"),
+        ]
+        config = CouncilConfig(providers=(ProviderConfig(provider="openai", model="gpt-4o", display_name="scribe"),))
+
+        with (
+            patch("star_chamber.council.resolve_api_keys", return_value=config.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=mock_responses),
+        ):
+            result = await run_council(files={"app.py": "x = 1"}, config=config, mode="code-review")
+
+        assert result.providers_responded == ("scribe",)
+
+    async def test_design_question_reports_its_answering_roster(self):
+        mock_responses = [
+            _success_response("openai", "gpt-4o", _design_json()),
+            _error_response("anthropic", "claude-3", "Connection refused."),
+        ]
+
+        with (
+            patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=mock_responses),
+        ):
+            result = await run_council(prompt="Monorepo?", config=_TWO_PROVIDER_CONFIG, mode="design-question")
+
+        assert set(result.providers_used) == {"openai", "anthropic"}
+        assert result.providers_responded == ("openai",)
+
+    async def test_no_answers_leaves_the_answering_roster_empty(self):
+        mock_responses = [
+            _error_response("openai", "gpt-4o", "Timeout."),
+            _error_response("anthropic", "claude-3", "Timeout."),
+        ]
+
+        with (
+            patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=mock_responses),
+        ):
+            result = await run_council(files={"app.py": "x = 1"}, config=_TWO_PROVIDER_CONFIG, mode="code-review")
+
+        assert result.providers_responded == ()

@@ -33,6 +33,18 @@ def _load_config(config_path: str | None) -> CouncilConfig:
     return config
 
 
+def _print_rosters(result: CodeReviewResult | DesignQuestionResult) -> None:
+    """Print the roster of members asked and the roster that answered.
+
+    Args:
+        result: The aggregated council result.
+    """
+    asked = ", ".join(result.providers_used) or "none"
+    answered = ", ".join(result.providers_responded) or "none"
+    click.echo(f"Providers asked ({len(result.providers_used)}): {asked}")
+    click.echo(f"Providers answered ({len(result.providers_responded)}): {answered}")
+
+
 def _print_code_review_result(result: CodeReviewResult) -> None:
     """Print a human-readable summary of a code review council result.
 
@@ -42,7 +54,7 @@ def _print_code_review_result(result: CodeReviewResult) -> None:
     click.echo(f"\n{'=' * 60}")
     click.echo("Code Review Council Results")
     click.echo(f"{'=' * 60}")
-    click.echo(f"Providers used: {', '.join(result.providers_used)}")
+    _print_rosters(result)
 
     if result.failed_providers:
         click.echo(f"\nFailed providers ({len(result.failed_providers)}):")
@@ -55,7 +67,10 @@ def _print_code_review_result(result: CodeReviewResult) -> None:
             click.echo(f"  - {provider}: {rating}")
 
     if result.consensus_issues:
-        click.echo(f"\nConsensus issues ({len(result.consensus_issues)}):")
+        click.echo(
+            f"\nConsensus issues ({len(result.consensus_issues)}), "
+            f"agreed by all {len(result.providers_responded)} providers that answered:"
+        )
         for issue in result.consensus_issues:
             click.echo(f"  [{issue.severity}] {issue.location} ({issue.category})")
             click.echo(f"    {issue.description}")
@@ -85,7 +100,7 @@ def _print_design_result(result: DesignQuestionResult) -> None:
     click.echo("Design Question Council Results")
     click.echo(f"{'=' * 60}")
     click.echo(f"Question: {result.prompt}")
-    click.echo(f"Providers used: {', '.join(result.providers_used)}")
+    _print_rosters(result)
 
     if result.failed_providers:
         click.echo(f"\nFailed providers ({len(result.failed_providers)}):")
@@ -93,7 +108,10 @@ def _print_design_result(result: DesignQuestionResult) -> None:
             click.echo(f"  - {fp.provider}: {fp.error}")
 
     if result.consensus_recommendation:
-        click.echo(f"\nConsensus recommendation: {result.consensus_recommendation}")
+        click.echo(
+            f"\nConsensus recommendation, from all {len(result.providers_responded)} "
+            f"providers that answered: {result.consensus_recommendation}"
+        )
 
     if result.approaches:
         click.echo(f"\nApproaches ({len(result.approaches)}):")

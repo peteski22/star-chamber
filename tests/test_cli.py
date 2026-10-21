@@ -73,6 +73,16 @@ def _success_response(provider: str, model: str, content: str, display_name: str
     )
 
 
+def _error_response(provider: str, model: str, error: str, display_name: str | None = None) -> ProviderResponse:
+    return ProviderResponse(
+        provider=provider,
+        display_name=display_name or provider,
+        model=model,
+        success=False,
+        error=error,
+    )
+
+
 # ---------------------------------------------------------------------------
 # review command.
 # ---------------------------------------------------------------------------
@@ -610,3 +620,97 @@ class TestProviderDisplayNames:
         configs_arg = call_kwargs.kwargs.get("configs") or call_kwargs[0][0]
         assert len(configs_arg) == 1
         assert configs_arg[0].display_name == "gemini-3.1-pro"
+
+
+class TestRosterOutput:
+    """The text output must separate the roster asked from the roster that answered."""
+
+    def test_text_output_separates_the_two_rosters(self, tmp_path: Path):
+        src = tmp_path / "app.py"
+        src.write_text("x = 1\n")
+
+        responses = [
+            _success_response("openai", "gpt-4o", _code_review_json()),
+            _error_response("anthropic", "claude-3", "Rate limit exceeded."),
+        ]
+
+        with (
+            patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
+            patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+        ):
+            runner = CliRunner()
+            result = runner.invoke(main, ["review", str(src)])
+
+        assert result.exit_code == 0
+        assert "Providers asked (2): openai, anthropic" in result.output
+        assert "Providers answered (1): openai" in result.output
+
+    def test_consensus_heading_states_its_denominator(self, tmp_path: Path):
+        src = tmp_path / "app.py"
+        src.write_text("x = 1\n")
+
+        issue_data = {
+            "severity": "high",
+            "location": "app.py:1",
+            "category": "style",
+            "description": "Unused import.",
+            "suggestion": "Remove the import.",
+        }
+        responses = [
+            _success_response("openai", "gpt-4o", _code_review_json(issues=[issue_data])),
+            _success_response("anthropic", "claude-3", _code_review_json(issues=[issue_data])),
+        ]
+
+        with (
+            patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
+            patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+        ):
+            runner = CliRunner()
+            result = runner.invoke(main, ["review", str(src)])
+
+        assert result.exit_code == 0
+        assert "agreed by all 2 providers that answered" in result.output
+
+    def test_no_answers_reports_none(self, tmp_path: Path):
+        src = tmp_path / "app.py"
+        src.write_text("x = 1\n")
+
+        responses = [
+            _error_response("openai", "gpt-4o", "Timeout."),
+            _error_response("anthropic", "claude-3", "Timeout."),
+        ]
+
+        with (
+            patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
+            patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+        ):
+            runner = CliRunner()
+            result = runner.invoke(main, ["review", str(src)])
+
+        assert result.exit_code == 0
+        assert "Providers answered (0): none" in result.output
+
+    def test_json_output_carries_the_answering_roster(self, tmp_path: Path):
+        src = tmp_path / "app.py"
+        src.write_text("x = 1\n")
+
+        responses = [
+            _success_response("openai", "gpt-4o", _code_review_json()),
+            _error_response("anthropic", "claude-3", "Rate limit exceeded."),
+        ]
+
+        with (
+            patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
+            patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+        ):
+            runner = CliRunner()
+            result = runner.invoke(main, ["review", "--format", "json", str(src)])
+
+        assert result.exit_code == 0
+        parsed = json.loads(result.output)
+        assert parsed["providers_used"] == ["openai", "anthropic"]
+        assert parsed["providers_responded"] == ["openai"]

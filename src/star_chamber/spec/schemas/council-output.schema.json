@@ -4,7 +4,7 @@
   "title": "Council Output",
   "description": "Final aggregated output from a council review or design question session.",
   "type": "object",
-  "required": ["mode", "providers_used", "failed_providers", "summary"],
+  "required": ["mode", "providers_used", "providers_responded", "failed_providers", "summary"],
   "properties": {
     "mode": {
       "type": "string",
@@ -18,7 +18,12 @@
     },
     "providers_used": {
       "type": "array",
-      "description": "All council members consulted (including failed ones), identified by display name.",
+      "description": "The roster that was asked: all council members consulted, including those that failed, identified by display name. This is not the roster that answered; see providers_responded.",
+      "items": { "type": "string" }
+    },
+    "providers_responded": {
+      "type": "array",
+      "description": "The roster that answered: council members that returned a usable response, identified by display name. This is the denominator the consensus, majority, and individual classifications were computed over.",
       "items": { "type": "string" }
     },
     "failed_providers": {
@@ -42,7 +47,7 @@
     },
     "consensus_issues": {
       "type": "array",
-      "description": "Issues flagged by all successful providers (code-review mode).",
+      "description": "Issues flagged by every member in providers_responded (code-review mode).",
       "items": {
         "type": "object",
         "required": ["severity", "location", "category", "description", "suggestion"],
@@ -64,7 +69,7 @@
     },
     "majority_issues": {
       "type": "array",
-      "description": "Issues flagged by more than one but not all providers (code-review mode).",
+      "description": "Issues flagged by more than one but not all members in providers_responded (code-review mode).",
       "items": {
         "type": "object",
         "required": ["severity", "location", "category", "description", "suggestion", "provider_count", "flagged_by"],

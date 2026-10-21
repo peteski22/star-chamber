@@ -64,6 +64,7 @@ def _build_code_review_result(
     return CodeReviewResult(
         mode="code-review",
         providers_used=tuple(providers_used),
+        providers_responded=tuple(r.provider for r in reviews),
         failed_providers=tuple(failed),
         reviews=tuple(reviews),
         consensus_issues=classification.consensus_issues,
@@ -121,6 +122,7 @@ def _build_design_result(
         mode="design-question",
         prompt=prompt,
         providers_used=tuple(providers_used),
+        providers_responded=tuple(a.provider for a in advices),
         failed_providers=tuple(failed),
         approaches=tuple(all_approaches),
         consensus_recommendation=consensus_recommendation,

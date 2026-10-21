@@ -1040,3 +1040,61 @@ class TestDesignApproachAggregation:
         )
 
         assert result.consensus_recommendation is None
+
+
+class TestDesignAggregationVoting:
+    """Each provider gets one vote per approach, and only for approaches it named.
+
+    Counting an approach's entries instead of its providers lets one provider
+    that names an approach twice outvote a provider that names it once.
+    """
+
+    def _result(self, *bodies: str):
+        responses = [_success_response(f"member-{index}", "model", body) for index, body in enumerate(bodies)]
+        return _build_design_result(responses, prompt="Which data layer?")
+
+    def test_provider_naming_an_approach_twice_casts_one_risk_vote(self):
+        result = self._result(
+            _design_json(
+                approaches=[
+                    _approach("Repository", risk_level="low"),
+                    _approach("Repository", risk_level="low"),
+                ]
+            ),
+            _design_json(approaches=[_approach("Repository", risk_level="high")]),
+        )
+
+        assert result.approaches[0].risk_level == "high"
+
+    def test_provider_naming_an_approach_twice_casts_one_fit_vote(self):
+        result = self._result(
+            _design_json(
+                approaches=[
+                    _approach("Repository", fit_rating="excellent"),
+                    _approach("Repository", fit_rating="excellent"),
+                ]
+            ),
+            _design_json(approaches=[_approach("Repository", fit_rating="fair")]),
+        )
+
+        assert result.approaches[0].fit_rating == "fair"
+
+    def test_provider_is_not_counted_for_an_approach_it_did_not_name(self):
+        """A provider recommends from the approaches it offered, not from another provider's."""
+        result = self._result(
+            _design_json(recommendation="Use Active Record.", approaches=[_approach("Repository")]),
+            _design_json(recommendation="Use Active Record.", approaches=[_approach("Active Record")]),
+        )
+
+        counts = {approach.name: approach.recommended_by for approach in result.approaches}
+        assert counts == {"Repository": 0, "Active Record": 1}
+
+    def test_names_that_differ_only_by_symbols_stay_distinct(self):
+        """Stripping every symbol collapses C++, C# and C into one approach."""
+        result = self._result(
+            _design_json(
+                approaches=[_approach("C++"), _approach("C#"), _approach("C")],
+            )
+        )
+
+        assert [approach.name for approach in result.approaches] == ["C++", "C#", "C"]

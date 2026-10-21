@@ -236,6 +236,10 @@ def classify(reviews: Sequence[ProviderReview], threshold: int = 2) -> Classific
 # Characters outside a name's words, so a name matches regardless of case and punctuation.
 _NON_WORD_RE = re.compile(r"[^a-z0-9]+", re.ASCII)
 
+# Symbols that tell one approach name from another, spelled out so that stripping
+# punctuation cannot merge names such as C++, C# and C.
+_NAME_SYMBOL_WORDS = {"#": " sharp ", "+": " plus "}
+
 # Fit ratings, most cautious first, so a tie resolves to the more cautious rating.
 _FIT_RATINGS_BY_CAUTION = ("poor", "fair", "good", "excellent")
 
@@ -246,7 +250,16 @@ _RISK_LEVELS_BY_CAUTION = ("high", "medium", "low")
 
 def _approach_name_key(name: str) -> str:
     """Reduce an approach name to the form two providers must share to mean the same approach."""
-    return _NON_WORD_RE.sub(" ", name.casefold()).strip()
+    text = name.casefold()
+    for symbol, word in _NAME_SYMBOL_WORDS.items():
+        text = text.replace(symbol, word)
+    return _NON_WORD_RE.sub(" ", text).strip()
+
+
+def _own_name_keys(advice: ProviderDesignAdvice) -> dict[str, None]:
+    """Return a key for each approach this provider named, in the order it named them."""
+    keys = (_approach_name_key(approach.name) for approach in advice.approaches)
+    return {key: None for key in keys if key}
 
 
 def _names_mentioned_in(text: str, name_keys: Iterable[str]) -> set[str]:
@@ -276,7 +289,9 @@ def aggregate_approaches(advices: Sequence[ProviderDesignAdvice]) -> tuple[Appro
     """Group the approaches every provider named, and count who recommended each one.
 
     A provider cannot report how many providers recommended an approach, so the
-    count is derived from the recommendation each provider gave.
+    count is derived from the recommendation each provider gave. A provider is
+    counted only for the approaches it named itself, and votes once per approach
+    on the aggregated risk level and fit rating.
 
     Args:
         advices: Parsed advice from every provider that answered.
@@ -289,8 +304,12 @@ def aggregate_approaches(advices: Sequence[ProviderDesignAdvice]) -> tuple[Appro
     cons: dict[str, dict[str, None]] = {}
     risk_levels: dict[str, list[str]] = defaultdict(list)
     fit_ratings: dict[str, list[str]] = defaultdict(list)
+    recommended_by = Counter[str]()
 
     for advice in advices:
+        stated_risks: dict[str, list[str]] = defaultdict(list)
+        stated_fits: dict[str, list[str]] = defaultdict(list)
+
         for approach in advice.approaches:
             key = _approach_name_key(approach.name)
             if not key:
@@ -298,13 +317,21 @@ def aggregate_approaches(advices: Sequence[ProviderDesignAdvice]) -> tuple[Appro
             display_names.setdefault(key, approach.name)
             pros.setdefault(key, {}).update(dict.fromkeys(approach.pros))
             cons.setdefault(key, {}).update(dict.fromkeys(approach.cons))
-            risk_levels[key].append(approach.risk_level)
+            stated_risks[key].append(approach.risk_level)
             if approach.fit_rating is not None:
-                fit_ratings[key].append(approach.fit_rating)
+                stated_fits[key].append(approach.fit_rating)
 
-    recommended_by = Counter[str]()
-    for advice in advices:
-        recommended_by.update(_names_mentioned_in(advice.recommendation, display_names))
+        # One ballot per provider per approach, so naming an approach twice does not vote twice.
+        for key, levels in stated_risks.items():
+            level = _most_cautious_of_the_most_common(levels, _RISK_LEVELS_BY_CAUTION)
+            if level is not None:
+                risk_levels[key].append(level)
+        for key, ratings in stated_fits.items():
+            rating = _most_cautious_of_the_most_common(ratings, _FIT_RATINGS_BY_CAUTION)
+            if rating is not None:
+                fit_ratings[key].append(rating)
+
+        recommended_by.update(_names_mentioned_in(advice.recommendation, _own_name_keys(advice)))
 
     return tuple(
         Approach(
@@ -343,7 +370,7 @@ def consensus_recommendation(
         return recommendations[0]
 
     display_names = {_approach_name_key(approach.name): approach.name for approach in approaches}
-    picks = [_names_mentioned_in(advice.recommendation, display_names) for advice in advices]
+    picks = [_names_mentioned_in(advice.recommendation, _own_name_keys(advice)) for advice in advices]
     if any(len(pick) != 1 for pick in picks):
         return None
     shared = {next(iter(pick)) for pick in picks}

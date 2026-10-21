@@ -136,7 +136,7 @@ Provide your review as structured JSON:
   "issues": [
     {
       "severity": "high|medium|low",
-      "location": "file:line",
+      "location": "file:line or file:firstLine-lastLine",
       "category": "craftsmanship|architecture|correctness|invariants|maintainability",
       "description": "What is wrong",
       "suggestion": "How to fix it"
@@ -283,7 +283,9 @@ The response wrapper ([`provider-response.schema.json`](schemas/provider-respons
 
 Issues from different providers are grouped when they refer to the same underlying concern:
 
-- **Same file** AND **same line range** (within ±5 lines tolerance) AND **same category** = same issue.
+- **Same file** AND **same line range** (overlapping, or within ±5 lines tolerance) AND **same category** = same issue.
+- A location MAY cite a single line (`file.py:205`) or a line range (`file.py:203-207`). A single line is treated as a range of one line, so the two forms group with each other.
+- A location whose trailing segment is neither is kept whole as the file path, so a path containing a colon is not split.
 - Orchestrators MAY supply a custom semantic similarity function for more sophisticated grouping.
 
 ### 9.2 Approach Grouping (Design Question)

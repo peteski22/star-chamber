@@ -212,7 +212,10 @@ class CodeReviewResult:
 
     Attributes:
         mode: Council mode (e.g. "code-review").
-        providers_used: Names of providers that participated.
+        providers_used: Names of every council member consulted, including those that failed.
+        providers_responded: Names of the members that returned a usable review.
+            Consensus, majority, and individual classifications were computed
+            over these members alone.
         failed_providers: Providers that failed during the session.
         reviews: Individual provider reviews.
         consensus_issues: Issues all providers agree on.
@@ -224,6 +227,7 @@ class CodeReviewResult:
 
     mode: str
     providers_used: tuple[str, ...]
+    providers_responded: tuple[str, ...]
     failed_providers: tuple[ProviderError, ...]
     reviews: tuple[ProviderReview, ...]
     consensus_issues: tuple[Issue, ...]
@@ -240,7 +244,9 @@ class DesignQuestionResult:
     Attributes:
         mode: Council mode (e.g. "design-question").
         prompt: The original design question.
-        providers_used: Names of providers that participated.
+        providers_used: Names of every council member consulted, including those that failed.
+        providers_responded: Names of the members that returned usable advice.
+            The consensus recommendation was computed over these members alone.
         failed_providers: Providers that failed during the session.
         approaches: Aggregated design approaches.
         consensus_recommendation: Recommendation all providers agreed on.
@@ -250,6 +256,7 @@ class DesignQuestionResult:
     mode: str
     prompt: str
     providers_used: tuple[str, ...]
+    providers_responded: tuple[str, ...]
     failed_providers: tuple[ProviderError, ...]
     approaches: tuple[Approach, ...]
     consensus_recommendation: str | None = None

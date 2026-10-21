@@ -554,6 +554,7 @@ class TestCodeReviewResult:
         return CodeReviewResult(
             mode="code-review",
             providers_used=("openai", "anthropic"),
+            providers_responded=("openai",),
             failed_providers=(ProviderError(provider="local", error="crash"),),
             reviews=(review,),
             consensus_issues=(issue,),
@@ -566,6 +567,7 @@ class TestCodeReviewResult:
     def test_all_fields_set(self, result):
         assert result.mode == "code-review"
         assert result.providers_used == ("openai", "anthropic")
+        assert result.providers_responded == ("openai",)
         assert len(result.failed_providers) == 1
         assert len(result.reviews) == 1
         assert len(result.consensus_issues) == 1
@@ -578,6 +580,7 @@ class TestCodeReviewResult:
         CodeReviewResult(
             mode="code-review",
             providers_used=(),
+            providers_responded=(),
             failed_providers=(),
             reviews=(),
             consensus_issues=(),
@@ -597,6 +600,7 @@ class TestCodeReviewResult:
         expected_keys = {
             "mode",
             "providers_used",
+            "providers_responded",
             "failed_providers",
             "reviews",
             "consensus_issues",
@@ -629,6 +633,7 @@ class TestDesignQuestionResult:
             mode="design-question",
             prompt="How should we structure the API?",
             providers_used=("openai", "anthropic"),
+            providers_responded=("openai", "anthropic"),
             failed_providers=(),
             approaches=(approach,),
             consensus_recommendation="Go with Option A",
@@ -639,6 +644,7 @@ class TestDesignQuestionResult:
         assert design_result.mode == "design-question"
         assert design_result.prompt == "How should we structure the API?"
         assert design_result.providers_used == ("openai", "anthropic")
+        assert design_result.providers_responded == ("openai", "anthropic")
         assert design_result.failed_providers == ()
         assert len(design_result.approaches) == 1
         assert design_result.consensus_recommendation == "Go with Option A"
@@ -649,6 +655,7 @@ class TestDesignQuestionResult:
             mode="design-question",
             prompt="What DB?",
             providers_used=(),
+            providers_responded=(),
             failed_providers=(),
             approaches=(),
         )
@@ -665,6 +672,7 @@ class TestDesignQuestionResult:
             "mode",
             "prompt",
             "providers_used",
+            "providers_responded",
             "failed_providers",
             "approaches",
             "consensus_recommendation",

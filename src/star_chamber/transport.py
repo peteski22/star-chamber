@@ -15,6 +15,10 @@ from star_chamber.types import OtariConfig, ProviderConfig
 # Default maximum token limit when none is configured.
 DEFAULT_MAX_TOKENS = 16384
 
+# Stop reasons that leave a reply unusable: the output ran out of room, or a filter withheld it.
+_STOPPED_AT_TOKEN_LIMIT = "length"
+_WITHHELD_BY_FILTER = "content_filter"
+
 # Patterns for redacting API keys from error messages.
 _API_KEY_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"Bearer\s+\S+"),
@@ -107,7 +111,8 @@ async def send_to_provider(
         otari: Optional Otari gateway routing configuration.
 
     Returns:
-        A ProviderResponse indicating success or failure.
+        A ProviderResponse indicating success or failure.  A reply the provider
+        cut short, or withheld, is a failure rather than partial content.
     """
     # The output identity: the configured display name, or the provider name.
     identity = config.display_name or config.provider
@@ -199,13 +204,36 @@ async def send_to_provider(
             error=f"No response content (empty choices) from {config.provider}.",
         )
 
-    content = response.choices[0].message.content
+    choice = response.choices[0]
+
+    if choice.finish_reason == _STOPPED_AT_TOKEN_LIMIT:
+        return ProviderResponse(
+            provider=config.provider,
+            display_name=identity,
+            model=config.model,
+            success=False,
+            error=(
+                f"Provider {config.provider} reached its {max_tok} output token limit, "
+                f"so the reply is cut off and incomplete. "
+                f"Raise max_tokens for this council member, or send fewer files."
+            ),
+        )
+
+    if choice.finish_reason == _WITHHELD_BY_FILTER:
+        return ProviderResponse(
+            provider=config.provider,
+            display_name=identity,
+            model=config.model,
+            success=False,
+            error=f"Provider {config.provider} blocked its own response, so no review is available.",
+        )
+
     return ProviderResponse(
         provider=config.provider,
         display_name=identity,
         model=config.model,
         success=True,
-        content=content,
+        content=choice.message.content or "",
     )
 
 

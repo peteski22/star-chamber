@@ -28,7 +28,7 @@ Provide your review as structured JSON:
   "issues": [
     {{
       "severity": "high | medium | low",
-      "location": "file:line",
+      "location": "file:line or file:firstLine-lastLine",
       "category": "craftsmanship | architecture | correctness | invariants | maintainability",
       "description": "What is wrong",
       "suggestion": "How to fix it"

@@ -35,6 +35,9 @@ def _build_code_review_result(
 
     Returns:
         A fully populated CodeReviewResult.
+
+    NOTE: Every response must land in either failed_providers or reviews, never both and never neither.
+    providers_responded is therefore the exact complement of failed_providers within providers_used.
     """
     reviews: list[ProviderReview] = []
     failed: list[ProviderError] = []
@@ -64,6 +67,7 @@ def _build_code_review_result(
     return CodeReviewResult(
         mode="code-review",
         providers_used=tuple(providers_used),
+        providers_responded=tuple(r.provider for r in reviews),
         failed_providers=tuple(failed),
         reviews=tuple(reviews),
         consensus_issues=classification.consensus_issues,
@@ -86,6 +90,9 @@ def _build_design_result(
 
     Returns:
         A fully populated DesignQuestionResult.
+
+    NOTE: Every response must land in either failed_providers or the parsed advice, never both and never neither.
+    providers_responded is therefore the exact complement of failed_providers within providers_used.
     """
     advices: list[ProviderDesignAdvice] = []
     failed: list[ProviderError] = []
@@ -121,6 +128,7 @@ def _build_design_result(
         mode="design-question",
         prompt=prompt,
         providers_used=tuple(providers_used),
+        providers_responded=tuple(a.provider for a in advices),
         failed_providers=tuple(failed),
         approaches=tuple(all_approaches),
         consensus_recommendation=consensus_recommendation,

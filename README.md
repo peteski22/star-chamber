@@ -58,7 +58,9 @@ When several council members share one provider — for example, multiple models
 }
 ```
 
-In the JSON output, each provider response carries both the underlying `provider` (the routing target) and this `display_name`, and the display name is the key used throughout the aggregated result — `providers_used`, `quality_ratings`, `individual_issues`, `flagged_by`, and `failed_providers`. A member with no `display_name` falls back to the provider name.
+In the JSON output, each provider response carries both the underlying `provider` (the routing target) and this `display_name`, and the display name is the key used throughout the aggregated result — `providers_used`, `providers_responded`, `quality_ratings`, `individual_issues`, `flagged_by`, and `failed_providers`. A member with no `display_name` falls back to the provider name.
+
+`providers_used` is the roster that was asked, including members that failed. `providers_responded` is the roster that answered, and it is the denominator the consensus and majority classifications were computed over. A consensus across two members when three were asked is a weaker signal than the same word across three, so report the answering roster rather than the roster asked.
 
 ### Otari gateway
 

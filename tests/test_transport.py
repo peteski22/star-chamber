@@ -9,6 +9,7 @@ import pytest
 
 from star_chamber.config import ConfigError
 from star_chamber.transport import (
+    DEFAULT_MAX_TOKENS,
     ProviderResponse,
     _is_auth_error,
     _sanitize_error,
@@ -23,13 +24,14 @@ from star_chamber.types import OtariConfig, ProviderConfig
 # -- helpers ------------------------------------------------------------------
 
 
-def _make_mock_any_llm(response_content: str = "Review looks good."):
+def _make_mock_any_llm(response_content: str = "Review looks good.", finish_reason: str = "stop"):
     """Build a mock any_llm module with an acompletion coroutine."""
     mock_module = types.ModuleType("any_llm")
 
     # Build a response shaped like any_llm's ModelResponse.
     mock_choice = MagicMock()
     mock_choice.message.content = response_content
+    mock_choice.finish_reason = finish_reason
 
     mock_response = MagicMock()
     mock_response.choices = [mock_choice]
@@ -279,6 +281,58 @@ class TestSendToProvider:
 
         assert result.success is False
         assert "no response" in result.error.lower() or "empty" in result.error.lower()
+
+    def test_output_token_limit_fails_instead_of_returning_a_partial_reply(self):
+        mock_module = _make_mock_any_llm('{"quality_rating": "go', finish_reason="length")
+        config = ProviderConfig(provider="anthropic", model="claude-3", max_tokens=20000)
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            result = asyncio.run(send_to_provider(config, "Review this."))
+
+        assert result.success is False
+        assert "20000" in result.error
+        assert "max_tokens" in result.error
+
+    def test_output_token_limit_error_names_the_default_limit_when_unconfigured(self):
+        mock_module = _make_mock_any_llm("partial", finish_reason="length")
+        config = ProviderConfig(provider="anthropic", model="claude-3")
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            result = asyncio.run(send_to_provider(config, "Review this."))
+
+        assert result.success is False
+        assert str(DEFAULT_MAX_TOKENS) in result.error
+
+    def test_blocked_response_fails_with_its_own_message(self):
+        mock_module = _make_mock_any_llm("", finish_reason="content_filter")
+        config = ProviderConfig(provider="anthropic", model="claude-3")
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            result = asyncio.run(send_to_provider(config, "Review this."))
+
+        assert result.success is False
+        assert "blocked" in result.error.lower()
+        assert "max_tokens" not in result.error
+
+    def test_normal_stop_still_succeeds(self):
+        mock_module = _make_mock_any_llm("Great code!", finish_reason="stop")
+        config = ProviderConfig(provider="anthropic", model="claude-3")
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            result = asyncio.run(send_to_provider(config, "Review this."))
+
+        assert result.success is True
+        assert result.content == "Great code!"
+
+    def test_absent_content_becomes_an_empty_string(self):
+        mock_module = _make_mock_any_llm(None, finish_reason="stop")
+        config = ProviderConfig(provider="anthropic", model="claude-3")
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            result = asyncio.run(send_to_provider(config, "Review this."))
+
+        assert result.success is True
+        assert result.content == ""
 
     def test_gemini_timeout_passed_as_kwarg(self):
         """Gemini receives timeout as a direct request kwarg."""

@@ -7,6 +7,7 @@ category, then classified as consensus, majority, or individual.
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from collections.abc import Sequence
 
@@ -15,50 +16,100 @@ from star_chamber.types import ClassificationResult, Issue, MajorityIssue, Provi
 # Line numbers within this tolerance are considered the same location.
 _LINE_TOLERANCE = 5
 
+# Matches a location's trailing line number or line range, e.g. "23" or "203-207".
+# The digit runs are bounded so the pattern cannot accept a number int() would reject.
+_LINE_SPAN_RE = re.compile(r"(\d{1,7})(?:-(\d{1,7}))?$", re.ASCII)
+
+# The most lines a span may cover, counting both ends, and still mean one place.
+# A wider span cites a file-level concern.
+# Grouping such a span by overlap would let it absorb unrelated findings, whose
+# descriptions the group then discards, so it is treated as no span instead.
+_MAX_SPAN_LINES = 50
+
+# An inclusive first and last line.  A single line is a span of one.
+_LineSpan = tuple[int, int]
+
+# A grouping key: file path, line span, and category.
+_IssueKey = tuple[str, _LineSpan | None, str]
+
 # Sort order for severity levels (lower value = higher priority).
 _SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 
 
-def _parse_location(location: str) -> tuple[str, int | None]:
-    """Parse a "file:line" location string into file path and optional line number.
+def _parse_location(location: str) -> tuple[str, _LineSpan | None]:
+    """Parse a location string into a file path and an optional line span.
+
+    Accepts a single line ("file.py:42"), a line range ("file.py:203-207"), or
+    a bare path ("file.py").  A single line yields a span of one line, so one
+    comparison covers both forms.  A trailing segment that is neither leaves the
+    location whole, which keeps a path containing a colon intact.
+
+    A span wider than _MAX_SPAN_LINES yields the file path and no span, because
+    it cites the file rather than one place within it.
 
     Args:
-        location: Location string in the form "path/to/file.py:42" or "file.py".
+        location: Location string such as "path/to/file.py:42" or "file.py:203-207".
 
     Returns:
-        Tuple of (file_path, line_number) where line_number is None if absent.
+        Tuple of (file_path, line_span), where line_span is None if absent.
     """
     idx = location.rfind(":")
     if idx == -1:
         return (location, None)
-    file_part = location[:idx]
-    line_part = location[idx + 1 :]
-    try:
-        return (file_part, int(line_part))
-    except ValueError:
+
+    match = _LINE_SPAN_RE.fullmatch(location[idx + 1 :])
+    if match is None:
         return (location, None)
 
+    first = int(match.group(1))
+    last = first if match.group(2) is None else int(match.group(2))
+    first, last = min(first, last), max(first, last)
 
-def _issue_key(issue: Issue) -> tuple[str, int | None, str]:
+    if last - first + 1 > _MAX_SPAN_LINES:
+        return (location[:idx], None)
+
+    return (location[:idx], (first, last))
+
+
+def _issue_key(issue: Issue) -> _IssueKey:
     """Build a grouping key from an issue.
 
     Args:
         issue: The issue to extract a key from.
 
     Returns:
-        Tuple of (file, line_number, category).
+        Tuple of (file, line_span, category).
     """
-    file, line = _parse_location(issue.location)
-    return (file, line, issue.category)
+    file, span = _parse_location(issue.location)
+    return (file, span, issue.category)
 
 
-def _issues_match(key_a: tuple[str, int | None, str], key_b: tuple[str, int | None, str]) -> bool:
+def _spans_match(span_a: _LineSpan, span_b: _LineSpan) -> bool:
+    """Determine whether two line spans refer to the same place.
+
+    Spans match when they overlap, or when the gap between them is within
+    _LINE_TOLERANCE.  A single line is a span of one, so two single lines match
+    on the same tolerance that separated them before spans existed.
+
+    Args:
+        span_a: First inclusive line span.
+        span_b: Second inclusive line span.
+
+    Returns:
+        True if the spans refer to the same place.
+    """
+    first_a, last_a = span_a
+    first_b, last_b = span_b
+    return first_a - _LINE_TOLERANCE <= last_b and first_b - _LINE_TOLERANCE <= last_a
+
+
+def _issues_match(key_a: _IssueKey, key_b: _IssueKey) -> bool:
     """Determine whether two issue keys refer to the same logical issue.
 
     Two keys match when they share the same file and category, and their line
-    numbers are within +-_LINE_TOLERANCE of each other.  Both lines must be
-    present (non-None) for tolerance comparison; if both are None they match,
-    but if only one is None they do not.
+    spans refer to the same place.  Both spans must be present for that
+    comparison; if both are absent they match, but if only one is absent they
+    do not.
 
     Args:
         key_a: First issue key.
@@ -67,19 +118,19 @@ def _issues_match(key_a: tuple[str, int | None, str], key_b: tuple[str, int | No
     Returns:
         True if the keys represent the same logical issue.
     """
-    file_a, line_a, cat_a = key_a
-    file_b, line_b, cat_b = key_b
+    file_a, span_a, cat_a = key_a
+    file_b, span_b, cat_b = key_b
 
     if file_a != file_b or cat_a != cat_b:
         return False
 
-    # Both None => match.  One None => no match.
-    if line_a is None and line_b is None:
+    # Both absent => match.  One absent => no match.
+    if span_a is None and span_b is None:
         return True
-    if line_a is None or line_b is None:
+    if span_a is None or span_b is None:
         return False
 
-    return abs(line_a - line_b) <= _LINE_TOLERANCE
+    return _spans_match(span_a, span_b)
 
 
 def _severity_sort_key(issue: Issue | MajorityIssue) -> int:
@@ -116,7 +167,7 @@ def classify(reviews: Sequence[ProviderReview], threshold: int = 2) -> Classific
     effective_threshold = min(threshold, num_providers)
 
     # Each group tracks: the representative issue, its key, and the set of providers.
-    groups: list[tuple[Issue, tuple[str, int | None, str], set[str]]] = []
+    groups: list[tuple[Issue, _IssueKey, set[str]]] = []
 
     for review in reviews:
         for issue in review.issues:

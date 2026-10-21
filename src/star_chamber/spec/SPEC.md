@@ -136,7 +136,7 @@ Provide your review as structured JSON:
   "issues": [
     {
       "severity": "high|medium|low",
-      "location": "file:line",
+      "location": "file:line or file:firstLine-lastLine",
       "category": "craftsmanship|architecture|correctness|invariants|maintainability",
       "description": "What is wrong",
       "suggestion": "How to fix it"
@@ -283,7 +283,9 @@ The response wrapper ([`provider-response.schema.json`](schemas/provider-respons
 
 Issues from different providers are grouped when they refer to the same underlying concern:
 
-- **Same file** AND **same line range** (within ±5 lines tolerance) AND **same category** = same issue.
+- **Same file** AND **same line range** (overlapping, or within ±5 lines tolerance) AND **same category** = same issue.
+- A location MAY cite a single line (`file.py:205`) or a line range (`file.py:203-207`). A single line is treated as a range of one line, so the two forms group with each other.
+- A location whose trailing segment is neither is kept whole as the file path, so a path containing a colon is not split.
 - Orchestrators MAY supply a custom semantic similarity function for more sophisticated grouping.
 
 ### 9.2 Approach Grouping (Design Question)
@@ -298,9 +300,11 @@ Issues/recommendations fall into mutually exclusive buckets:
 
 | Bucket | Definition | Confidence |
 |--------|-----------|------------|
-| **Consensus** | All successful providers flagged it. | Highest |
-| **Majority** | More than one but not all providers. | High |
-| **Individual** | Exactly one provider. | Lower |
+| **Consensus** | Every member that answered flagged it. | Highest |
+| **Majority** | More than one but not all members that answered. | High |
+| **Individual** | Exactly one member that answered. | Lower |
+
+Classification counts a member only when it returned a usable response. The denominator is therefore `providers_responded`, not `providers_used`. A consensus across two members when three were asked is a weaker signal than the same word across three, so consumers that report agreement MUST state which roster it was computed over.
 
 **Design question consensus:** For design questions, `consensus_recommendation` captures high-level directional agreement (e.g., "use CRUD, not event sourcing") even when providers recommend different specific variants. It is not populated when providers disagree on direction. Per-approach `recommended_by` counts track the specific variant each provider chose.
 
@@ -320,10 +324,11 @@ The structured output includes:
 
 - `mode`: `"code-review"`
 - `files_reviewed[]`: List of reviewed file paths.
-- `providers_used[]`: List of all council members consulted, by display name.
+- `providers_used[]`: The roster asked. All council members consulted, including those that failed, by display name.
+- `providers_responded[]`: The roster that answered. Members that returned a usable review, by display name. This is the denominator the classifications below were computed over.
 - `failed_providers[]`: Members that failed or returned malformed responses, by display name.
-- `consensus_issues[]`: Issues flagged by all successful providers.
-- `majority_issues[]`: Issues flagged by more than one member. Each item includes `provider_count` and `flagged_by` (array of member display names) to identify which members raised it.
+- `consensus_issues[]`: Issues flagged by every member in `providers_responded`.
+- `majority_issues[]`: Issues flagged by more than one member in `providers_responded`. Each item includes `provider_count` and `flagged_by` (array of member display names) to identify which members raised it.
 - `individual_issues{}`: Issues keyed by member display name.
 - `quality_ratings{}`: Per-member quality rating, keyed by display name.
 - `summary{}`: Counts (`total_issues`, `consensus_count`, `majority_count`) and `synthesis` (1-2 sentence overall assessment).
@@ -335,11 +340,12 @@ The structured output includes:
 ## Council Review
 
 **Files:** {list of files reviewed}
-**Providers:** {list of providers used}
+**Providers asked:** {providers_used}
+**Providers answered:** {providers_responded}
 
-### Consensus Issues (All Providers Agree)
+### Consensus Issues (All {M} Providers That Answered Agree)
 
-These issues were flagged by every council member. Address these first.
+These issues were flagged by every council member that answered. Address these first.
 
 1. `{file}:{line}` **[{SEVERITY}]** - {description}
    - **Suggestion:** {how to fix}
@@ -372,9 +378,10 @@ The structured output includes:
 
 - `mode`: `"design-question"`
 - `prompt`: The original design question (enables rendering the Markdown template without external context).
-- `providers_used[]`: List of all council members consulted, by display name.
+- `providers_used[]`: The roster asked. All council members consulted, including those that failed, by display name.
+- `providers_responded[]`: The roster that answered. Members that returned usable advice, by display name. This is the denominator `consensus_recommendation` was computed over.
 - `failed_providers[]`: Members that failed or returned malformed responses, by display name.
-- `consensus_recommendation` (optional): High-level directional agreement when all providers agree, even if they differ on specifics.
+- `consensus_recommendation` (optional): High-level directional agreement when every member that answered agrees, even if they differ on specifics.
 - `approaches[]`: All approaches mentioned by any provider, with `recommended_by` count, merged pros/cons, `risk_level`, and optional `fit_rating` (omitted when no provider assessed fit for the approach; when providers disagree, use the most common rating).
 - `summary{}`: Contains `synthesis` (1-2 sentence overall assessment).
 - `debate{}` (optional): Debate metadata (rounds_completed, converged).
@@ -385,7 +392,8 @@ The structured output includes:
 ## Council Advisory
 
 **Question:** {the design question}
-**Providers:** {list of providers consulted}
+**Providers asked:** {providers_used}
+**Providers answered:** {providers_responded}
 
 ### Consensus Recommendation
 

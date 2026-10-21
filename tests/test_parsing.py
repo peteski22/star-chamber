@@ -142,3 +142,48 @@ class TestParseDesignAdvice:
         content = (FIXTURES / "malformed.txt").read_text()
         with pytest.raises(ParseError, match="Failed to extract JSON"):
             parse_design_advice(content, provider="openai", model="gpt-4o")
+
+
+# -- unparsable response diagnostics -------------------------------------------
+
+
+class TestUnparsableDiagnostics:
+    """The failure message must separate a cut-off reply from prose from an empty one."""
+
+    def test_empty_response_is_named_as_empty(self):
+        with pytest.raises(ParseError, match="empty"):
+            parse_code_review("", provider="anthropic", model="claude-opus-5")
+
+    def test_cut_off_json_is_named_as_incomplete(self):
+        content = '{"quality_rating": "good", "issues": [{"severity": "high", "location": "a.py:1'
+        with pytest.raises(ParseError, match="ends mid-structure"):
+            parse_code_review(content, provider="anthropic", model="claude-opus-5")
+
+    def test_cut_off_json_inside_a_code_fence_is_named_as_incomplete(self):
+        content = '```json\n{"quality_rating": "good", "issues": [{"severity": "hi'
+        with pytest.raises(ParseError, match="ends mid-structure"):
+            parse_code_review(content, provider="anthropic", model="claude-opus-5")
+
+    def test_prose_is_named_as_carrying_no_json(self):
+        content = "I cannot review this code because the request is unclear."
+        with pytest.raises(ParseError, match="no JSON found"):
+            parse_code_review(content, provider="anthropic", model="claude-opus-5")
+
+    def test_complete_but_invalid_json_is_named_as_malformed(self):
+        content = '{"quality_rating": "good",,}'
+        with pytest.raises(ParseError, match="malformed"):
+            parse_code_review(content, provider="anthropic", model="claude-opus-5")
+
+    def test_message_reports_the_response_length(self):
+        content = "x" * 4096
+        with pytest.raises(ParseError, match="4096 characters"):
+            parse_code_review(content, provider="anthropic", model="claude-opus-5")
+
+    def test_design_advice_reports_the_same_detail(self):
+        content = '{"recommendation": "repository", "approaches": [{"name": "Repo'
+        with pytest.raises(ParseError, match="ends mid-structure"):
+            parse_design_advice(content, provider="anthropic", model="claude-opus-5")
+
+    def test_existing_message_prefix_is_preserved(self):
+        with pytest.raises(ParseError, match=r"Failed to extract JSON from anthropic response"):
+            parse_code_review("prose only", provider="anthropic", model="claude-opus-5")

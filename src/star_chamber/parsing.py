@@ -11,9 +11,39 @@ from star_chamber.types import Approach, Issue, ProviderDesignAdvice, ProviderRe
 # Matches ```json ... ``` or ``` ... ``` code blocks.
 _CODE_BLOCK_RE = re.compile(r"```(?:json)?\s*\n(.*?)\n```", re.DOTALL)
 
+# Matches an opening fence alone, so a reply cut off before its closing fence still reads as JSON.
+_OPEN_FENCE_RE = re.compile(r"^\s*```(?:json)?\s*\n")
+
+_JSON_START_RE = re.compile(r"[{\[]")
+
 
 class ParseError(Exception):
     """Raised when response parsing fails."""
+
+
+def _describe_unparsable(content: str) -> str:
+    """Describe a response that yielded no JSON.
+
+    Distinguishes a reply the provider cut short from one that refused in prose,
+    so a caller can act on the failure instead of only seeing that parsing failed.
+
+    Args:
+        content: Raw LLM response text that produced no JSON.
+
+    Returns:
+        A short phrase naming the response length and its shape.
+    """
+    if not content.strip():
+        return "empty"
+
+    body = _OPEN_FENCE_RE.sub("", content).strip().removesuffix("```").strip()
+    length = len(content)
+
+    if not body or _JSON_START_RE.search(body) is None:
+        return f"{length} characters, no JSON found"
+    if not body.endswith(("}", "]")):
+        return f"{length} characters, ends mid-structure"
+    return f"{length} characters, malformed JSON"
 
 
 def extract_json(content: str) -> dict[str, Any] | list[Any] | None:
@@ -71,7 +101,7 @@ def parse_code_review(content: str, provider: str, model: str) -> ProviderReview
     """
     data = extract_json(content)
     if data is None or not isinstance(data, dict):
-        msg = f"Failed to extract JSON from {provider} response"
+        msg = f"Failed to extract JSON from {provider} response ({_describe_unparsable(content)})"
         raise ParseError(msg)
 
     if "quality_rating" not in data:
@@ -119,7 +149,7 @@ def parse_design_advice(content: str, provider: str, model: str) -> ProviderDesi
     """
     data = extract_json(content)
     if data is None or not isinstance(data, dict):
-        msg = f"Failed to extract JSON from {provider} response"
+        msg = f"Failed to extract JSON from {provider} response ({_describe_unparsable(content)})"
         raise ParseError(msg)
 
     if "recommendation" not in data:

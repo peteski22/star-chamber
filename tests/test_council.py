@@ -30,6 +30,15 @@ _TWO_PROVIDER_CONFIG = CouncilConfig(
 )
 
 
+_GOOD_ISSUE = {
+    "severity": "high",
+    "location": "app.py:10",
+    "category": "correctness",
+    "description": "Off-by-one.",
+    "suggestion": "Use <=.",
+}
+
+
 def _code_review_json(
     quality: str = "good",
     issues: list[dict] | None = None,
@@ -785,3 +794,75 @@ class TestRosterComplement:
         failed = {f.provider for f in result.failed_providers}
         assert tuple(p for p in result.providers_used if p not in failed) == result.providers_responded
         assert len(result.providers_responded) + len(result.failed_providers) == len(result.providers_used)
+
+
+class TestMalformedMemberFailsAlone:
+    """A member that sends an unusable reply costs the council that member, not the session.
+
+    Every field of a reply is attacker-shaped data, so the parser raises ParseError and the
+    member lands in failed_providers alongside the members that timed out.
+    """
+
+    @pytest.mark.parametrize(
+        ("label", "issue"),
+        [
+            ("null location", {**_GOOD_ISSUE, "location": None}),
+            ("numeric location", {**_GOOD_ISSUE, "location": 12}),
+            ("no severity", {k: v for k, v in _GOOD_ISSUE.items() if k != "severity"}),
+            ("no location", {k: v for k, v in _GOOD_ISSUE.items() if k != "location"}),
+        ],
+    )
+    def test_one_bad_issue_does_not_end_a_code_review(self, label, issue):
+        responses = [
+            _success_response("openai", "gpt-4o", _code_review_json(issues=[dict(_GOOD_ISSUE)])),
+            _success_response("anthropic", "claude-opus-5", _code_review_json(issues=[issue])),
+            _success_response("gemini", "gemini-2.0", _code_review_json(issues=[dict(_GOOD_ISSUE)])),
+        ]
+
+        result = _build_code_review_result(responses, files_reviewed=("app.py",))
+
+        assert result.providers_responded == ("openai", "gemini")
+        assert [failure.provider for failure in result.failed_providers] == ["anthropic"]
+        assert result.providers_used == ("openai", "anthropic", "gemini")
+
+    def test_the_surviving_members_still_reach_consensus(self):
+        bad = {**_GOOD_ISSUE, "location": None}
+        responses = [
+            _success_response("openai", "gpt-4o", _code_review_json(issues=[dict(_GOOD_ISSUE)])),
+            _success_response("anthropic", "claude-opus-5", _code_review_json(issues=[bad])),
+            _success_response("gemini", "gemini-2.0", _code_review_json(issues=[dict(_GOOD_ISSUE)])),
+        ]
+
+        result = _build_code_review_result(responses, files_reviewed=("app.py",))
+
+        assert len(result.consensus_issues) == 1
+        assert result.summary.consensus_count == 1
+
+    @pytest.mark.parametrize(
+        ("label", "approaches"),
+        [
+            ("approaches not a list", "none"),
+            ("approach not an object", ["none"]),
+            ("approach without a name", [{}]),
+            ("null approach name", [{"name": None}]),
+        ],
+    )
+    def test_one_bad_approach_does_not_end_a_design_question(self, label, approaches):
+        responses = [
+            _success_response("openai", "gpt-4o", _design_json()),
+            _success_response("anthropic", "claude-opus-5", _design_json(approaches=approaches)),
+        ]
+
+        result = _build_design_result(responses, prompt="Which data layer?")
+
+        assert result.providers_responded == ("openai",)
+        assert [failure.provider for failure in result.failed_providers] == ["anthropic"]
+
+    def test_the_failure_names_the_field_and_the_shape(self):
+        bad = {**_GOOD_ISSUE, "location": None}
+        responses = [_success_response("anthropic", "claude-opus-5", _code_review_json(issues=[bad]))]
+
+        result = _build_code_review_result(responses, files_reviewed=("app.py",))
+
+        assert "location" in result.failed_providers[0].error
+        assert "null" in result.failed_providers[0].error

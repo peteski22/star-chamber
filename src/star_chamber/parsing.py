@@ -16,6 +16,17 @@ _OPEN_FENCE_RE = re.compile(r"^\s*```(?:json)?\s*\n")
 
 _JSON_START_RE = re.compile(r"[{\[]")
 
+# JSON shape names, so a parse failure describes what the provider sent in protocol terms.
+_JSON_TYPE_NAMES: dict[type, str] = {
+    bool: "a boolean",
+    dict: "an object",
+    float: "a number",
+    int: "a whole number",
+    list: "a list",
+    str: "text",
+    type(None): "null",
+}
+
 
 class ParseError(Exception):
     """Raised when response parsing fails."""
@@ -44,6 +55,154 @@ def _describe_unparsable(content: str) -> str:
     if not body.endswith(("}", "]")):
         return f"{length} characters, ends mid-structure"
     return f"{length} characters, malformed JSON"
+
+
+def _json_type_name(value: object) -> str:
+    """Name the JSON shape of a value, for a parse failure a reader can act on."""
+    return _JSON_TYPE_NAMES.get(type(value), "an unexpected value")
+
+
+def _object_list(container: dict[str, Any], field: str, context: str) -> list[dict[str, Any]]:
+    """Return a list-of-objects field, empty when absent.
+
+    Args:
+        container: Decoded JSON object that may hold the field.
+        field: Field name, as the protocol spells it.
+        context: Where the field sits, for the error message.
+
+    Returns:
+        The field's items, or an empty list when the field is absent.
+
+    Raises:
+        ParseError: If the field is not a list, or any item is not an object.
+    """
+    if field not in container:
+        return []
+    value = container[field]
+    if not isinstance(value, list):
+        msg = f"Field {field} in {context} must be a list, got {_json_type_name(value)}"
+        raise ParseError(msg)
+    for item in value:
+        if not isinstance(item, dict):
+            msg = f"Every entry of {field} in {context} must be an object, got {_json_type_name(item)}"
+            raise ParseError(msg)
+    return value
+
+
+def _optional_text(container: dict[str, Any], field: str, context: str, default: str) -> str:
+    """Return a text field, or ``default`` when absent.
+
+    Args:
+        container: Decoded JSON object that may hold the field.
+        field: Field name, as the protocol spells it.
+        context: Where the field sits, for the error message.
+        default: Value to use when the field is absent.
+
+    Returns:
+        The field's text, or the default.
+
+    Raises:
+        ParseError: If the field is present and is not text.
+    """
+    if field not in container:
+        return default
+    return _require_text(container, field, context)
+
+
+def _optional_text_list(container: dict[str, Any], field: str, context: str) -> tuple[str, ...]:
+    """Return a text-list field, empty when absent.
+
+    Args:
+        container: Decoded JSON object that may hold the field.
+        field: Field name, as the protocol spells it.
+        context: Where the field sits, for the error message.
+
+    Returns:
+        The field's entries, or an empty tuple when the field is absent.
+
+    Raises:
+        ParseError: If the field is not a list, or any entry is not text.
+    """
+    if field not in container:
+        return ()
+    value = container[field]
+    if not isinstance(value, list):
+        msg = f"Field {field} in {context} must be a list, got {_json_type_name(value)}"
+        raise ParseError(msg)
+    for entry in value:
+        if not isinstance(entry, str):
+            msg = f"Every entry of {field} in {context} must be text, got {_json_type_name(entry)}"
+            raise ParseError(msg)
+    return tuple(value)
+
+
+def _optional_text_or_none(container: dict[str, Any], field: str, context: str) -> str | None:
+    """Return a text field that may be null, None when absent or null.
+
+    Args:
+        container: Decoded JSON object that may hold the field.
+        field: Field name, as the protocol spells it.
+        context: Where the field sits, for the error message.
+
+    Returns:
+        The field's text, or None.
+
+    Raises:
+        ParseError: If the field is present and is neither text nor null.
+    """
+    value = container.get(field)
+    if value is None:
+        return None
+    return _require_text(container, field, context)
+
+
+def _optional_whole_number(container: dict[str, Any], field: str, context: str, default: int) -> int:
+    """Return a whole-number field, or ``default`` when absent.
+
+    Args:
+        container: Decoded JSON object that may hold the field.
+        field: Field name, as the protocol spells it.
+        context: Where the field sits, for the error message.
+        default: Value to use when the field is absent.
+
+    Returns:
+        The field's value, or the default.
+
+    Raises:
+        ParseError: If the field is present and is not a whole number.
+    """
+    if field not in container:
+        return default
+    value = container[field]
+    # A JSON boolean is an int in Python, and serializes back as true rather than a number.
+    if not isinstance(value, int) or isinstance(value, bool):
+        msg = f"Field {field} in {context} must be a whole number, got {_json_type_name(value)}"
+        raise ParseError(msg)
+    return value
+
+
+def _require_text(container: dict[str, Any], field: str, context: str) -> str:
+    """Return a required text field.
+
+    Args:
+        container: Decoded JSON object that should hold the field.
+        field: Field name, as the protocol spells it.
+        context: Where the field sits, for the error message.
+
+    Returns:
+        The field's text.
+
+    Raises:
+        ParseError: If the field is absent or is not text.
+    """
+    if field not in container:
+        msg = f"Missing required field {field} in {context}"
+        raise ParseError(msg)
+    value = container[field]
+    if not isinstance(value, str):
+        msg = f"Field {field} in {context} must be text, got {_json_type_name(value)}"
+        raise ParseError(msg)
+    return value
 
 
 def extract_json(content: str) -> dict[str, Any] | list[Any] | None:
@@ -104,28 +263,28 @@ def parse_code_review(content: str, provider: str, model: str) -> ProviderReview
         msg = f"Failed to extract JSON from {provider} response ({_describe_unparsable(content)})"
         raise ParseError(msg)
 
-    if "quality_rating" not in data:
-        msg = f"Missing required field quality_rating in {provider} response"
-        raise ParseError(msg)
+    context = f"{provider} response"
+    issue_context = f"an issue in {provider} response"
 
+    quality_rating = _require_text(data, "quality_rating", context)
     issues = tuple(
         Issue(
-            severity=issue["severity"],
-            location=issue["location"],
-            category=issue["category"],
-            description=issue["description"],
-            suggestion=issue["suggestion"],
+            severity=_require_text(issue, "severity", issue_context),
+            location=_require_text(issue, "location", issue_context),
+            category=_require_text(issue, "category", issue_context),
+            description=_require_text(issue, "description", issue_context),
+            suggestion=_require_text(issue, "suggestion", issue_context),
         )
-        for issue in data.get("issues", [])
+        for issue in _object_list(data, "issues", context)
     )
 
     return ProviderReview(
         provider=provider,
         model=model,
-        quality_rating=data["quality_rating"],
+        quality_rating=quality_rating,
         issues=issues,
-        praise=tuple(data.get("praise", [])),
-        summary=data.get("summary", ""),
+        praise=_optional_text_list(data, "praise", context),
+        summary=_optional_text(data, "summary", context, ""),
         raw_content=content,
     )
 
@@ -160,23 +319,27 @@ def parse_design_advice(content: str, provider: str, model: str) -> ProviderDesi
         msg = f"Missing required field approaches in {provider} response"
         raise ParseError(msg)
 
+    context = f"{provider} response"
+    approach_context = f"an approach in {provider} response"
+
+    recommendation = _require_text(data, "recommendation", context)
     approaches = tuple(
         Approach(
-            name=approach["name"],
-            recommended_by=approach.get("recommended_by", 0),
-            pros=tuple(approach.get("pros", [])),
-            cons=tuple(approach.get("cons", [])),
-            risk_level=approach.get("risk_level", "unknown"),
-            fit_rating=approach.get("fit_rating"),
+            name=_require_text(approach, "name", approach_context),
+            recommended_by=_optional_whole_number(approach, "recommended_by", approach_context, 0),
+            pros=_optional_text_list(approach, "pros", approach_context),
+            cons=_optional_text_list(approach, "cons", approach_context),
+            risk_level=_optional_text(approach, "risk_level", approach_context, "unknown"),
+            fit_rating=_optional_text_or_none(approach, "fit_rating", approach_context),
         )
-        for approach in data["approaches"]
+        for approach in _object_list(data, "approaches", context)
     )
 
     return ProviderDesignAdvice(
         provider=provider,
         model=model,
-        recommendation=data["recommendation"],
+        recommendation=recommendation,
         approaches=approaches,
-        summary=data.get("summary", ""),
+        summary=_optional_text(data, "summary", context, ""),
         raw_content=content,
     )

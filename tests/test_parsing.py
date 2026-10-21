@@ -187,3 +187,160 @@ class TestUnparsableDiagnostics:
     def test_existing_message_prefix_is_preserved(self):
         with pytest.raises(ParseError, match=r"Failed to extract JSON from anthropic response"):
             parse_code_review("prose only", provider="anthropic", model="claude-opus-5")
+
+
+_ISSUE = {
+    "severity": "high",
+    "location": "app.py:10",
+    "category": "correctness",
+    "description": "Off-by-one.",
+    "suggestion": "Use <=.",
+}
+
+_NON_TEXT = [
+    pytest.param(None, "null", id="null"),
+    pytest.param(12, "a whole number", id="number"),
+    pytest.param(True, "a boolean", id="boolean"),
+    pytest.param([], "a list", id="list"),
+    pytest.param({}, "an object", id="object"),
+]
+
+
+def _review(**overrides) -> str:
+    body = {"quality_rating": "good", "issues": [dict(_ISSUE)], "praise": ["Clear."], "summary": "Fine."}
+    body.update(overrides)
+    return json.dumps(body)
+
+
+def _advice(**overrides) -> str:
+    body = {"recommendation": "Use a repository.", "approaches": [{"name": "Repository"}], "summary": "Fine."}
+    body.update(overrides)
+    return json.dumps(body)
+
+
+def _parse_review(content: str) -> ProviderReview:
+    return parse_code_review(content, provider="anthropic", model="claude-opus-5")
+
+
+def _parse_advice(content: str) -> ProviderDesignAdvice:
+    return parse_design_advice(content, provider="anthropic", model="claude-opus-5")
+
+
+class TestCodeReviewFieldTypes:
+    """A member's reply is untrusted, so every field it supplies is checked here.
+
+    A field of the wrong shape raises ParseError, which puts that member in
+    failed_providers rather than ending the session.
+    """
+
+    @pytest.mark.parametrize("field", sorted(_ISSUE))
+    @pytest.mark.parametrize(("value", "shape"), _NON_TEXT)
+    def test_non_text_issue_field_is_rejected(self, field, value, shape):
+        issue = dict(_ISSUE) | {field: value}
+
+        with pytest.raises(ParseError, match=rf"Field {field} in an issue .* must be text, got {shape}"):
+            _parse_review(_review(issues=[issue]))
+
+    @pytest.mark.parametrize("field", sorted(_ISSUE))
+    def test_omitted_issue_field_is_rejected(self, field):
+        issue = {k: v for k, v in _ISSUE.items() if k != field}
+
+        with pytest.raises(ParseError, match=rf"Missing required field {field} in an issue"):
+            _parse_review(_review(issues=[issue]))
+
+    @pytest.mark.parametrize(("value", "shape"), _NON_TEXT)
+    def test_non_text_quality_rating_is_rejected(self, value, shape):
+        with pytest.raises(ParseError, match=rf"Field quality_rating .* must be text, got {shape}"):
+            _parse_review(_review(quality_rating=value))
+
+    @pytest.mark.parametrize(("value", "shape"), _NON_TEXT)
+    def test_non_text_summary_is_rejected(self, value, shape):
+        with pytest.raises(ParseError, match=rf"Field summary .* must be text, got {shape}"):
+            _parse_review(_review(summary=value))
+
+    def test_issues_must_be_a_list(self):
+        with pytest.raises(ParseError, match="Field issues .* must be a list, got text"):
+            _parse_review(_review(issues="none"))
+
+    def test_an_issue_must_be_an_object(self):
+        with pytest.raises(ParseError, match="Every entry of issues .* must be an object, got text"):
+            _parse_review(_review(issues=["none"]))
+
+    def test_praise_must_be_a_list(self):
+        """A string would otherwise become one praise entry per character."""
+        with pytest.raises(ParseError, match="Field praise .* must be a list, got text"):
+            _parse_review(_review(praise="Clear."))
+
+    def test_a_praise_entry_must_be_text(self):
+        with pytest.raises(ParseError, match="Every entry of praise .* must be text, got null"):
+            _parse_review(_review(praise=[None]))
+
+    def test_omitted_optional_fields_keep_their_defaults(self):
+        review = _parse_review(json.dumps({"quality_rating": "good"}))
+
+        assert review.issues == ()
+        assert review.praise == ()
+        assert review.summary == ""
+
+
+class TestDesignFieldTypes:
+    """The same checks for design advice, where fit_rating may legitimately be null."""
+
+    @pytest.mark.parametrize(("value", "shape"), _NON_TEXT)
+    def test_non_text_approach_name_is_rejected(self, value, shape):
+        with pytest.raises(ParseError, match=rf"Field name in an approach .* must be text, got {shape}"):
+            _parse_advice(_advice(approaches=[{"name": value}]))
+
+    def test_omitted_approach_name_is_rejected(self):
+        with pytest.raises(ParseError, match="Missing required field name in an approach"):
+            _parse_advice(_advice(approaches=[{}]))
+
+    @pytest.mark.parametrize(("value", "shape"), _NON_TEXT)
+    def test_non_text_recommendation_is_rejected(self, value, shape):
+        with pytest.raises(ParseError, match=rf"Field recommendation .* must be text, got {shape}"):
+            _parse_advice(_advice(recommendation=value))
+
+    def test_null_risk_level_is_rejected(self):
+        with pytest.raises(ParseError, match="Field risk_level in an approach .* must be text, got null"):
+            _parse_advice(_advice(approaches=[{"name": "Repository", "risk_level": None}]))
+
+    def test_non_text_fit_rating_is_rejected(self):
+        with pytest.raises(ParseError, match="Field fit_rating in an approach .* must be text, got a whole number"):
+            _parse_advice(_advice(approaches=[{"name": "Repository", "fit_rating": 3}]))
+
+    def test_null_fit_rating_is_accepted(self):
+        """The output schema admits a null fit_rating, so the parser must too."""
+        advice = _parse_advice(_advice(approaches=[{"name": "Repository", "fit_rating": None}]))
+
+        assert advice.approaches[0].fit_rating is None
+
+    def test_non_numeric_recommended_by_is_rejected(self):
+        with pytest.raises(ParseError, match="Field recommended_by in an approach .* must be a whole number, got text"):
+            _parse_advice(_advice(approaches=[{"name": "Repository", "recommended_by": "two"}]))
+
+    def test_boolean_recommended_by_is_rejected(self):
+        """A JSON boolean is an int in Python but serializes back as true."""
+        with pytest.raises(ParseError, match="must be a whole number, got a boolean"):
+            _parse_advice(_advice(approaches=[{"name": "Repository", "recommended_by": True}]))
+
+    def test_approaches_must_be_a_list(self):
+        with pytest.raises(ParseError, match="Field approaches .* must be a list, got text"):
+            _parse_advice(_advice(approaches="none"))
+
+    def test_an_approach_must_be_an_object(self):
+        with pytest.raises(ParseError, match="Every entry of approaches .* must be an object, got text"):
+            _parse_advice(_advice(approaches=["none"]))
+
+    def test_a_pros_entry_must_be_text(self):
+        with pytest.raises(ParseError, match="Every entry of pros .* must be text, got null"):
+            _parse_advice(_advice(approaches=[{"name": "Repository", "pros": [None]}]))
+
+    def test_omitted_optional_fields_keep_their_defaults(self):
+        advice = _parse_advice(_advice(approaches=[{"name": "Repository"}], summary=""))
+        approach = advice.approaches[0]
+
+        assert approach.recommended_by == 0
+        assert approach.pros == ()
+        assert approach.cons == ()
+        assert approach.risk_level == "unknown"
+        assert approach.fit_rating is None

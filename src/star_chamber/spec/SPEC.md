@@ -27,7 +27,7 @@ The council protocol defines how multiple LLM providers are queried in parallel,
 
 ### Versioning
 
-This spec follows [Semantic Versioning](https://semver.org/). The current version is **0.1** (pre-stable). The version will advance to 1.0 when the schema and algorithm definitions are considered stable.
+This spec follows [Semantic Versioning](https://semver.org/). The current version is **0.2** (pre-stable). The version will advance to 1.0 when the schema and algorithm definitions are considered stable.
 
 ### Terminology
 

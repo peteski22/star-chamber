@@ -293,6 +293,20 @@ def _names_mentioned_in(text: str, name_keys: Iterable[str]) -> set[str]:
     return named
 
 
+def _approaches_recommended_by(advice: ProviderDesignAdvice, name_keys: Iterable[str]) -> set[str]:
+    """Return the keys of the approaches one provider's recommendation chose.
+
+    Args:
+        advice: Parsed advice from one provider.
+        name_keys: Every grouped approach name, so that a longer name any provider
+            raised can rule out a shorter one.
+
+    Returns:
+        The keys this provider both named itself and then recommended.
+    """
+    return _names_mentioned_in(advice.recommendation, name_keys) & _own_name_keys(advice).keys()
+
+
 def _most_cautious_of_the_most_common(values: Sequence[str], by_caution: Sequence[str]) -> str | None:
     """Return the value the most providers stated, resolving a tie toward the more cautious value.
 
@@ -314,9 +328,10 @@ def aggregate_approaches(advices: Sequence[ProviderDesignAdvice]) -> tuple[Appro
     """Group the approaches every provider named, and count who recommended each one.
 
     A provider cannot report how many providers recommended an approach, so the
-    count is derived from the recommendation each provider gave. A provider is
-    counted only for the approaches it named itself, and votes once per approach
-    on the aggregated risk level and fit rating.
+    count is derived from the recommendation each provider gave. The recommendation
+    is read against every grouped name, and the result is then restricted to the
+    approaches that provider named itself. A provider votes once per approach on
+    the aggregated risk level and fit rating.
 
     Args:
         advices: Parsed advice from every provider that answered.
@@ -356,7 +371,10 @@ def aggregate_approaches(advices: Sequence[ProviderDesignAdvice]) -> tuple[Appro
             if rating is not None:
                 fit_ratings[key].append(rating)
 
-        recommended_by.update(_names_mentioned_in(advice.recommendation, _own_name_keys(advice)))
+    # The grouped names are complete only once every provider has been read, and a longer
+    # name rules out a shorter one, so the count needs a pass of its own.
+    for advice in advices:
+        recommended_by.update(_approaches_recommended_by(advice, display_names))
 
     return tuple(
         Approach(
@@ -395,7 +413,7 @@ def consensus_recommendation(
         return recommendations[0]
 
     display_names = {_approach_name_key(approach.name): approach.name for approach in approaches}
-    picks = [_names_mentioned_in(advice.recommendation, _own_name_keys(advice)) for advice in advices]
+    picks = [_approaches_recommended_by(advice, display_names) for advice in advices]
     if any(len(pick) != 1 for pick in picks):
         return None
     shared = {next(iter(pick)) for pick in picks}

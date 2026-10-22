@@ -1159,3 +1159,33 @@ class TestDesignApproachNameMatching:
         )
 
         assert result.consensus_recommendation == "CRUD with domain events"
+
+    def test_a_member_recommending_an_approach_it_did_not_list_counts_for_nothing(self):
+        """The longer name belongs to another member, so the short name is not what was chosen."""
+        result = self._result(
+            _design_json(
+                recommendation="Use CRUD with domain events.",
+                approaches=[_approach("CRUD")],
+            ),
+            _design_json(
+                recommendation="Use CRUD with domain events.",
+                approaches=[_approach("CRUD with domain events")],
+            ),
+        )
+
+        counts = {approach.name: approach.recommended_by for approach in result.approaches}
+        assert counts == {"CRUD": 0, "CRUD with domain events": 1}
+
+    def test_no_consensus_when_a_member_recommends_an_approach_it_did_not_list(self):
+        result = self._result(
+            _design_json(
+                recommendation="Use CRUD with domain events.",
+                approaches=[_approach("CRUD")],
+            ),
+            _design_json(
+                recommendation="Go with CRUD with domain events.",
+                approaches=[_approach("CRUD with domain events")],
+            ),
+        )
+
+        assert result.consensus_recommendation is None

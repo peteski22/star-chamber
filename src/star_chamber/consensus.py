@@ -234,7 +234,9 @@ def classify(reviews: Sequence[ProviderReview], threshold: int = 2) -> Classific
 
 
 # Characters outside a name's words, so a name matches regardless of case and punctuation.
-_NON_WORD_RE = re.compile(r"[^a-z0-9]+", re.ASCII)
+# The pattern is Unicode aware, because an ASCII one empties the key of a name written
+# in another script and the approach then disappears from the result.
+_NON_WORD_RE = re.compile(r"[\W_]+")
 
 # Symbols that tell one approach name from another, spelled out so that stripping
 # punctuation cannot merge names such as C++, C# and C.
@@ -262,10 +264,33 @@ def _own_name_keys(advice: ProviderDesignAdvice) -> dict[str, None]:
     return {key: None for key in keys if key}
 
 
+def _word_spans(words: Sequence[str], phrase: Sequence[str]) -> list[tuple[int, int]]:
+    """Return the start and stop word offsets of every whole-word run of the phrase."""
+    width = len(phrase)
+    return [(start, start + width) for start in range(len(words) - width + 1) if words[start : start + width] == phrase]
+
+
 def _names_mentioned_in(text: str, name_keys: Iterable[str]) -> set[str]:
-    """Return the approach names the text names, matching whole words only."""
-    haystack = f" {_approach_name_key(text)} "
-    return {key for key in name_keys if f" {key} " in haystack}
+    """Return the approach names the text names, matching whole words only.
+
+    NOTE: A name counts only where it stands on its own. One that appears solely
+    inside a longer name the text also names was never named in its own right.
+    """
+    words = _approach_name_key(text).split()
+    phrases = {key: key.split() for key in name_keys if key}
+    spans = {key: _word_spans(words, phrase) for key, phrase in phrases.items()}
+
+    named = set()
+    for key, occurrences in spans.items():
+        swallowing = [
+            span for other, found in spans.items() if len(phrases[other]) > len(phrases[key]) for span in found
+        ]
+        if any(
+            all(not (outer_start <= start and stop <= outer_stop) for outer_start, outer_stop in swallowing)
+            for start, stop in occurrences
+        ):
+            named.add(key)
+    return named
 
 
 def _most_cautious_of_the_most_common(values: Sequence[str], by_caution: Sequence[str]) -> str | None:

@@ -1098,3 +1098,64 @@ class TestDesignAggregationVoting:
         )
 
         assert [approach.name for approach in result.approaches] == ["C++", "C#", "C"]
+
+
+class TestDesignApproachNameMatching:
+    """A name has to survive normalization, and has to match only where it stands alone.
+
+    Dropping the letters of a name empties its key, and the approach disappears
+    from the result. Matching a short name inside a longer one credits an
+    approach the member never chose.
+    """
+
+    def _result(self, *bodies: str):
+        responses = [_success_response(f"member-{index}", "model", body) for index, body in enumerate(bodies)]
+        return _build_design_result(responses, prompt="Which data layer?")
+
+    def test_a_name_outside_the_latin_alphabet_is_reported(self):
+        result = self._result(_design_json(approaches=[_approach("事件溯源")]))
+
+        assert [approach.name for approach in result.approaches] == ["事件溯源"]
+
+    def test_a_name_outside_the_latin_alphabet_can_be_recommended(self):
+        result = self._result(
+            _design_json(recommendation="採用 事件溯源 吧。", approaches=[_approach("事件溯源")]),
+        )
+
+        assert result.approaches[0].recommended_by == 1
+
+    def test_a_short_name_inside_a_longer_one_is_not_counted(self):
+        result = self._result(
+            _design_json(
+                recommendation="Use CRUD with domain events.",
+                approaches=[_approach("CRUD"), _approach("CRUD with domain events")],
+            ),
+        )
+
+        counts = {approach.name: approach.recommended_by for approach in result.approaches}
+        assert counts == {"CRUD": 0, "CRUD with domain events": 1}
+
+    def test_a_short_name_named_on_its_own_is_counted(self):
+        result = self._result(
+            _design_json(
+                recommendation="Use CRUD with domain events, because plain CRUD alone loses the history.",
+                approaches=[_approach("CRUD"), _approach("CRUD with domain events")],
+            ),
+        )
+
+        counts = {approach.name: approach.recommended_by for approach in result.approaches}
+        assert counts == {"CRUD": 1, "CRUD with domain events": 1}
+
+    def test_consensus_fires_when_every_member_names_the_longer_approach(self):
+        result = self._result(
+            _design_json(
+                recommendation="Use CRUD with domain events.",
+                approaches=[_approach("CRUD"), _approach("CRUD with domain events")],
+            ),
+            _design_json(
+                recommendation="Go with CRUD with domain events.",
+                approaches=[_approach("CRUD"), _approach("CRUD with domain events")],
+            ),
+        )
+
+        assert result.consensus_recommendation == "CRUD with domain events"

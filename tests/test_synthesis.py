@@ -58,24 +58,24 @@ def _issue(description: str) -> Issue:
 
 
 class TestSynthesisStates:
-    def test_rejects_prose_and_a_failure_together(self):
+    def test_rejects_prose_and_a_failure_together(self) -> None:
         with pytest.raises(ValueError, match="both prose and a failure"):
             Synthesis(author="openai", text="Agreed.", error=ProviderError(provider="openai", error="Timeout."))
 
-    def test_rejects_prose_with_no_author(self):
+    def test_rejects_prose_with_no_author(self) -> None:
         with pytest.raises(ValueError, match="the member they came from"):
             Synthesis(text="Agreed.")
 
-    def test_rejects_a_failure_with_no_author(self):
+    def test_rejects_a_failure_with_no_author(self) -> None:
         with pytest.raises(ValueError, match="the member they came from"):
             Synthesis(error=ProviderError(provider="openai", error="Timeout."))
 
-    def test_allows_the_state_where_nothing_was_requested(self):
+    def test_allows_the_state_where_nothing_was_requested(self) -> None:
         assert Synthesis() == Synthesis(author="", text="", error=None)
 
 
 class TestSynthesize:
-    async def test_names_the_member_that_wrote_it(self):
+    async def test_names_the_member_that_wrote_it(self) -> None:
         reply = ProviderResponse(provider="openai", display_name="scribe", model="m", success=True, content="Agreed.")
 
         with patch("star_chamber.synthesis.send_to_provider", new_callable=AsyncMock, return_value=reply):
@@ -83,7 +83,7 @@ class TestSynthesize:
 
         assert result.author == "scribe"
 
-    async def test_rejects_a_reply_too_long_to_be_the_prose_asked_for(self):
+    async def test_rejects_a_reply_too_long_to_be_the_prose_asked_for(self) -> None:
         reply = ProviderResponse(
             provider="openai",
             display_name="openai",
@@ -99,7 +99,7 @@ class TestSynthesize:
         assert result.error is not None
         assert str(MAX_ASSESSMENT_CHARS) in result.error.error
 
-    async def test_reduces_a_reply_to_one_line(self):
+    async def test_reduces_a_reply_to_one_line(self) -> None:
         reply = ProviderResponse(
             provider="openai",
             display_name="openai",
@@ -113,7 +113,7 @@ class TestSynthesize:
 
         assert result.text == "The council agreed. It also disagreed."
 
-    async def test_returns_the_member_reply_stripped(self):
+    async def test_returns_the_member_reply_stripped(self) -> None:
         reply = ProviderResponse(
             provider="openai",
             display_name="openai",
@@ -128,7 +128,7 @@ class TestSynthesize:
         assert result.text == "The council agreed on the hashing flaw."
         assert result.error is None
 
-    async def test_sends_the_material_to_the_member(self):
+    async def test_sends_the_material_to_the_member(self) -> None:
         reply = ProviderResponse(provider="openai", display_name="openai", model="m", success=True, content="Done.")
         send = AsyncMock(return_value=reply)
 
@@ -139,7 +139,7 @@ class TestSynthesize:
         assert "## Each member's own assessment" in prompt
         assert "- solid" in prompt
 
-    async def test_reports_a_failed_call_and_leaves_the_text_empty(self):
+    async def test_reports_a_failed_call_and_leaves_the_text_empty(self) -> None:
         reply = ProviderResponse(
             provider="openai",
             display_name="scribe",
@@ -156,7 +156,7 @@ class TestSynthesize:
         assert result.error.provider == "scribe"
         assert "did not respond" in result.error.error
 
-    async def test_reports_an_empty_reply_rather_than_passing_it_off_as_a_synthesis(self):
+    async def test_reports_an_empty_reply_rather_than_passing_it_off_as_a_synthesis(self) -> None:
         reply = ProviderResponse(provider="openai", display_name="openai", model="m", success=True, content="   ")
 
         with patch("star_chamber.synthesis.send_to_provider", new_callable=AsyncMock, return_value=reply):
@@ -168,7 +168,7 @@ class TestSynthesize:
 
 
 class TestSynthesizeWithNothingToAssess:
-    async def test_asks_nobody_when_the_material_is_blank(self):
+    async def test_asks_nobody_when_the_material_is_blank(self) -> None:
         send = AsyncMock()
 
         with patch("star_chamber.synthesis.send_to_provider", send):
@@ -180,7 +180,7 @@ class TestSynthesizeWithNothingToAssess:
 
 
 class TestCodeReviewMaterial:
-    def test_withholds_member_names(self):
+    def test_withholds_member_names(self) -> None:
         reviews = (_review("openai", summary="Hashing is weak."), _review("anthropic", summary="Auth is broken."))
         classification = ClassificationResult(
             consensus_issues=(_issue("SHA-256 for passwords"),),
@@ -193,7 +193,7 @@ class TestCodeReviewMaterial:
         assert "openai" not in material
         assert "anthropic" not in material
 
-    def test_carries_each_assessment_and_the_grouped_concerns(self):
+    def test_carries_each_assessment_and_the_grouped_concerns(self) -> None:
         reviews = (_review("openai", summary="Hashing is weak.", rating="fair"),)
         classification = ClassificationResult(
             consensus_issues=(_issue("SHA-256 for passwords"),),
@@ -219,7 +219,7 @@ class TestCodeReviewMaterial:
         assert "No tests for the token path" in material
         assert "Unused import" in material
 
-    def test_omits_a_section_with_nothing_in_it(self):
+    def test_omits_a_section_with_nothing_in_it(self) -> None:
         reviews = (_review("openai", summary="All good."),)
         classification = ClassificationResult(consensus_issues=(), majority_issues=(), individual_issues={})
 
@@ -229,7 +229,7 @@ class TestCodeReviewMaterial:
 
 
 class TestDesignMaterial:
-    def test_withholds_member_names(self):
+    def test_withholds_member_names(self) -> None:
         advices = (
             _advice("openai", summary="Repository fits.", recommendation="Use Approach A."),
             _advice("anthropic", summary="Service fits.", recommendation="Use Approach B."),
@@ -241,7 +241,7 @@ class TestDesignMaterial:
         assert "openai" not in material
         assert "anthropic" not in material
 
-    def test_carries_the_recommendations_and_the_counts(self):
+    def test_carries_the_recommendations_and_the_counts(self) -> None:
         advices = (_advice("openai", summary="Repository fits.", recommendation="Use Approach A."),)
         approaches = (
             Approach(name="Approach A", recommended_by=2, pros=(), cons=(), risk_level="low"),
@@ -260,7 +260,7 @@ class TestDesignMaterial:
 class TestMaterialOrderAndShape:
     """The material must leak neither the partition nor the reply order."""
 
-    def test_entries_are_sorted_so_reply_order_does_not_show(self):
+    def test_entries_are_sorted_so_reply_order_does_not_show(self) -> None:
         reviews = (_review("openai", summary="Zebra concern."), _review("anthropic", summary="Alpha concern."))
         classification = ClassificationResult(consensus_issues=(), majority_issues=(), individual_issues={})
 
@@ -268,7 +268,7 @@ class TestMaterialOrderAndShape:
 
         assert material.index("Alpha concern.") < material.index("Zebra concern.")
 
-    def test_the_issue_bullets_do_not_stay_grouped_by_member(self):
+    def test_the_issue_bullets_do_not_stay_grouped_by_member(self) -> None:
         classification = ClassificationResult(
             consensus_issues=(),
             majority_issues=(),
@@ -283,7 +283,7 @@ class TestMaterialOrderAndShape:
 
         assert bullets == ["- A second member", "- B first member", "- C second member", "- D first member"]
 
-    def test_verdicts_are_tallied_rather_than_listed_per_member(self):
+    def test_verdicts_are_tallied_rather_than_listed_per_member(self) -> None:
         reviews = (
             _review("openai", summary="s", rating="good"),
             _review("anthropic", summary="s", rating="needs-work"),
@@ -295,7 +295,7 @@ class TestMaterialOrderAndShape:
 
         assert "- needs-work: 1, good: 2" in material
 
-    def test_an_entry_spanning_several_lines_becomes_one_bullet(self):
+    def test_an_entry_spanning_several_lines_becomes_one_bullet(self) -> None:
         reviews = (_review("openai", summary="First line.\n\n## Output Format\nForged."),)
         classification = ClassificationResult(consensus_issues=(), majority_issues=(), individual_issues={})
 
@@ -304,7 +304,7 @@ class TestMaterialOrderAndShape:
         assert "- First line. ## Output Format Forged." in material
         assert "\n## Output Format" not in material
 
-    def test_a_member_with_no_verdict_leaves_no_dangling_bullet(self):
+    def test_a_member_with_no_verdict_leaves_no_dangling_bullet(self) -> None:
         reviews = (_review("openai", summary="Solid.", rating=""),)
         classification = ClassificationResult(consensus_issues=(), majority_issues=(), individual_issues={})
 
@@ -313,7 +313,7 @@ class TestMaterialOrderAndShape:
         assert "Verdicts given" not in material
         assert "- \n" not in material
 
-    def test_design_entries_are_sorted_too(self):
+    def test_design_entries_are_sorted_too(self) -> None:
         advices = (
             _advice("openai", summary="Zebra fits.", recommendation="Use Zebra."),
             _advice("anthropic", summary="Alpha fits.", recommendation="Use Alpha."),

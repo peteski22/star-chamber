@@ -41,15 +41,15 @@ class TestOtariExtra:
     transitive dependency's extras.
     """
 
-    def test_otari_extra_is_declared(self):
+    def test_otari_extra_is_declared(self) -> None:
         extras = metadata(PACKAGE).get_all("Provides-Extra") or []
         assert "otari" in extras
 
-    def test_otari_extra_requires_the_any_llm_otari_provider(self):
+    def test_otari_extra_requires_the_any_llm_otari_provider(self) -> None:
         gated = _requirement_for_extra(PROVIDER_DEPENDENCY, "otari")
         assert "otari" in gated.extras
 
-    def test_otari_extra_mirrors_the_base_provider_pin(self):
+    def test_otari_extra_mirrors_the_base_provider_pin(self) -> None:
         # The extra exists to add a provider client, not to widen or narrow the
         # version range the base install already resolves. Comparing the two
         # specifiers catches drift without restating the range as a literal,
@@ -59,7 +59,7 @@ class TestOtariExtra:
 
         assert gated.specifier == base.specifier, f"extra {gated.specifier} drifted from base {base.specifier}"
 
-    def test_otari_extra_excludes_clients_that_predate_the_gateway_api_root(self):
+    def test_otari_extra_excludes_clients_that_predate_the_gateway_api_root(self) -> None:
         # Gateways from 0.6.0 serve only /api/v1. Clients before 0.4.0 append /v1 and get a 404.
         gated = _requirement_for_extra(GATEWAY_CLIENT_DEPENDENCY, "otari")
 

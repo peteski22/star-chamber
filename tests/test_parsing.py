@@ -15,35 +15,35 @@ FIXTURES = Path(__file__).parent / "testdata" / "provider_responses"
 
 
 class TestExtractJson:
-    def test_direct_json_object(self):
+    def test_direct_json_object(self) -> None:
         raw = '{"quality_rating": "good", "issues": []}'
         result = extract_json(raw)
         assert result == {"quality_rating": "good", "issues": []}
 
-    def test_json_code_block(self):
+    def test_json_code_block(self) -> None:
         raw = '```json\n{"key": "value"}\n```'
         result = extract_json(raw)
         assert result == {"key": "value"}
 
-    def test_bare_code_block(self):
+    def test_bare_code_block(self) -> None:
         raw = '```\n{"key": "value"}\n```'
         result = extract_json(raw)
         assert result == {"key": "value"}
 
-    def test_code_block_with_surrounding_text(self):
+    def test_code_block_with_surrounding_text(self) -> None:
         raw = 'Here is my analysis:\n\n```json\n{"rating": "good"}\n```\n\nHope that helps!'
         result = extract_json(raw)
         assert result == {"rating": "good"}
 
-    def test_empty_string(self):
+    def test_empty_string(self) -> None:
         result = extract_json("")
         assert result is None
 
-    def test_no_json(self):
+    def test_no_json(self) -> None:
         result = extract_json("This is just plain text with no JSON at all.")
         assert result is None
 
-    def test_array_json(self):
+    def test_array_json(self) -> None:
         raw = '[{"a": 1}, {"b": 2}]'
         result = extract_json(raw)
         assert result == [{"a": 1}, {"b": 2}]
@@ -53,7 +53,7 @@ class TestExtractJson:
 
 
 class TestParseCodeReview:
-    def test_parse_from_code_block(self):
+    def test_parse_from_code_block(self) -> None:
         content = (FIXTURES / "openai_code_review.txt").read_text()
         review = parse_code_review(content, provider="openai", model="gpt-4o")
 
@@ -73,7 +73,7 @@ class TestParseCodeReview:
         assert review.summary == "Critical security flaw found."
         assert review.raw_content == content
 
-    def test_parse_direct_json(self):
+    def test_parse_direct_json(self) -> None:
         content = (FIXTURES / "anthropic_code_review.txt").read_text()
         review = parse_code_review(content, provider="anthropic", model="claude-sonnet-4-20250514")
 
@@ -85,17 +85,17 @@ class TestParseCodeReview:
         assert review.praise == ("Well structured.",)
         assert review.summary == "No issues found."
 
-    def test_malformed_raises_parse_error(self):
+    def test_malformed_raises_parse_error(self) -> None:
         content = (FIXTURES / "malformed.txt").read_text()
         with pytest.raises(ParseError, match="Failed to extract JSON"):
             parse_code_review(content, provider="openai", model="gpt-4o")
 
-    def test_missing_quality_rating_raises_parse_error(self):
+    def test_missing_quality_rating_raises_parse_error(self) -> None:
         content = json.dumps({"issues": [], "praise": [], "summary": "ok"})
         with pytest.raises(ParseError, match="quality_rating"):
             parse_code_review(content, provider="openai", model="gpt-4o")
 
-    def test_provider_from_wrapper_overrides_body(self):
+    def test_provider_from_wrapper_overrides_body(self) -> None:
         content = json.dumps(
             {
                 "provider": "wrong-provider",
@@ -113,7 +113,7 @@ class TestParseCodeReview:
 
 
 class TestParseDesignAdvice:
-    def test_parse_design_advice(self):
+    def test_parse_design_advice(self) -> None:
         content = (FIXTURES / "openai_design.txt").read_text()
         advice = parse_design_advice(content, provider="openai", model="gpt-4o")
 
@@ -138,7 +138,7 @@ class TestParseDesignAdvice:
         assert advice.summary == "Repository pattern is the best fit for this codebase."
         assert advice.raw_content == content
 
-    def test_malformed_raises_parse_error(self):
+    def test_malformed_raises_parse_error(self) -> None:
         content = (FIXTURES / "malformed.txt").read_text()
         with pytest.raises(ParseError, match="Failed to extract JSON"):
             parse_design_advice(content, provider="openai", model="gpt-4o")
@@ -150,41 +150,41 @@ class TestParseDesignAdvice:
 class TestUnparsableDiagnostics:
     """The failure message must separate a cut-off reply from prose from an empty one."""
 
-    def test_empty_response_is_named_as_empty(self):
+    def test_empty_response_is_named_as_empty(self) -> None:
         with pytest.raises(ParseError, match="empty"):
             parse_code_review("", provider="anthropic", model="claude-opus-5")
 
-    def test_cut_off_json_is_named_as_incomplete(self):
+    def test_cut_off_json_is_named_as_incomplete(self) -> None:
         content = '{"quality_rating": "good", "issues": [{"severity": "high", "location": "a.py:1'
         with pytest.raises(ParseError, match="ends mid-structure"):
             parse_code_review(content, provider="anthropic", model="claude-opus-5")
 
-    def test_cut_off_json_inside_a_code_fence_is_named_as_incomplete(self):
+    def test_cut_off_json_inside_a_code_fence_is_named_as_incomplete(self) -> None:
         content = '```json\n{"quality_rating": "good", "issues": [{"severity": "hi'
         with pytest.raises(ParseError, match="ends mid-structure"):
             parse_code_review(content, provider="anthropic", model="claude-opus-5")
 
-    def test_prose_is_named_as_carrying_no_json(self):
+    def test_prose_is_named_as_carrying_no_json(self) -> None:
         content = "I cannot review this code because the request is unclear."
         with pytest.raises(ParseError, match="no JSON found"):
             parse_code_review(content, provider="anthropic", model="claude-opus-5")
 
-    def test_complete_but_invalid_json_is_named_as_malformed(self):
+    def test_complete_but_invalid_json_is_named_as_malformed(self) -> None:
         content = '{"quality_rating": "good",,}'
         with pytest.raises(ParseError, match="malformed"):
             parse_code_review(content, provider="anthropic", model="claude-opus-5")
 
-    def test_message_reports_the_response_length(self):
+    def test_message_reports_the_response_length(self) -> None:
         content = "x" * 4096
         with pytest.raises(ParseError, match="4096 characters"):
             parse_code_review(content, provider="anthropic", model="claude-opus-5")
 
-    def test_design_advice_reports_the_same_detail(self):
+    def test_design_advice_reports_the_same_detail(self) -> None:
         content = '{"recommendation": "repository", "approaches": [{"name": "Repo'
         with pytest.raises(ParseError, match="ends mid-structure"):
             parse_design_advice(content, provider="anthropic", model="claude-opus-5")
 
-    def test_existing_message_prefix_is_preserved(self):
+    def test_existing_message_prefix_is_preserved(self) -> None:
         with pytest.raises(ParseError, match=r"Failed to extract JSON from anthropic response"):
             parse_code_review("prose only", provider="anthropic", model="claude-opus-5")
 
@@ -235,47 +235,47 @@ class TestCodeReviewFieldTypes:
 
     @pytest.mark.parametrize("field", sorted(_ISSUE))
     @pytest.mark.parametrize(("value", "shape"), _NON_TEXT)
-    def test_non_text_issue_field_is_rejected(self, field, value, shape):
+    def test_non_text_issue_field_is_rejected(self, field, value, shape) -> None:
         issue = dict(_ISSUE) | {field: value}
 
         with pytest.raises(ParseError, match=rf"Field {field} in an issue .* must be text, got {shape}"):
             _parse_review(_review(issues=[issue]))
 
     @pytest.mark.parametrize("field", sorted(_ISSUE))
-    def test_omitted_issue_field_is_rejected(self, field):
+    def test_omitted_issue_field_is_rejected(self, field) -> None:
         issue = {k: v for k, v in _ISSUE.items() if k != field}
 
         with pytest.raises(ParseError, match=rf"Missing required field {field} in an issue"):
             _parse_review(_review(issues=[issue]))
 
     @pytest.mark.parametrize(("value", "shape"), _NON_TEXT)
-    def test_non_text_quality_rating_is_rejected(self, value, shape):
+    def test_non_text_quality_rating_is_rejected(self, value, shape) -> None:
         with pytest.raises(ParseError, match=rf"Field quality_rating .* must be text, got {shape}"):
             _parse_review(_review(quality_rating=value))
 
     @pytest.mark.parametrize(("value", "shape"), _NON_TEXT)
-    def test_non_text_summary_is_rejected(self, value, shape):
+    def test_non_text_summary_is_rejected(self, value, shape) -> None:
         with pytest.raises(ParseError, match=rf"Field summary .* must be text, got {shape}"):
             _parse_review(_review(summary=value))
 
-    def test_issues_must_be_a_list(self):
+    def test_issues_must_be_a_list(self) -> None:
         with pytest.raises(ParseError, match="Field issues .* must be a list, got text"):
             _parse_review(_review(issues="none"))
 
-    def test_an_issue_must_be_an_object(self):
+    def test_an_issue_must_be_an_object(self) -> None:
         with pytest.raises(ParseError, match="Every entry of issues .* must be an object, got text"):
             _parse_review(_review(issues=["none"]))
 
-    def test_praise_must_be_a_list(self):
+    def test_praise_must_be_a_list(self) -> None:
         """A string would otherwise become one praise entry per character."""
         with pytest.raises(ParseError, match="Field praise .* must be a list, got text"):
             _parse_review(_review(praise="Clear."))
 
-    def test_a_praise_entry_must_be_text(self):
+    def test_a_praise_entry_must_be_text(self) -> None:
         with pytest.raises(ParseError, match="Every entry of praise .* must be text, got null"):
             _parse_review(_review(praise=[None]))
 
-    def test_omitted_optional_fields_keep_their_defaults(self):
+    def test_omitted_optional_fields_keep_their_defaults(self) -> None:
         review = _parse_review(json.dumps({"quality_rating": "good"}))
 
         assert review.issues == ()
@@ -287,55 +287,55 @@ class TestDesignFieldTypes:
     """The same checks for design advice, where fit_rating may legitimately be null."""
 
     @pytest.mark.parametrize(("value", "shape"), _NON_TEXT)
-    def test_non_text_approach_name_is_rejected(self, value, shape):
+    def test_non_text_approach_name_is_rejected(self, value, shape) -> None:
         with pytest.raises(ParseError, match=rf"Field name in an approach .* must be text, got {shape}"):
             _parse_advice(_advice(approaches=[{"name": value}]))
 
-    def test_omitted_approach_name_is_rejected(self):
+    def test_omitted_approach_name_is_rejected(self) -> None:
         with pytest.raises(ParseError, match="Missing required field name in an approach"):
             _parse_advice(_advice(approaches=[{}]))
 
     @pytest.mark.parametrize(("value", "shape"), _NON_TEXT)
-    def test_non_text_recommendation_is_rejected(self, value, shape):
+    def test_non_text_recommendation_is_rejected(self, value, shape) -> None:
         with pytest.raises(ParseError, match=rf"Field recommendation .* must be text, got {shape}"):
             _parse_advice(_advice(recommendation=value))
 
-    def test_null_risk_level_is_rejected(self):
+    def test_null_risk_level_is_rejected(self) -> None:
         with pytest.raises(ParseError, match="Field risk_level in an approach .* must be text, got null"):
             _parse_advice(_advice(approaches=[{"name": "Repository", "risk_level": None}]))
 
-    def test_non_text_fit_rating_is_rejected(self):
+    def test_non_text_fit_rating_is_rejected(self) -> None:
         with pytest.raises(ParseError, match="Field fit_rating in an approach .* must be text, got a whole number"):
             _parse_advice(_advice(approaches=[{"name": "Repository", "fit_rating": 3}]))
 
-    def test_null_fit_rating_is_accepted(self):
+    def test_null_fit_rating_is_accepted(self) -> None:
         """The output schema admits a null fit_rating, so the parser must too."""
         advice = _parse_advice(_advice(approaches=[{"name": "Repository", "fit_rating": None}]))
 
         assert advice.approaches[0].fit_rating is None
 
-    def test_non_numeric_recommended_by_is_rejected(self):
+    def test_non_numeric_recommended_by_is_rejected(self) -> None:
         with pytest.raises(ParseError, match="Field recommended_by in an approach .* must be a whole number, got text"):
             _parse_advice(_advice(approaches=[{"name": "Repository", "recommended_by": "two"}]))
 
-    def test_boolean_recommended_by_is_rejected(self):
+    def test_boolean_recommended_by_is_rejected(self) -> None:
         """A JSON boolean is an int in Python but serializes back as true."""
         with pytest.raises(ParseError, match="must be a whole number, got a boolean"):
             _parse_advice(_advice(approaches=[{"name": "Repository", "recommended_by": True}]))
 
-    def test_approaches_must_be_a_list(self):
+    def test_approaches_must_be_a_list(self) -> None:
         with pytest.raises(ParseError, match="Field approaches .* must be a list, got text"):
             _parse_advice(_advice(approaches="none"))
 
-    def test_an_approach_must_be_an_object(self):
+    def test_an_approach_must_be_an_object(self) -> None:
         with pytest.raises(ParseError, match="Every entry of approaches .* must be an object, got text"):
             _parse_advice(_advice(approaches=["none"]))
 
-    def test_a_pros_entry_must_be_text(self):
+    def test_a_pros_entry_must_be_text(self) -> None:
         with pytest.raises(ParseError, match="Every entry of pros .* must be text, got null"):
             _parse_advice(_advice(approaches=[{"name": "Repository", "pros": [None]}]))
 
-    def test_omitted_optional_fields_keep_their_defaults(self):
+    def test_omitted_optional_fields_keep_their_defaults(self) -> None:
         advice = _parse_advice(_advice(approaches=[{"name": "Repository"}], summary=""))
         approach = advice.approaches[0]
 

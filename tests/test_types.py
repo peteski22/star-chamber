@@ -40,7 +40,7 @@ def _reconstruct(cls, data):
 
 
 class TestProviderConfig:
-    def test_all_fields_set(self):
+    def test_all_fields_set(self) -> None:
         pc = ProviderConfig(
             provider="openai",
             model="gpt-4",
@@ -58,17 +58,17 @@ class TestProviderConfig:
         assert pc.local is True
         assert pc.display_name == "primary"
 
-    def test_identity_is_the_display_name_when_one_is_set(self):
+    def test_identity_is_the_display_name_when_one_is_set(self) -> None:
         pc = ProviderConfig(provider="openai", model="gpt-4", display_name="primary")
 
         assert pc.identity == "primary"
 
-    def test_identity_falls_back_to_the_provider_name(self):
+    def test_identity_falls_back_to_the_provider_name(self) -> None:
         pc = ProviderConfig(provider="openai", model="gpt-4")
 
         assert pc.identity == "openai"
 
-    def test_defaults(self):
+    def test_defaults(self) -> None:
         pc = ProviderConfig(provider="anthropic", model="claude-3")
         assert pc.api_key is None
         assert pc.api_base is None
@@ -76,12 +76,12 @@ class TestProviderConfig:
         assert pc.local is False
         assert pc.display_name is None
 
-    def test_frozen(self):
+    def test_frozen(self) -> None:
         pc = ProviderConfig(provider="openai", model="gpt-4")
         with pytest.raises(AttributeError):
             pc.provider = "anthropic"  # type: ignore[misc]
 
-    def test_json_round_trip(self):
+    def test_json_round_trip(self) -> None:
         pc = ProviderConfig(
             provider="openai",
             model="gpt-4",
@@ -99,7 +99,7 @@ class TestProviderConfig:
 
 
 class TestCouncilConfig:
-    def test_all_fields_set(self):
+    def test_all_fields_set(self) -> None:
         p1 = ProviderConfig(provider="openai", model="gpt-4")
         p2 = ProviderConfig(provider="anthropic", model="claude-3")
         gw = OtariConfig(api_base="https://gw.example", api_key="${OTARI_API_KEY}")
@@ -114,20 +114,20 @@ class TestCouncilConfig:
         assert cc.consensus_threshold == 3
         assert cc.otari == gw
 
-    def test_defaults(self):
+    def test_defaults(self) -> None:
         p1 = ProviderConfig(provider="openai", model="gpt-4")
         cc = CouncilConfig(providers=(p1,))
         assert cc.timeout_seconds == 60
         assert cc.consensus_threshold == 2
         assert cc.otari is None
 
-    def test_frozen(self):
+    def test_frozen(self) -> None:
         p1 = ProviderConfig(provider="openai", model="gpt-4")
         cc = CouncilConfig(providers=(p1,))
         with pytest.raises(AttributeError):
             cc.timeout_seconds = 999  # type: ignore[misc]
 
-    def test_json_round_trip(self):
+    def test_json_round_trip(self) -> None:
         p1 = ProviderConfig(provider="openai", model="gpt-4", api_key="test-key-not-real")  # pragma: allowlist secret
         gw = OtariConfig(api_base="https://gw.example", api_key="${OTARI_API_KEY}")
         cc = CouncilConfig(providers=(p1,), timeout_seconds=90, otari=gw)
@@ -143,12 +143,12 @@ class TestCouncilConfig:
 
 
 class TestOtariConfig:
-    def test_defaults(self):
+    def test_defaults(self) -> None:
         gw = OtariConfig()
         assert gw.api_base is None
         assert gw.api_key is None
 
-    def test_frozen(self):
+    def test_frozen(self) -> None:
         gw = OtariConfig(api_base="x", api_key="y")
         with pytest.raises(AttributeError):
             gw.api_base = "z"  # type: ignore[misc]
@@ -158,7 +158,7 @@ class TestOtariConfig:
 
 
 class TestIssue:
-    def test_all_fields_set(self):
+    def test_all_fields_set(self) -> None:
         issue = Issue(
             severity="error",
             location="main.py:10",
@@ -172,7 +172,7 @@ class TestIssue:
         assert issue.description == "SQL injection"
         assert issue.suggestion == "Use parameterised queries"
 
-    def test_frozen(self):
+    def test_frozen(self) -> None:
         issue = Issue(
             severity="error",
             location="main.py:10",
@@ -183,7 +183,7 @@ class TestIssue:
         with pytest.raises(AttributeError):
             issue.severity = "warning"  # type: ignore[misc]
 
-    def test_json_round_trip(self):
+    def test_json_round_trip(self) -> None:
         issue = Issue(
             severity="warning",
             location="utils.py:42",
@@ -200,7 +200,7 @@ class TestIssue:
 
 
 class TestMajorityIssue:
-    def test_all_fields_set(self):
+    def test_all_fields_set(self) -> None:
         mi = MajorityIssue(
             severity="error",
             location="app.py:5",
@@ -214,7 +214,7 @@ class TestMajorityIssue:
         assert mi.provider_count == 2
         assert mi.flagged_by == ("openai", "anthropic")
 
-    def test_frozen(self):
+    def test_frozen(self) -> None:
         mi = MajorityIssue(
             severity="error",
             location="app.py:5",
@@ -227,7 +227,7 @@ class TestMajorityIssue:
         with pytest.raises(AttributeError):
             mi.provider_count = 5  # type: ignore[misc]
 
-    def test_json_round_trip(self):
+    def test_json_round_trip(self) -> None:
         mi = MajorityIssue(
             severity="warning",
             location="x.py:1",
@@ -254,17 +254,17 @@ class TestMajorityIssue:
 
 
 class TestProviderError:
-    def test_all_fields_set(self):
+    def test_all_fields_set(self) -> None:
         pe = ProviderError(provider="openai", error="timeout")
         assert pe.provider == "openai"
         assert pe.error == "timeout"
 
-    def test_frozen(self):
+    def test_frozen(self) -> None:
         pe = ProviderError(provider="openai", error="timeout")
         with pytest.raises(AttributeError):
             pe.error = "other"  # type: ignore[misc]
 
-    def test_json_round_trip(self):
+    def test_json_round_trip(self) -> None:
         pe = ProviderError(provider="openai", error="rate-limited")
         data = _round_trip(pe)
         rebuilt = _reconstruct(ProviderError, data)
@@ -295,7 +295,7 @@ class TestProviderReview:
             raw_content='{"rating": "good"}',
         )
 
-    def test_all_fields_set(self, review):
+    def test_all_fields_set(self, review) -> None:
         assert review.provider == "openai"
         assert review.model == "gpt-4"
         assert review.quality_rating == "good"
@@ -303,11 +303,11 @@ class TestProviderReview:
         assert review.praise == ("Clean code",)
         assert review.summary == "Looks ok"
 
-    def test_frozen(self, review):
+    def test_frozen(self, review) -> None:
         with pytest.raises(AttributeError):
             review.summary = "changed"  # type: ignore[misc]
 
-    def test_json_round_trip(self, review):
+    def test_json_round_trip(self, review) -> None:
         data = _round_trip(review)
         rebuilt = ProviderReview(
             provider=data["provider"],
@@ -325,7 +325,7 @@ class TestProviderReview:
 
 
 class TestApproach:
-    def test_all_fields_set(self):
+    def test_all_fields_set(self) -> None:
         a = Approach(
             name="Option A",
             recommended_by=3,
@@ -341,7 +341,7 @@ class TestApproach:
         assert a.risk_level == "low"
         assert a.fit_rating == "excellent"
 
-    def test_defaults(self):
+    def test_defaults(self) -> None:
         a = Approach(
             name="Option B",
             recommended_by=1,
@@ -351,7 +351,7 @@ class TestApproach:
         )
         assert a.fit_rating is None
 
-    def test_frozen(self):
+    def test_frozen(self) -> None:
         a = Approach(
             name="Option A",
             recommended_by=1,
@@ -362,7 +362,7 @@ class TestApproach:
         with pytest.raises(AttributeError):
             a.name = "changed"  # type: ignore[misc]
 
-    def test_json_round_trip(self):
+    def test_json_round_trip(self) -> None:
         a = Approach(
             name="X",
             recommended_by=2,
@@ -387,7 +387,7 @@ class TestApproach:
 
 
 class TestProviderDesignAdvice:
-    def test_all_fields_set(self):
+    def test_all_fields_set(self) -> None:
         approach = Approach(
             name="Microservices",
             recommended_by=2,
@@ -409,7 +409,7 @@ class TestProviderDesignAdvice:
         assert len(pda.approaches) == 1
         assert pda.summary == "Go with microservices"
 
-    def test_frozen(self):
+    def test_frozen(self) -> None:
         pda = ProviderDesignAdvice(
             provider="openai",
             model="gpt-4",
@@ -421,7 +421,7 @@ class TestProviderDesignAdvice:
         with pytest.raises(AttributeError):
             pda.provider = "other"  # type: ignore[misc]
 
-    def test_json_round_trip(self):
+    def test_json_round_trip(self) -> None:
         approach = Approach(
             name="Monolith",
             recommended_by=1,
@@ -464,7 +464,7 @@ class TestProviderDesignAdvice:
 
 
 class TestClassificationResult:
-    def test_all_fields_set(self):
+    def test_all_fields_set(self) -> None:
         issue = Issue(
             severity="error",
             location="x.py:1",
@@ -490,7 +490,7 @@ class TestClassificationResult:
         assert cr.majority_issues == (mi,)
         assert cr.individual_issues == {"openai": (issue,)}
 
-    def test_frozen(self):
+    def test_frozen(self) -> None:
         cr = ClassificationResult(
             consensus_issues=(),
             majority_issues=(),
@@ -499,7 +499,7 @@ class TestClassificationResult:
         with pytest.raises(AttributeError):
             cr.consensus_issues = ()  # type: ignore[misc]
 
-    def test_json_round_trip(self):
+    def test_json_round_trip(self) -> None:
         issue = Issue(
             severity="error",
             location="z.py:3",
@@ -577,7 +577,7 @@ class TestCodeReviewResult:
             summary=CodeReviewSummary(total_issues=1, consensus_count=1, majority_count=1, synthesis="Overall good"),
         )
 
-    def test_all_fields_set(self, result):
+    def test_all_fields_set(self, result) -> None:
         assert result.mode == "code-review"
         assert result.providers_used == ("openai", "anthropic")
         assert result.providers_responded == ("openai",)
@@ -590,7 +590,7 @@ class TestCodeReviewResult:
         assert result.summary.synthesis == "Overall good"
         assert result.files_reviewed == ("app.py",)
 
-    def test_defaults(self):
+    def test_defaults(self) -> None:
         CodeReviewResult(
             mode="code-review",
             files_reviewed=(),
@@ -605,11 +605,11 @@ class TestCodeReviewResult:
             summary=CodeReviewSummary(total_issues=0, consensus_count=0, majority_count=0, synthesis=""),
         )
 
-    def test_frozen(self, result):
+    def test_frozen(self, result) -> None:
         with pytest.raises(AttributeError):
             result.mode = "other"  # type: ignore[misc]
 
-    def test_json_round_trip(self, result):
+    def test_json_round_trip(self, result) -> None:
         data = _round_trip(result)
         # Verify the serialized JSON contains all top-level keys.
         expected_keys = {
@@ -656,7 +656,7 @@ class TestDesignQuestionResult:
             summary=DesignSummary(synthesis="Option A is best"),
         )
 
-    def test_all_fields_set(self, design_result):
+    def test_all_fields_set(self, design_result) -> None:
         assert design_result.mode == "design-question"
         assert design_result.prompt == "How should we structure the API?"
         assert design_result.providers_used == ("openai", "anthropic")
@@ -666,7 +666,7 @@ class TestDesignQuestionResult:
         assert design_result.consensus_recommendation == "Go with Option A"
         assert design_result.summary.synthesis == "Option A is best"
 
-    def test_defaults(self):
+    def test_defaults(self) -> None:
         dr = DesignQuestionResult(
             mode="design-question",
             prompt="What DB?",
@@ -679,11 +679,11 @@ class TestDesignQuestionResult:
         assert dr.consensus_recommendation is None
         assert dr.summary.synthesis == ""
 
-    def test_frozen(self, design_result):
+    def test_frozen(self, design_result) -> None:
         with pytest.raises(AttributeError):
             design_result.mode = "other"  # type: ignore[misc]
 
-    def test_json_round_trip(self, design_result):
+    def test_json_round_trip(self, design_result) -> None:
         data = _round_trip(design_result)
         expected_keys = {
             "mode",
@@ -703,10 +703,10 @@ class TestDesignQuestionResult:
 
 
 class TestProviderConfigDisplayName:
-    def test_none_by_default(self):
+    def test_none_by_default(self) -> None:
         cfg = ProviderConfig(provider="openai", model="gpt-4o")
         assert cfg.display_name is None
 
-    def test_holds_configured_value(self):
+    def test_holds_configured_value(self) -> None:
         cfg = ProviderConfig(provider="openrouter", model="openai/gpt-5.2", display_name="gpt-5.2")
         assert cfg.display_name == "gpt-5.2"

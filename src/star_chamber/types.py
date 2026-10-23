@@ -33,6 +33,11 @@ class ProviderConfig:
     local: bool = False
     display_name: str | None = None
 
+    @property
+    def identity(self) -> str:
+        """Return the name this member is known by in council output."""
+        return self.display_name or self.provider
+
 
 @dataclass(frozen=True)
 class OtariConfig:
@@ -64,12 +69,16 @@ class CouncilConfig:
         timeout_seconds: Per-provider timeout in seconds.
         consensus_threshold: Minimum providers that must agree for consensus.
         otari: Optional otari routing for non-local providers.
+        synthesis: Whether to ask a member for the session's closing
+            assessment. False spends no call on one and leaves the summary
+            saying none was requested.
     """
 
     providers: tuple[ProviderConfig, ...]
     timeout_seconds: int = 60
     consensus_threshold: int = 2
     otari: OtariConfig | None = None
+    synthesis: bool = True
 
 
 @dataclass(frozen=True)
@@ -215,13 +224,20 @@ class CodeReviewSummary:
         total_issues: Number of distinct issues found, across every bucket.
         consensus_count: Number of issues every member that answered flagged.
         majority_count: Number of issues more than one but not all of them flagged.
-        synthesis: Overall assessment in prose.
+        synthesis: Overall assessment in prose. Empty when no member wrote one.
+        synthesis_error: The member asked for the assessment and why it wrote
+            none. Null when the assessment is present, and null when no member
+            could be asked.
+        synthesized_by: The member asked for the assessment, whether or not it
+            wrote one. Null when no member was asked.
     """
 
     total_issues: int
     consensus_count: int
     majority_count: int
     synthesis: str
+    synthesis_error: ProviderError | None = None
+    synthesized_by: str | None = None
 
 
 @dataclass(frozen=True)
@@ -229,10 +245,17 @@ class DesignSummary:
     """Prose summarizing a design question council session.
 
     Attributes:
-        synthesis: Overall assessment in prose.
+        synthesis: Overall assessment in prose. Empty when no member wrote one.
+        synthesis_error: The member asked for the assessment and why it wrote
+            none. Null when the assessment is present, and null when no member
+            could be asked.
+        synthesized_by: The member asked for the assessment, whether or not it
+            wrote one. Null when no member was asked.
     """
 
     synthesis: str
+    synthesis_error: ProviderError | None = None
+    synthesized_by: str | None = None
 
 
 @dataclass(frozen=True)

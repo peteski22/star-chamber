@@ -10,7 +10,7 @@ from star_chamber.schema import get_schema, list_schemas
 
 
 class TestListSchemas:
-    def test_returns_known_schemas(self):
+    def test_returns_known_schemas(self) -> None:
         names = list_schemas()
         assert "code-review-result" in names
         assert "council-config" in names
@@ -20,22 +20,22 @@ class TestListSchemas:
         assert "provider-response" in names
         assert "review-request" in names
 
-    def test_returns_sorted(self):
+    def test_returns_sorted(self) -> None:
         names = list_schemas()
         assert names == sorted(names)
 
-    def test_returns_strings(self):
+    def test_returns_strings(self) -> None:
         names = list_schemas()
         assert all(isinstance(n, str) for n in names)
 
-    def test_strips_schema_suffix(self):
+    def test_strips_schema_suffix(self) -> None:
         """Schema names should not include .schema.json suffix."""
         names = list_schemas()
         assert all(not n.endswith(".json") for n in names)
 
 
 class TestCouncilConfigSchema:
-    def test_declares_all_accepted_top_level_keys(self):
+    def test_declares_all_accepted_top_level_keys(self) -> None:
         """With additionalProperties:false, the schema must declare every
         top-level key load_config accepts, or valid configs fail validation."""
         schema = json.loads(get_schema("council-config"))
@@ -44,7 +44,7 @@ class TestCouncilConfigSchema:
         declared = set(schema["properties"])
         assert accepted <= declared, f"schema missing: {accepted - declared}"
 
-    def test_consensus_threshold_property(self):
+    def test_consensus_threshold_property(self) -> None:
         schema = json.loads(get_schema("council-config"))
         prop = schema["properties"]["consensus_threshold"]
         assert prop["type"] == "integer"
@@ -53,21 +53,21 @@ class TestCouncilConfigSchema:
 
 
 class TestGetSchema:
-    def test_returns_valid_json_string(self):
+    def test_returns_valid_json_string(self) -> None:
         content = get_schema("code-review-result")
         data = json.loads(content)
         assert "$schema" in data or "type" in data
 
-    def test_all_schemas_loadable(self):
+    def test_all_schemas_loadable(self) -> None:
         for name in list_schemas():
             content = get_schema(name)
             data = json.loads(content)
             assert isinstance(data, dict)
 
-    def test_unknown_schema_raises(self):
+    def test_unknown_schema_raises(self) -> None:
         with pytest.raises(FileNotFoundError):
             get_schema("nonexistent-schema")
 
-    def test_returns_string_not_bytes(self):
+    def test_returns_string_not_bytes(self) -> None:
         content = get_schema("code-review-result")
         assert isinstance(content, str)

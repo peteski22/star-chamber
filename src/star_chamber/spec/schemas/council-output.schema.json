@@ -70,21 +70,7 @@
     "failed_providers": {
       "type": "array",
       "description": "Providers that failed or returned malformed responses.",
-      "items": {
-        "type": "object",
-        "required": ["provider", "error"],
-        "properties": {
-          "provider": {
-            "type": "string",
-            "description": "Member display name."
-          },
-          "error": {
-            "type": "string",
-            "description": "Error description."
-          }
-        },
-        "additionalProperties": false
-      }
+      "items": { "$ref": "#/$defs/provider_error" }
     },
     "consensus_issues": {
       "type": "array",
@@ -201,7 +187,15 @@
         },
         "synthesis": {
           "type": "string",
-          "description": "1-2 sentence overall synthesis."
+          "description": "A short overall synthesis, one or two sentences as asked of its author. Empty when no member wrote one."
+        },
+        "synthesis_error": {
+          "description": "The member asked for the synthesis and why it wrote none. Null when the synthesis is present, and null when no member could be asked.",
+          "oneOf": [{ "$ref": "#/$defs/provider_error" }, { "type": "null" }]
+        },
+        "synthesized_by": {
+          "description": "Display name of the member asked for the synthesis, whether or not it wrote one. Null when no member was asked.",
+          "type": ["string", "null"]
         }
       },
       "additionalProperties": false
@@ -287,6 +281,22 @@
         },
         "description": { "type": "string" },
         "suggestion": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "provider_error": {
+      "description": "One member and the reason it produced nothing usable.",
+      "type": "object",
+      "required": ["provider", "error"],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "description": "Member display name."
+        },
+        "error": {
+          "type": "string",
+          "description": "Error description."
+        }
       },
       "additionalProperties": false
     }

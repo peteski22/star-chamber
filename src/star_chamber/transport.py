@@ -114,8 +114,7 @@ async def send_to_provider(
         A ProviderResponse indicating success or failure.  A reply the provider
         cut short, or withheld, is a failure rather than partial content.
     """
-    # The output identity: the configured display name, or the provider name.
-    identity = config.display_name or config.provider
+    identity = config.identity
 
     try:
         import any_llm  # noqa: F811
@@ -242,7 +241,7 @@ async def fan_out(
     prompt: str,
     timeout: float | None = None,
     otari: OtariConfig | None = None,
-) -> list[ProviderResponse]:
+) -> list[tuple[ProviderConfig, ProviderResponse]]:
     """Send a prompt to all providers in parallel.
 
     Args:
@@ -252,10 +251,14 @@ async def fan_out(
         otari: Optional otari routing configuration.
 
     Returns:
-        List of ProviderResponse objects, one per provider.
+        Each member paired with its own reply, one pair per member.
+
+    NOTE: Returning the pairs keeps the member reachable from its reply, so a
+    caller never has to match the two sequences up itself.
     """
     tasks = [send_to_provider(cfg, prompt, timeout=timeout, otari=otari) for cfg in configs]
-    return list(await asyncio.gather(*tasks))
+    responses = await asyncio.gather(*tasks)
+    return list(zip(configs, responses, strict=True))
 
 
 def resolve_api_keys(

@@ -40,6 +40,11 @@
       "description": "Minimum number of providers that must agree for consensus.",
       "default": 2,
       "minimum": 1
+    },
+    "synthesis": {
+      "type": "boolean",
+      "description": "Whether to ask a member for the session's closing synthesis. False spends no call on one.",
+      "default": true
     }
   },
   "additionalProperties": false

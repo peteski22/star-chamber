@@ -11,7 +11,7 @@ import click
 
 from star_chamber.config import ConfigError, load_config
 from star_chamber.transport import validate_otari_api_base
-from star_chamber.types import CodeReviewResult, CouncilConfig, DesignQuestionResult
+from star_chamber.types import CodeReviewResult, CouncilConfig, DesignQuestionResult, ProviderError
 
 
 def _load_config(config_path: str | None) -> CouncilConfig:
@@ -43,6 +43,19 @@ def _print_rosters(result: CodeReviewResult | DesignQuestionResult) -> None:
     answered = ", ".join(result.providers_responded) or "none"
     click.echo(f"Providers asked ({len(result.providers_used)}): {asked}")
     click.echo(f"Providers answered ({len(result.providers_responded)}): {answered}")
+
+
+def _print_summary(synthesis: str, synthesis_error: ProviderError | None) -> None:
+    """Print the closing assessment, or say which member owed one and did not write it.
+
+    Args:
+        synthesis: The closing assessment, empty when none was written.
+        synthesis_error: The member asked and why it wrote none.
+    """
+    if synthesis:
+        click.echo(f"\nSummary: {synthesis}")
+    elif synthesis_error is not None:
+        click.echo(f"\nNo summary: {synthesis_error.provider}: {synthesis_error.error}")
 
 
 def _print_code_review_result(result: CodeReviewResult) -> None:
@@ -84,8 +97,7 @@ def _print_code_review_result(result: CodeReviewResult) -> None:
             click.echo(f"    {issue.description}")
             click.echo(f"    Suggestion: {issue.suggestion}")
 
-    if result.summary.synthesis:
-        click.echo(f"\nSummary: {result.summary.synthesis}")
+    _print_summary(result.summary.synthesis, result.summary.synthesis_error)
 
     click.echo("")
 
@@ -129,8 +141,7 @@ def _print_design_result(result: DesignQuestionResult) -> None:
                 for con in approach.cons:
                     click.echo(f"      - {con}")
 
-    if result.summary.synthesis:
-        click.echo(f"\nSummary: {result.summary.synthesis}")
+    _print_summary(result.summary.synthesis, result.summary.synthesis_error)
 
     click.echo("")
 
@@ -147,6 +158,12 @@ def main() -> None:
 )
 @click.option("--config", "config_path", type=click.Path(), default=None, help="Path to providers.json.")
 @click.option("--timeout", type=int, default=None, help="Per-provider timeout in seconds.")
+@click.option(
+    "--no-synthesis",
+    is_flag=True,
+    default=False,
+    help="Skip the closing assessment, saving one model call per session.",
+)
 @click.option(
     "--context-file",
     type=click.Path(exists=True),
@@ -166,6 +183,7 @@ def review(
     providers: tuple[str, ...],
     config_path: str | None,
     timeout: int | None,
+    no_synthesis: bool,
     context_file: str | None,
     council_context: str | None,
     output: str | None,
@@ -186,21 +204,14 @@ def review(
         if not filtered:
             click.echo(f"Error: no configured providers match: {', '.join(providers)}", err=True)
             sys.exit(2)
-        config = CouncilConfig(
-            providers=filtered,
-            timeout_seconds=config.timeout_seconds,
-            consensus_threshold=config.consensus_threshold,
-            otari=config.otari,
-        )
+        config = dataclasses.replace(config, providers=filtered)
 
     # Override timeout if specified.
     if timeout is not None:
-        config = CouncilConfig(
-            providers=config.providers,
-            timeout_seconds=timeout,
-            consensus_threshold=config.consensus_threshold,
-            otari=config.otari,
-        )
+        config = dataclasses.replace(config, timeout_seconds=timeout)
+
+    if no_synthesis:
+        config = dataclasses.replace(config, synthesis=False)
 
     # Read context file if provided.
     context = ""
@@ -244,6 +255,12 @@ def review(
 @click.option("--config", "config_path", type=click.Path(), default=None, help="Path to providers.json.")
 @click.option("--timeout", type=int, default=None, help="Per-provider timeout in seconds.")
 @click.option(
+    "--no-synthesis",
+    is_flag=True,
+    default=False,
+    help="Skip the closing assessment, saving one model call per session.",
+)
+@click.option(
     "--context-file",
     type=click.Path(exists=True),
     default=None,
@@ -262,6 +279,7 @@ def ask(
     providers: tuple[str, ...],
     config_path: str | None,
     timeout: int | None,
+    no_synthesis: bool,
     context_file: str | None,
     council_context: str | None,
     output: str | None,
@@ -282,21 +300,14 @@ def ask(
         if not filtered:
             click.echo(f"Error: no configured providers match: {', '.join(providers)}", err=True)
             sys.exit(2)
-        config = CouncilConfig(
-            providers=filtered,
-            timeout_seconds=config.timeout_seconds,
-            consensus_threshold=config.consensus_threshold,
-            otari=config.otari,
-        )
+        config = dataclasses.replace(config, providers=filtered)
 
     # Override timeout if specified.
     if timeout is not None:
-        config = CouncilConfig(
-            providers=config.providers,
-            timeout_seconds=timeout,
-            consensus_threshold=config.consensus_threshold,
-            otari=config.otari,
-        )
+        config = dataclasses.replace(config, timeout_seconds=timeout)
+
+    if no_synthesis:
+        config = dataclasses.replace(config, synthesis=False)
 
     # Read context file if provided.
     context = ""

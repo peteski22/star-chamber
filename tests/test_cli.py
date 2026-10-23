@@ -9,6 +9,7 @@ from click.testing import CliRunner
 from star_chamber.cli import main
 from star_chamber.transport import ProviderResponse
 from star_chamber.types import CouncilConfig, OtariConfig, ProviderConfig
+from tests.helpers import SYNTHESIS, exchanges
 
 # ---------------------------------------------------------------------------
 # Fixtures.
@@ -89,7 +90,7 @@ def _error_response(provider: str, model: str, error: str, display_name: str | N
 
 
 class TestReviewCommand:
-    def test_review_with_temp_file(self, tmp_path: Path):
+    def test_review_with_temp_file(self, tmp_path: Path) -> None:
         src = tmp_path / "hello.py"
         src.write_text("print('hello')\n")
 
@@ -101,15 +102,57 @@ class TestReviewCommand:
         with (
             patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", str(src)])
 
         assert result.exit_code == 0
-        assert "Looks solid overall" in result.output
+        assert f"Summary: {SYNTHESIS}" in result.output
 
-    def test_review_format_json(self, tmp_path: Path):
+    def test_review_no_synthesis_skips_the_summary_and_its_call(self, tmp_path: Path) -> None:
+        src = tmp_path / "hello.py"
+        src.write_text("print('hello')\n")
+
+        responses = [_success_response("openai", "gpt-4o", _code_review_json())]
+        send = AsyncMock()
+
+        with (
+            patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
+            patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
+            patch("star_chamber.synthesis.send_to_provider", send),
+        ):
+            runner = CliRunner()
+            result = runner.invoke(main, ["review", "--no-synthesis", str(src)])
+
+        assert result.exit_code == 0
+        assert send.await_count == 0
+        assert "Summary:" not in result.output
+        assert "No summary:" not in result.output
+
+    def test_review_says_which_member_owed_a_summary(self, tmp_path: Path) -> None:
+        src = tmp_path / "hello.py"
+        src.write_text("print('hello')\n")
+
+        responses = [_success_response("openai", "gpt-4o", _code_review_json())]
+        refusal = ProviderResponse(
+            provider="openai", display_name="openai", model="gpt-4o", success=False, error="Timeout."
+        )
+
+        with (
+            patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
+            patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
+            patch("star_chamber.synthesis.send_to_provider", new_callable=AsyncMock, return_value=refusal),
+        ):
+            runner = CliRunner()
+            result = runner.invoke(main, ["review", str(src)])
+
+        assert result.exit_code == 0
+        assert "No summary: openai: Timeout." in result.output
+
+    def test_review_format_json(self, tmp_path: Path) -> None:
         src = tmp_path / "app.py"
         src.write_text("x = 1\n")
 
@@ -121,7 +164,7 @@ class TestReviewCommand:
         with (
             patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", "--format", "json", str(src)])
@@ -130,13 +173,13 @@ class TestReviewCommand:
         parsed = json.loads(result.output)
         assert parsed["mode"] == "code-review"
 
-    def test_review_nonexistent_file(self):
+    def test_review_nonexistent_file(self) -> None:
         runner = CliRunner()
         result = runner.invoke(main, ["review", "/nonexistent/file.py"])
 
         assert result.exit_code == 2
 
-    def test_review_with_provider_flag_filters(self, tmp_path: Path):
+    def test_review_with_provider_flag_filters(self, tmp_path: Path) -> None:
         src = tmp_path / "filtered.py"
         src.write_text("y = 2\n")
 
@@ -148,7 +191,9 @@ class TestReviewCommand:
         with (
             patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
             patch("star_chamber.council.resolve_api_keys", return_value=(_OPENAI_CONFIG,)),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+            patch(
+                "star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)
+            ) as mock_fan_out,
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", "-p", "openai", str(src)])
@@ -160,7 +205,7 @@ class TestReviewCommand:
         assert len(configs_arg) == 1
         assert configs_arg[0].provider == "openai"
 
-    def test_review_output_to_file(self, tmp_path: Path):
+    def test_review_output_to_file(self, tmp_path: Path) -> None:
         src = tmp_path / "out_test.py"
         src.write_text("a = 1\n")
         output_file = tmp_path / "result.json"
@@ -173,7 +218,7 @@ class TestReviewCommand:
         with (
             patch("star_chamber.cli._load_config", return_value=single_config),
             patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", "--output", str(output_file), str(src)])
@@ -190,7 +235,7 @@ class TestReviewCommand:
 
 
 class TestAskCommand:
-    def test_ask_design_question(self):
+    def test_ask_design_question(self) -> None:
         responses = [
             _success_response("openai", "gpt-4o", _design_json()),
             _success_response("anthropic", "claude-3", _design_json()),
@@ -199,7 +244,7 @@ class TestAskCommand:
         with (
             patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["ask", "Should we use Redis?"])
@@ -207,7 +252,7 @@ class TestAskCommand:
         assert result.exit_code == 0
         assert "Approach A" in result.output
 
-    def test_ask_format_json(self):
+    def test_ask_format_json(self) -> None:
         responses = [
             _success_response("openai", "gpt-4o", _design_json()),
         ]
@@ -216,7 +261,7 @@ class TestAskCommand:
         with (
             patch("star_chamber.cli._load_config", return_value=single_config),
             patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["ask", "--format", "json", "Should we use Redis?"])
@@ -233,7 +278,7 @@ class TestAskCommand:
 
 
 class TestContextFileFlag:
-    def test_review_with_context_file(self, tmp_path: Path):
+    def test_review_with_context_file(self, tmp_path: Path) -> None:
         src = tmp_path / "app.py"
         src.write_text("x = 1\n")
         ctx = tmp_path / "context.txt"
@@ -247,7 +292,9 @@ class TestContextFileFlag:
         with (
             patch("star_chamber.cli._load_config", return_value=single_config),
             patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+            patch(
+                "star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)
+            ) as mock_fan_out,
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", "--context-file", str(ctx), str(src)])
@@ -258,7 +305,7 @@ class TestContextFileFlag:
         prompt_arg = call_kwargs.kwargs.get("prompt") or call_kwargs[0][1]
         assert "strict typing" in prompt_arg
 
-    def test_ask_with_context_file(self, tmp_path: Path):
+    def test_ask_with_context_file(self, tmp_path: Path) -> None:
         ctx = tmp_path / "context.txt"
         ctx.write_text("Monorepo with shared packages.\n")
 
@@ -270,7 +317,9 @@ class TestContextFileFlag:
         with (
             patch("star_chamber.cli._load_config", return_value=single_config),
             patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+            patch(
+                "star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)
+            ) as mock_fan_out,
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["ask", "--context-file", str(ctx), "Should we use Redis?"])
@@ -280,7 +329,7 @@ class TestContextFileFlag:
         prompt_arg = call_kwargs.kwargs.get("prompt") or call_kwargs[0][1]
         assert "shared packages" in prompt_arg
 
-    def test_review_context_file_not_found(self, tmp_path: Path):
+    def test_review_context_file_not_found(self, tmp_path: Path) -> None:
         src = tmp_path / "app.py"
         src.write_text("x = 1\n")
 
@@ -288,7 +337,7 @@ class TestContextFileFlag:
         result = runner.invoke(main, ["review", "--context-file", "/nonexistent/ctx.txt", str(src)])
         assert result.exit_code != 0
 
-    def test_review_without_context_file(self, tmp_path: Path):
+    def test_review_without_context_file(self, tmp_path: Path) -> None:
         """Context defaults to empty when --context-file is not provided."""
         src = tmp_path / "app.py"
         src.write_text("x = 1\n")
@@ -301,7 +350,9 @@ class TestContextFileFlag:
         with (
             patch("star_chamber.cli._load_config", return_value=single_config),
             patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+            patch(
+                "star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)
+            ) as mock_fan_out,
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", str(src)])
@@ -319,7 +370,7 @@ class TestContextFileFlag:
 
 
 class TestListProvidersCommand:
-    def test_list_providers_shows_names(self):
+    def test_list_providers_shows_names(self) -> None:
         with patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG):
             runner = CliRunner()
             result = runner.invoke(main, ["list-providers"])
@@ -330,7 +381,7 @@ class TestListProvidersCommand:
         assert "gpt-4o" in result.output
         assert "claude-3" in result.output
 
-    def test_list_providers_shows_local_status(self):
+    def test_list_providers_shows_local_status(self) -> None:
         local_provider = ProviderConfig(provider="ollama", model="llama3", local=True)
         config = CouncilConfig(providers=(local_provider,))
 
@@ -342,7 +393,7 @@ class TestListProvidersCommand:
         assert "ollama" in result.output
         assert "local" in result.output.lower()
 
-    def test_list_providers_shows_otari_status(self):
+    def test_list_providers_shows_otari_status(self) -> None:
         config = CouncilConfig(
             providers=(_OPENAI_CONFIG,),
             otari=OtariConfig(api_base="https://gw.example", api_key="${OTARI_API_KEY}"),
@@ -362,7 +413,7 @@ class TestListProvidersCommand:
 
 
 class TestConfigErrorHandling:
-    def test_config_error_produces_nonzero_exit(self):
+    def test_config_error_produces_nonzero_exit(self) -> None:
         from star_chamber.config import ConfigError
 
         with patch("star_chamber.cli._load_config", side_effect=ConfigError("Config file not found: /bad/path.json")):
@@ -372,7 +423,7 @@ class TestConfigErrorHandling:
         assert result.exit_code != 0
         assert "Config file not found" in result.output
 
-    def test_review_config_error(self, tmp_path: Path):
+    def test_review_config_error(self, tmp_path: Path) -> None:
         from star_chamber.config import ConfigError
 
         src = tmp_path / "err.py"
@@ -400,7 +451,7 @@ class TestOtariApiBaseCheck:
         )
         return config_file
 
-    def test_list_providers_reports_the_corrected_base(self, tmp_path: Path):
+    def test_list_providers_reports_the_corrected_base(self, tmp_path: Path) -> None:
         config_file = self._write_otari_config(tmp_path, "https://api.otari.ai/v1")
 
         result = CliRunner().invoke(main, ["list-providers", "--config", str(config_file)])
@@ -408,7 +459,7 @@ class TestOtariApiBaseCheck:
         assert result.exit_code == 2
         assert "Set 'otari.api_base' in the config to 'https://api.otari.ai'." in result.output
 
-    def test_review_stops_before_calling_providers(self, tmp_path: Path, monkeypatch):
+    def test_review_stops_before_calling_providers(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.setenv("OTARI_API_BASE", "https://api.otari.ai/v1")
         config_file = self._write_otari_config(tmp_path, "${OTARI_API_BASE}")
         src = tmp_path / "hello.py"
@@ -421,7 +472,7 @@ class TestOtariApiBaseCheck:
         assert "Set OTARI_API_BASE to 'https://api.otari.ai'." in result.output
         mock_fan_out.assert_not_called()
 
-    def test_ask_stops_before_calling_providers(self, tmp_path: Path, monkeypatch):
+    def test_ask_stops_before_calling_providers(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.setenv("OTARI_API_BASE", "https://api.otari.ai/v1")
         config_file = self._write_otari_config(tmp_path, "${OTARI_API_BASE}")
 
@@ -432,7 +483,7 @@ class TestOtariApiBaseCheck:
         assert "Set OTARI_API_BASE to 'https://api.otari.ai'." in result.output
         mock_fan_out.assert_not_called()
 
-    def test_origin_base_loads(self, tmp_path: Path):
+    def test_origin_base_loads(self, tmp_path: Path) -> None:
         config_file = self._write_otari_config(tmp_path, "https://api.otari.ai")
 
         result = CliRunner().invoke(main, ["list-providers", "--config", str(config_file)])
@@ -447,7 +498,7 @@ class TestOtariApiBaseCheck:
 
 
 class TestCouncilContextFlag:
-    def test_review_with_council_context(self, tmp_path: Path):
+    def test_review_with_council_context(self, tmp_path: Path) -> None:
         src = tmp_path / "app.py"
         src.write_text("x = 1\n")
         ctx = tmp_path / "context.txt"
@@ -463,7 +514,9 @@ class TestCouncilContextFlag:
         with (
             patch("star_chamber.cli._load_config", return_value=single_config),
             patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+            patch(
+                "star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)
+            ) as mock_fan_out,
         ):
             runner = CliRunner()
             result = runner.invoke(
@@ -477,7 +530,7 @@ class TestCouncilContextFlag:
         assert "missing error handling" in prompt_arg
         assert "Previous Council Feedback" in prompt_arg
 
-    def test_ask_with_council_context(self, tmp_path: Path):
+    def test_ask_with_council_context(self, tmp_path: Path) -> None:
         council = tmp_path / "council.txt"
         council.write_text("Round 1: favour Redis for simplicity.\n")
 
@@ -489,7 +542,9 @@ class TestCouncilContextFlag:
         with (
             patch("star_chamber.cli._load_config", return_value=single_config),
             patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+            patch(
+                "star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)
+            ) as mock_fan_out,
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["ask", "--council-context", str(council), "Should we use Redis?"])
@@ -499,7 +554,7 @@ class TestCouncilContextFlag:
         prompt_arg = call_kwargs.kwargs.get("prompt") or call_kwargs[0][1]
         assert "favour Redis" in prompt_arg
 
-    def test_review_without_council_context(self, tmp_path: Path):
+    def test_review_without_council_context(self, tmp_path: Path) -> None:
         """Previous Council Feedback section absent when --council-context not provided."""
         src = tmp_path / "app.py"
         src.write_text("x = 1\n")
@@ -512,7 +567,9 @@ class TestCouncilContextFlag:
         with (
             patch("star_chamber.cli._load_config", return_value=single_config),
             patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+            patch(
+                "star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)
+            ) as mock_fan_out,
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", str(src)])
@@ -529,21 +586,21 @@ class TestCouncilContextFlag:
 
 
 class TestSchemaCommand:
-    def test_schema_list(self):
+    def test_schema_list(self) -> None:
         runner = CliRunner()
         result = runner.invoke(main, ["schema", "list"])
         assert result.exit_code == 0
         assert "code-review-result" in result.output
         assert "council-config" in result.output
 
-    def test_schema_get(self):
+    def test_schema_get(self) -> None:
         runner = CliRunner()
         result = runner.invoke(main, ["schema", "code-review-result"])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert isinstance(data, dict)
 
-    def test_schema_unknown(self):
+    def test_schema_unknown(self) -> None:
         runner = CliRunner()
         result = runner.invoke(main, ["schema", "nonexistent"])
         assert result.exit_code != 0
@@ -556,7 +613,7 @@ class TestSchemaCommand:
 
 
 class TestProviderDisplayNames:
-    def test_list_providers_shows_display_name_and_underlying_provider(self):
+    def test_list_providers_shows_display_name_and_underlying_provider(self) -> None:
         member = ProviderConfig(provider="openrouter", model="openai/gpt-5.2", display_name="gpt-5.2")
         config = CouncilConfig(providers=(member,))
 
@@ -568,7 +625,7 @@ class TestProviderDisplayNames:
         assert "gpt-5.2" in result.output
         assert "via openrouter" in result.output
 
-    def test_review_provider_flag_matches_display_name(self, tmp_path: Path):
+    def test_review_provider_flag_matches_display_name(self, tmp_path: Path) -> None:
         src = tmp_path / "member.py"
         src.write_text("z = 3\n")
 
@@ -585,7 +642,9 @@ class TestProviderDisplayNames:
         with (
             patch("star_chamber.cli._load_config", return_value=config),
             patch("star_chamber.council.resolve_api_keys", side_effect=lambda configs: configs),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+            patch(
+                "star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)
+            ) as mock_fan_out,
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", "-p", "gemini-3.1-pro", str(src)])
@@ -596,7 +655,7 @@ class TestProviderDisplayNames:
         assert len(configs_arg) == 1
         assert configs_arg[0].display_name == "gemini-3.1-pro"
 
-    def test_ask_provider_flag_matches_display_name(self):
+    def test_ask_provider_flag_matches_display_name(self) -> None:
         gemini = ProviderConfig(
             provider="openrouter", model="google/gemini-3.1-pro-preview", display_name="gemini-3.1-pro"
         )
@@ -610,7 +669,9 @@ class TestProviderDisplayNames:
         with (
             patch("star_chamber.cli._load_config", return_value=config),
             patch("star_chamber.council.resolve_api_keys", side_effect=lambda configs: configs),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+            patch(
+                "star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)
+            ) as mock_fan_out,
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["ask", "-p", "gemini-3.1-pro", "Should we use Redis?"])
@@ -625,7 +686,7 @@ class TestProviderDisplayNames:
 class TestRosterOutput:
     """The text output must separate the roster asked from the roster that answered."""
 
-    def test_text_output_separates_the_two_rosters(self, tmp_path: Path):
+    def test_text_output_separates_the_two_rosters(self, tmp_path: Path) -> None:
         src = tmp_path / "app.py"
         src.write_text("x = 1\n")
 
@@ -637,7 +698,7 @@ class TestRosterOutput:
         with (
             patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", str(src)])
@@ -646,7 +707,7 @@ class TestRosterOutput:
         assert "Providers asked (2): openai, anthropic" in result.output
         assert "Providers answered (1): openai" in result.output
 
-    def test_consensus_heading_states_its_denominator(self, tmp_path: Path):
+    def test_consensus_heading_states_its_denominator(self, tmp_path: Path) -> None:
         src = tmp_path / "app.py"
         src.write_text("x = 1\n")
 
@@ -665,7 +726,7 @@ class TestRosterOutput:
         with (
             patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", str(src)])
@@ -673,7 +734,7 @@ class TestRosterOutput:
         assert result.exit_code == 0
         assert "agreed by all 2 providers that answered" in result.output
 
-    def test_no_answers_reports_none(self, tmp_path: Path):
+    def test_no_answers_reports_none(self, tmp_path: Path) -> None:
         src = tmp_path / "app.py"
         src.write_text("x = 1\n")
 
@@ -685,7 +746,7 @@ class TestRosterOutput:
         with (
             patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", str(src)])
@@ -693,7 +754,7 @@ class TestRosterOutput:
         assert result.exit_code == 0
         assert "Providers answered (0): none" in result.output
 
-    def test_json_output_carries_the_answering_roster(self, tmp_path: Path):
+    def test_json_output_carries_the_answering_roster(self, tmp_path: Path) -> None:
         src = tmp_path / "app.py"
         src.write_text("x = 1\n")
 
@@ -705,7 +766,7 @@ class TestRosterOutput:
         with (
             patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", "--format", "json", str(src)])

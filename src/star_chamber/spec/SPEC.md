@@ -314,7 +314,7 @@ Classification counts a member only when it returned a usable response. The deno
 
 **Design question consensus:** For design questions, `consensus_recommendation` captures high-level directional agreement (e.g., "use CRUD, not event sourcing"), which a synthesis step can establish even when providers recommend different specific variants. It is not populated when providers disagree on direction. Per-approach `recommended_by` counts track the specific variant each provider chose.
 
-Without a synthesis step an orchestrator MUST populate it in two cases: every provider gave the same recommendation text, or every provider named one and the same approach. It MUST be null otherwise. Directional agreement across differently named variants reads the shared direction out of differing prose, which needs synthesis, so an orchestrator that performs none reports null in that case rather than guessing.
+Without a synthesis step an orchestrator MUST populate it only when every provider that answered named one and the same approach, and the value MUST be that approach's name. It MUST be null otherwise. A consumer can therefore always read the value as a name that appears in `approaches`, rather than having to tell a name from a provider's prose. Directional agreement across differently named variants reads the shared direction out of differing prose, which needs synthesis, so an orchestrator that performs none reports null in that case rather than guessing.
 
 ### 9.4 Confidence Ordering
 
@@ -390,7 +390,7 @@ The structured output includes:
 - `providers_used[]`: The roster asked. All council members consulted, including those that failed, by display name.
 - `providers_responded[]`: The roster that answered. Members that returned usable advice, by display name. This is the denominator `consensus_recommendation` was computed over.
 - `failed_providers[]`: Members that failed or returned malformed responses, by display name.
-- `consensus_recommendation`: High-level directional agreement when every member that answered agrees. Differing specifics count only where a synthesis step establishes the shared direction. Without one the field carries identical recommendation text or one approach every member named, and is null otherwise, as section 9.3 requires.
+- `consensus_recommendation`: High-level directional agreement when every member that answered agrees. Differing specifics count only where a synthesis step establishes the shared direction. Without one the field carries the name of the one approach every member named, and is null otherwise, as section 9.3 requires.
 - `approaches[]`: All approaches mentioned by any provider, with `recommended_by` count, merged pros/cons, `risk_level`, and `fit_rating`. `risk_level` is `unknown` when no provider stated one. `fit_rating` is null when no provider assessed fit for the approach; when providers disagree, use the most common rating.
 - `summary{}`: Contains `synthesis` (1-2 sentence overall assessment).
 - `debate{}` (optional): Debate metadata (rounds_completed, converged).

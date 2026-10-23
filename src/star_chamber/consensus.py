@@ -240,7 +240,9 @@ _NON_WORD_RE = re.compile(r"[\W_]+")
 
 # Symbols that tell one approach name from another, spelled out so that stripping
 # punctuation cannot merge names such as C++, C# and C.
-_NAME_SYMBOL_WORDS = {"#": " sharp ", "+": " plus "}
+# NOTE: The spelling carries no spaces, so a symbol joined to a word stays part of that
+# word. Expanding it into a word of its own would let "C" match a recommendation of "C++".
+_NAME_SYMBOL_WORDS = {"#": "sharp", "+": "plus"}
 
 # Fit ratings, most cautious first, so a tie resolves to the more cautious rating.
 _FIT_RATINGS_BY_CAUTION = ("poor", "fair", "good", "excellent")
@@ -264,7 +266,7 @@ def _own_name_keys(advice: ProviderDesignAdvice) -> dict[str, None]:
     return {key: None for key in keys if key}
 
 
-def _word_spans(words: Sequence[str], phrase: Sequence[str]) -> list[tuple[int, int]]:
+def _word_spans(words: list[str], phrase: list[str]) -> list[tuple[int, int]]:
     """Return the start and stop word offsets of every whole-word run of the phrase."""
     width = len(phrase)
     return [(start, start + width) for start in range(len(words) - width + 1) if words[start : start + width] == phrase]
@@ -338,6 +340,9 @@ def aggregate_approaches(advices: Sequence[ProviderDesignAdvice]) -> tuple[Appro
 
     Returns:
         One approach per distinct name, ordered as the providers first named them.
+
+    NOTE: A recommendation that names an approach in order to reject it still counts
+    toward it, because the count is derived from names alone and not from their polarity.
     """
     display_names: dict[str, str] = {}
     pros: dict[str, dict[str, None]] = {}
@@ -393,24 +398,23 @@ def consensus_recommendation(
     advices: Sequence[ProviderDesignAdvice],
     approaches: Sequence[Approach],
 ) -> str | None:
-    """Report the one direction every provider that answered recommended.
+    """Name the one approach every provider that answered recommended.
+
+    The value is always a name that appears in ``approaches``, so a consumer can
+    look it up rather than having to tell prose and a name apart.
 
     Args:
         advices: Parsed advice from every provider that answered.
         approaches: The grouped approaches those providers named.
 
     Returns:
-        The shared recommendation, or None when the providers named no single direction.
+        The shared approach's name, or None when the providers named no single one.
 
     NOTE: Providers that recommend different variants of one direction yield None,
     because recognizing the shared direction behind differing prose needs a synthesis step.
     """
     if not advices:
         return None
-
-    recommendations = [advice.recommendation for advice in advices]
-    if all(text == recommendations[0] for text in recommendations):
-        return recommendations[0]
 
     display_names = {_approach_name_key(approach.name): approach.name for approach in approaches}
     picks = [_approaches_recommended_by(advice, display_names) for advice in advices]

@@ -195,13 +195,13 @@ class TestBuildDesignQuestionResult:
 
     def test_consensus_recommendation_when_all_agree(self):
         responses = [
-            _success_response("openai", "gpt-4o", _design_json(recommendation="Use caching.")),
-            _success_response("anthropic", "claude-3", _design_json(recommendation="Use caching.")),
+            _success_response("openai", "gpt-4o", _design_json(recommendation="Use Approach A.")),
+            _success_response("anthropic", "claude-3", _design_json(recommendation="Use Approach A.")),
         ]
 
         result = _build_design_result(responses, prompt="How to improve perf?")
 
-        assert result.consensus_recommendation == "Use caching."
+        assert result.consensus_recommendation == "Approach A"
 
     def test_no_consensus_when_providers_disagree(self):
         responses = [
@@ -1189,3 +1189,65 @@ class TestDesignApproachNameMatching:
         )
 
         assert result.consensus_recommendation is None
+
+    def test_a_symbol_name_in_the_recommendation_does_not_count_the_shorter_name(self):
+        """Expanding C++ into words lets the word C match a recommendation that never named it."""
+        result = self._result(
+            _design_json(recommendation="Use C++ here.", approaches=[_approach("C")]),
+        )
+
+        assert result.approaches[0].recommended_by == 0
+
+    def test_a_symbol_name_counts_only_the_approach_it_names(self):
+        result = self._result(
+            _design_json(
+                recommendation="Use C++ here.",
+                approaches=[_approach("C"), _approach("C++")],
+            ),
+        )
+
+        counts = {approach.name: approach.recommended_by for approach in result.approaches}
+        assert counts == {"C": 0, "C++": 1}
+
+
+class TestDesignConsensusRecommendation:
+    """The field carries one kind of value: the name of the approach every member chose.
+
+    Returning a member's own prose instead makes one answer read as a council
+    result, and gives a consumer two shapes it cannot tell apart.
+    """
+
+    def _result(self, *bodies: str):
+        responses = [_success_response(f"member-{index}", "model", body) for index, body in enumerate(bodies)]
+        return _build_design_result(responses, prompt="Which data layer?")
+
+    def test_identical_prose_naming_a_shared_approach_reports_the_approach_name(self):
+        result = self._result(
+            _design_json(recommendation="Use Repository.", approaches=[_approach("Repository")]),
+            _design_json(recommendation="Use Repository.", approaches=[_approach("Repository")]),
+        )
+
+        assert result.consensus_recommendation == "Repository"
+
+    def test_identical_prose_naming_no_approach_is_null(self):
+        result = self._result(
+            _design_json(recommendation="Do the simplest thing.", approaches=[_approach("Repository")]),
+            _design_json(recommendation="Do the simplest thing.", approaches=[_approach("Repository")]),
+        )
+
+        assert result.consensus_recommendation is None
+
+    def test_blank_recommendations_are_null(self):
+        result = self._result(
+            _design_json(recommendation="", approaches=[_approach("Repository")]),
+            _design_json(recommendation="", approaches=[_approach("Repository")]),
+        )
+
+        assert result.consensus_recommendation is None
+
+    def test_a_single_member_reports_the_approach_it_named(self):
+        result = self._result(
+            _design_json(recommendation="Use Repository, it fits.", approaches=[_approach("Repository")]),
+        )
+
+        assert result.consensus_recommendation == "Repository"

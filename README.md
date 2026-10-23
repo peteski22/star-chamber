@@ -143,6 +143,18 @@ star-chamber schema list
 star-chamber schema code-review-result
 ```
 
+`council-output` is published open: its fixed objects state no `additionalProperties`, so validating a document against this copy accepts output from a newer producer instead of rejecting it on fields the copy predates. The maps keyed by member name, `individual_issues` and `quality_ratings`, still constrain the shape of their values. Every other schema describes input the council receives and stays closed.
+
+Validating against the published copy therefore no longer catches a field this package should not have emitted. The producer is held to a strict variant derived from the published schema, so a released document still carries nothing the schema does not declare. A consumer wanting the same check runs the same derivation:
+
+```python
+import json
+
+from star_chamber import get_schema, strict_variant
+
+strict = strict_variant(json.loads(get_schema("council-output")))
+```
+
 ## Python API
 
 ```python
@@ -193,13 +205,18 @@ result = asyncio.run(run_council(
 ### Schema access
 
 ```python
-from star_chamber import get_schema, list_schemas
+import json
+
+from star_chamber import get_schema, list_schemas, strict_variant
 
 # List available schema names.
 names = list_schemas()
 
 # Get a specific schema as a JSON string.
 schema_json = get_schema("code-review-result")
+
+# Derive the variant a producer answers to, for a schema published open.
+strict = strict_variant(json.loads(get_schema("council-output")))
 ```
 
 ## Consensus classification

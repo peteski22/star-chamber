@@ -1,10 +1,10 @@
-# Council Protocol Specification v0.5
+# Council Protocol Specification v0.6
 
 This document specifies the portable council deliberation protocol — the invocation modes, prompt templates, response parsing, consensus classification, and output format that any orchestrator can implement independently.
 
 The orchestrator-specific implementation for Claude Code lives in `plugins/pragma/skills/star-chamber/PROTOCOL.md`. That document handles Bash subprocess isolation, `uv run` invocation, temp file management, and other runtime concerns. This spec covers only the portable protocol logic.
 
-**Status:** Draft (v0.5). Breaking changes may occur before v1.0.
+**Status:** Draft (v0.6). Breaking changes may occur before v1.0.
 
 ## Table of Contents
 
@@ -27,7 +27,33 @@ The council protocol defines how multiple LLM providers are queried in parallel,
 
 ### Versioning
 
-This spec follows [Semantic Versioning](https://semver.org/). The current version is **0.5** (pre-stable). The version will advance to 1.0 when the schema and algorithm definitions are considered stable.
+This spec follows [Semantic Versioning](https://semver.org/). The current version is **0.6** (pre-stable). The version will advance to 1.0 when the schema and algorithm definitions are considered stable.
+
+### Schema Strictness
+
+A schema describing what the council emits MAY be published open to keys it does not declare. A schema describing what the council receives MUST stay closed, because strictness there guards untrusted input. Only [`schemas/council-output.schema.json`](schemas/council-output.schema.json) is published open.
+
+A consumer that validates a document against an older copy of a closed schema rejects it on the fields that copy has never heard of. Every field the protocol has added has had that effect on every orchestrator pinned to the previous schema, and the schemas ship inside the package, so the pinned copy is the common case.
+
+Producers are still held to the full strictness of the format. The strict variant is derived from the published schema rather than maintained beside it, because a strict schema and a tolerant one written by hand can disagree with each other and no test would catch it. The derivation states `additionalProperties: false` on every subschema that declares `properties` for an instance of its own and states no `additionalProperties` already.
+
+A subschema describes an instance of its own when it is reached through `$defs`, `additionalProperties`, `contains`, `items`, `patternProperties`, `prefixItems`, `properties`, `propertyNames`, or `unevaluatedProperties`. A subschema reached through `allOf`, `anyOf`, `dependentSchemas`, `else`, `if`, `not`, `oneOf`, or `then` constrains the same instance as the schema that carries it. The derivation MUST NOT enter one of those, nor anything beneath it. Such a branch describes part of an instance that another branch also describes, so closing it rejects the keys the other branch declares, and closing an `if` stops the branch matching at all, which withdraws the rule it carries rather than enforcing it. The derivation MUST also ignore `const`, `default`, `enum`, and `examples`, whose contents are instances rather than subschemas.
+
+A schema therefore gains no strictness for a shape declared only inside such a branch. A branch MUST state which of the properties already declared for an instance are required, and MUST NOT introduce a property of its own. `additionalProperties` is blind to composition, so a property declared only in a branch is rejected by the strictness derived where the instance is described.
+
+`additionalProperties` therefore carries three meanings in a published schema, and none of the three is spare:
+
+| Form | Meaning |
+|------|---------|
+| Absent | Open to a consumer, strict to the producer under the derived variant. |
+| `true` | Open to everyone, the producer included. |
+| A schema | The object is a map, and the schema describes its values. |
+
+An object the producer may extend freely MUST state `additionalProperties: true`. An implementation MUST NOT state `true` merely to document that a consumer may read unknown keys, because absence already says that, and `true` is the only remaining way to express an object no derived strictness applies to.
+
+This package exports the derivation as `star_chamber.strict_variant`, so a consumer applying the producer's own check runs the same transform instead of reimplementing this rule.
+
+Open publication covers undeclared keys and nothing else. A consumer validating against an older copy still rejects a document on a value added to an enum after that copy, because an enum closes a set of values rather than a set of keys. Widening an emitted enum therefore remains a change that breaks a pinned consumer.
 
 ### Terminology
 

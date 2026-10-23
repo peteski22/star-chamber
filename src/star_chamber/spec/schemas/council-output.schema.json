@@ -146,7 +146,7 @@
     },
     "consensus_recommendation": {
       "type": ["string", "null"],
-      "description": "High-level consensus recommendation when all providers agree on a general direction, even if they differ on specifics (design-question mode)."
+      "description": "High-level consensus recommendation when every provider that answered agrees on a general direction (design-question mode). Differing specifics count only where a synthesis step establishes the shared direction. Without one the value is the name of the one approach every provider named, and is null otherwise."
     },
     "approaches": {
       "type": "array",

@@ -27,7 +27,7 @@ The council protocol defines how multiple LLM providers are queried in parallel,
 
 ### Versioning
 
-This spec follows [Semantic Versioning](https://semver.org/). The current version is **0.3** (pre-stable). The version will advance to 1.0 when the schema and algorithm definitions are considered stable.
+This spec follows [Semantic Versioning](https://semver.org/). The current version is **0.4** (pre-stable). The version will advance to 1.0 when the schema and algorithm definitions are considered stable.
 
 ### Terminology
 
@@ -296,6 +296,12 @@ The approaches array includes all approaches mentioned by any provider — both 
 
 Approaches from different providers are grouped when they refer to the same approach (by name match or semantic similarity). The `recommended_by` count reflects how many providers selected that approach as their primary recommendation.
 
+Names MUST be matched with case and repeated spacing ignored, so `Repository` and `repository  layer` are the same name only if the remaining words match. Punctuation is ignored except for characters that tell two names apart, which MUST be preserved, so `C++`, `C#` and `C` remain three approaches rather than one. Letters and digits MUST be preserved whatever script they are written in, so an approach named outside the Latin alphabet keeps a name to group and match on. Orchestrators MAY add semantic similarity on top, as in section 9.1. A grouped approach carries the union of the pros and the union of the cons, in the order providers first stated them, with duplicates removed.
+
+An aggregated `risk_level` is the level the most providers stated, and an aggregated `fit_rating` is the rating the most providers stated. A tie MUST resolve toward the more cautious value: the higher risk, or the lower fit. A provider that stated no level or no rating does not vote, so `risk_level` is `unknown` and `fit_rating` is null only when no provider stated one. Each provider votes once per approach, so a provider that names one approach more than once MUST NOT outvote a provider that names it once.
+
+Providers cannot report `recommended_by`, because the member output schema does not carry it. An orchestrator therefore derives it: a provider counts toward an approach when its `recommendation` names that approach as whole words. A name MUST be counted only where it stands on its own, so a recommendation of `CRUD with domain events` does not also count toward an approach named `CRUD`. The recommendation MUST be read against every grouped name before the eligible names are selected, because the longer name may be one another provider raised. Only the approaches that provider named itself are eligible, so one provider cannot be counted for an approach that another provider raised, and a provider that recommends a name it never listed counts toward nothing. Two limits follow from naming alone. A recommendation that names an approach only to reject it is counted, and a recommendation that describes an approach without naming it is not.
+
 ### 9.3 Classification Buckets
 
 Issues/recommendations fall into mutually exclusive buckets:
@@ -308,7 +314,9 @@ Issues/recommendations fall into mutually exclusive buckets:
 
 Classification counts a member only when it returned a usable response. The denominator is therefore `providers_responded`, not `providers_used`. A consensus across two members when three were asked is a weaker signal than the same word across three, so consumers that report agreement MUST state which roster it was computed over.
 
-**Design question consensus:** For design questions, `consensus_recommendation` captures high-level directional agreement (e.g., "use CRUD, not event sourcing") even when providers recommend different specific variants. It is not populated when providers disagree on direction. Per-approach `recommended_by` counts track the specific variant each provider chose.
+**Design question consensus:** For design questions, `consensus_recommendation` captures high-level directional agreement (e.g., "use CRUD, not event sourcing"), which a synthesis step can establish even when providers recommend different specific variants. It is not populated when providers disagree on direction. Per-approach `recommended_by` counts track the specific variant each provider chose.
+
+Without a synthesis step an orchestrator MUST populate it only when every provider that answered named one and the same approach, and the value MUST be that approach's name. It MUST be null otherwise. A consumer can therefore always read the value as a name that appears in `approaches`, rather than having to tell a name from a provider's prose. Directional agreement across differently named variants reads the shared direction out of differing prose, which needs synthesis, so an orchestrator that performs none reports null in that case rather than guessing.
 
 ### 9.4 Confidence Ordering
 
@@ -384,7 +392,7 @@ The structured output includes:
 - `providers_used[]`: The roster asked. All council members consulted, including those that failed, by display name.
 - `providers_responded[]`: The roster that answered. Members that returned usable advice, by display name. This is the denominator `consensus_recommendation` was computed over.
 - `failed_providers[]`: Members that failed or returned malformed responses, by display name.
-- `consensus_recommendation`: High-level directional agreement when every member that answered agrees, even if they differ on specifics. Null when they do not agree on direction.
+- `consensus_recommendation`: High-level directional agreement when every member that answered agrees. Differing specifics count only where a synthesis step establishes the shared direction. Without one the field carries the name of the one approach every member named, and is null otherwise, as section 9.3 requires.
 - `approaches[]`: All approaches mentioned by any provider, with `recommended_by` count, merged pros/cons, `risk_level`, and `fit_rating`. `risk_level` is `unknown` when no provider stated one. `fit_rating` is null when no provider assessed fit for the approach; when providers disagree, use the most common rating.
 - `summary{}`: Contains `synthesis` (1-2 sentence overall assessment).
 - `debate{}` (optional): Debate metadata (rounds_completed, converged).

@@ -1,17 +1,26 @@
-"""Consensus classification for multi-provider code review issues.
+"""Consensus algorithms that combine what several providers reported.
 
 Implements the grouping and classification algorithm from spec section 9.
 Issues from multiple providers are grouped by file, line proximity, and
 category, then classified as consensus, majority, or individual.
+Design approaches are grouped by name, and the count of providers that
+recommended each one is derived from the recommendation each provider gave.
 """
 
 from __future__ import annotations
 
 import re
-from collections import defaultdict
-from collections.abc import Sequence
+from collections import Counter, defaultdict
+from collections.abc import Iterable, Sequence
 
-from star_chamber.types import ClassificationResult, Issue, MajorityIssue, ProviderReview
+from star_chamber.types import (
+    Approach,
+    ClassificationResult,
+    Issue,
+    MajorityIssue,
+    ProviderDesignAdvice,
+    ProviderReview,
+)
 
 # Line numbers within this tolerance are considered the same location.
 _LINE_TOLERANCE = 5
@@ -222,3 +231,196 @@ def classify(reviews: Sequence[ProviderReview], threshold: int = 2) -> Classific
         majority_issues=tuple(majority),
         individual_issues={k: tuple(v) for k, v in individual_map.items()},
     )
+
+
+# Characters outside a name's words, so a name matches regardless of case and punctuation.
+# The pattern is Unicode aware, because an ASCII one empties the key of a name written
+# in another script and the approach then disappears from the result.
+_NON_WORD_RE = re.compile(r"[\W_]+")
+
+# Symbols that tell one approach name from another, spelled out so that stripping
+# punctuation cannot merge names such as C++, C# and C.
+# NOTE: The spelling carries no spaces, so a symbol joined to a word stays part of that
+# word. Expanding it into a word of its own would let "C" match a recommendation of "C++".
+_NAME_SYMBOL_WORDS = {"#": "sharp", "+": "plus"}
+
+# Fit ratings, most cautious first, so a tie resolves to the more cautious rating.
+_FIT_RATINGS_BY_CAUTION = ("poor", "fair", "good", "excellent")
+
+# Risk levels, most cautious first, so a tie resolves to the more cautious level.
+# "unknown" is absent because it means no provider stated a level, not that one was chosen.
+_RISK_LEVELS_BY_CAUTION = ("high", "medium", "low")
+
+
+def _approach_name_key(name: str) -> str:
+    """Reduce an approach name to the form two providers must share to mean the same approach."""
+    text = name.casefold()
+    for symbol, word in _NAME_SYMBOL_WORDS.items():
+        text = text.replace(symbol, word)
+    return _NON_WORD_RE.sub(" ", text).strip()
+
+
+def _own_name_keys(advice: ProviderDesignAdvice) -> dict[str, None]:
+    """Return a key for each approach this provider named, in the order it named them."""
+    keys = (_approach_name_key(approach.name) for approach in advice.approaches)
+    return {key: None for key in keys if key}
+
+
+def _word_spans(words: list[str], phrase: list[str]) -> list[tuple[int, int]]:
+    """Return the start and stop word offsets of every whole-word run of the phrase."""
+    width = len(phrase)
+    return [(start, start + width) for start in range(len(words) - width + 1) if words[start : start + width] == phrase]
+
+
+def _names_mentioned_in(text: str, name_keys: Iterable[str]) -> set[str]:
+    """Return the approach names the text names, matching whole words only.
+
+    NOTE: A name counts only where it stands on its own. One that appears solely
+    inside a longer name the text also names was never named in its own right.
+    """
+    words = _approach_name_key(text).split()
+    phrases = {key: key.split() for key in name_keys if key}
+    spans = {key: _word_spans(words, phrase) for key, phrase in phrases.items()}
+
+    named = set()
+    for key, occurrences in spans.items():
+        swallowing = [
+            span for other, found in spans.items() if len(phrases[other]) > len(phrases[key]) for span in found
+        ]
+        if any(
+            all(not (outer_start <= start and stop <= outer_stop) for outer_start, outer_stop in swallowing)
+            for start, stop in occurrences
+        ):
+            named.add(key)
+    return named
+
+
+def _approaches_recommended_by(advice: ProviderDesignAdvice, name_keys: Iterable[str]) -> set[str]:
+    """Return the keys of the approaches one provider's recommendation chose.
+
+    Args:
+        advice: Parsed advice from one provider.
+        name_keys: Every grouped approach name, so that a longer name any provider
+            raised can rule out a shorter one.
+
+    Returns:
+        The keys this provider both named itself and then recommended.
+    """
+    return _names_mentioned_in(advice.recommendation, name_keys) & _own_name_keys(advice).keys()
+
+
+def _most_cautious_of_the_most_common(values: Sequence[str], by_caution: Sequence[str]) -> str | None:
+    """Return the value the most providers stated, resolving a tie toward the more cautious value.
+
+    Args:
+        values: What each provider stated, including repeats.
+        by_caution: The permitted values, most cautious first.
+
+    Returns:
+        The winning value, or None when no provider stated a permitted one.
+    """
+    counts = Counter(value for value in values if value in by_caution)
+    if not counts:
+        return None
+    most = max(counts.values())
+    return next(value for value in by_caution if counts.get(value) == most)
+
+
+def aggregate_approaches(advices: Sequence[ProviderDesignAdvice]) -> tuple[Approach, ...]:
+    """Group the approaches every provider named, and count who recommended each one.
+
+    A provider cannot report how many providers recommended an approach, so the
+    count is derived from the recommendation each provider gave. The recommendation
+    is read against every grouped name, and the result is then restricted to the
+    approaches that provider named itself. A provider votes once per approach on
+    the aggregated risk level and fit rating.
+
+    Args:
+        advices: Parsed advice from every provider that answered.
+
+    Returns:
+        One approach per distinct name, ordered as the providers first named them.
+
+    NOTE: A recommendation that names an approach in order to reject it still counts
+    toward it, because the count is derived from names alone and not from their polarity.
+    """
+    display_names: dict[str, str] = {}
+    pros: dict[str, dict[str, None]] = {}
+    cons: dict[str, dict[str, None]] = {}
+    risk_levels: dict[str, list[str]] = defaultdict(list)
+    fit_ratings: dict[str, list[str]] = defaultdict(list)
+    recommended_by = Counter[str]()
+
+    for advice in advices:
+        stated_risks: dict[str, list[str]] = defaultdict(list)
+        stated_fits: dict[str, list[str]] = defaultdict(list)
+
+        for approach in advice.approaches:
+            key = _approach_name_key(approach.name)
+            if not key:
+                continue
+            display_names.setdefault(key, approach.name)
+            pros.setdefault(key, {}).update(dict.fromkeys(approach.pros))
+            cons.setdefault(key, {}).update(dict.fromkeys(approach.cons))
+            stated_risks[key].append(approach.risk_level)
+            if approach.fit_rating is not None:
+                stated_fits[key].append(approach.fit_rating)
+
+        # One ballot per provider per approach, so naming an approach twice does not vote twice.
+        for key, levels in stated_risks.items():
+            level = _most_cautious_of_the_most_common(levels, _RISK_LEVELS_BY_CAUTION)
+            if level is not None:
+                risk_levels[key].append(level)
+        for key, ratings in stated_fits.items():
+            rating = _most_cautious_of_the_most_common(ratings, _FIT_RATINGS_BY_CAUTION)
+            if rating is not None:
+                fit_ratings[key].append(rating)
+
+    # The grouped names are complete only once every provider has been read, and a longer
+    # name rules out a shorter one, so the count needs a pass of its own.
+    for advice in advices:
+        recommended_by.update(_approaches_recommended_by(advice, display_names))
+
+    return tuple(
+        Approach(
+            name=display_names[key],
+            recommended_by=recommended_by[key],
+            pros=tuple(pros[key]),
+            cons=tuple(cons[key]),
+            risk_level=_most_cautious_of_the_most_common(risk_levels[key], _RISK_LEVELS_BY_CAUTION) or "unknown",
+            fit_rating=_most_cautious_of_the_most_common(fit_ratings[key], _FIT_RATINGS_BY_CAUTION),
+        )
+        for key in display_names
+    )
+
+
+def consensus_recommendation(
+    advices: Sequence[ProviderDesignAdvice],
+    approaches: Sequence[Approach],
+) -> str | None:
+    """Name the one approach every provider that answered recommended.
+
+    The value is always a name that appears in ``approaches``, so a consumer can
+    look it up rather than having to tell prose and a name apart.
+
+    Args:
+        advices: Parsed advice from every provider that answered.
+        approaches: The grouped approaches those providers named.
+
+    Returns:
+        The shared approach's name, or None when the providers named no single one.
+
+    NOTE: Providers that recommend different variants of one direction yield None,
+    because recognizing the shared direction behind differing prose needs a synthesis step.
+    """
+    if not advices:
+        return None
+
+    display_names = {_approach_name_key(approach.name): approach.name for approach in approaches}
+    picks = [_approaches_recommended_by(advice, display_names) for advice in advices]
+    if any(len(pick) != 1 for pick in picks):
+        return None
+    shared = {next(iter(pick)) for pick in picks}
+    if len(shared) != 1:
+        return None
+    return display_names[next(iter(shared))]

@@ -18,7 +18,7 @@ from star_chamber.types import (
     ProviderConfig,
     ProviderError,
 )
-from tests.helpers import SYNTHESIS, build_code_review_result, build_design_result
+from tests.helpers import SYNTHESIS, build_code_review_result, build_design_result, exchanges
 
 # ---------------------------------------------------------------------------
 # Fixtures.
@@ -239,7 +239,7 @@ class TestRunCouncilCodeReview:
 
         with (
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=mock_responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(mock_responses)),
         ):
             result = await run_council(
                 files={"app.py": "import os\nprint('hello')"},
@@ -261,7 +261,7 @@ class TestRunCouncilCodeReview:
 
         with (
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=mock_responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(mock_responses)),
         ):
             result = await run_council(
                 files={"app.py": "print('hello')"},
@@ -282,7 +282,7 @@ class TestRunCouncilCodeReview:
 
         with (
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=mock_responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(mock_responses)),
         ):
             result = await run_council(
                 files={"app.py": "print('hello')"},
@@ -309,7 +309,7 @@ class TestRunCouncilCodeReview:
 
         with (
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=mock_responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(mock_responses)),
         ):
             result = await run_council(
                 files={"auth.py": "query = f'SELECT * FROM users WHERE id={uid}'"},
@@ -328,7 +328,7 @@ class TestRunCouncilCodeReview:
 
         with (
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=mock_responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(mock_responses)),
         ):
             result = await run_council(
                 files={"app.py": "print('hello')"},
@@ -349,7 +349,7 @@ class TestRunCouncilCodeReview:
         with (
             patch("star_chamber.council.load_config", return_value=auto_config),
             patch("star_chamber.council.resolve_api_keys", return_value=auto_config.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=mock_responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(mock_responses)),
         ):
             result = await run_council(
                 files={"app.py": "print('hello')"},
@@ -375,7 +375,7 @@ class TestRunCouncilDesignQuestion:
 
         with (
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=mock_responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(mock_responses)),
         ):
             result = await run_council(
                 prompt="Should we use a monorepo?",
@@ -397,7 +397,7 @@ class TestRunCouncilDesignQuestion:
 
         with (
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=mock_responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(mock_responses)),
         ):
             result = await run_council(
                 prompt="How to handle auth?",
@@ -426,7 +426,7 @@ class TestRunCouncilSync:
 
         with (
             patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=mock_responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(mock_responses)),
         ):
             result = run_council_sync(
                 files={"app.py": "print('hello')"},
@@ -447,7 +447,7 @@ class TestRunCouncilSync:
 
         with (
             patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=mock_responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(mock_responses)),
         ):
             result = run_council_sync(
                 prompt="How to design this?",
@@ -470,7 +470,7 @@ class TestRunCouncilCouncilContext:
             _success_response("openai", "gpt-4o", _code_review_json()),
         ]
         single_config = CouncilConfig(providers=(_OPENAI_CONFIG,))
-        mock_fan_out = AsyncMock(return_value=mock_responses)
+        mock_fan_out = AsyncMock(return_value=exchanges(mock_responses))
 
         with (
             patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
@@ -492,7 +492,7 @@ class TestRunCouncilCouncilContext:
             _success_response("openai", "gpt-4o", _code_review_json()),
         ]
         single_config = CouncilConfig(providers=(_OPENAI_CONFIG,))
-        mock_fan_out = AsyncMock(return_value=mock_responses)
+        mock_fan_out = AsyncMock(return_value=exchanges(mock_responses))
 
         with (
             patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
@@ -512,7 +512,7 @@ class TestRunCouncilCouncilContext:
             _success_response("openai", "gpt-4o", _design_json()),
         ]
         single_config = CouncilConfig(providers=(_OPENAI_CONFIG,))
-        mock_fan_out = AsyncMock(return_value=mock_responses)
+        mock_fan_out = AsyncMock(return_value=exchanges(mock_responses))
 
         with (
             patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
@@ -544,7 +544,7 @@ class TestRunCouncilSingleRoundOnly:
             _success_response("openai", "gpt-4o", _code_review_json()),
             _success_response("anthropic", "claude-3", _code_review_json()),
         ]
-        mock_fan_out = AsyncMock(return_value=mock_responses)
+        mock_fan_out = AsyncMock(return_value=exchanges(mock_responses))
 
         with (
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
@@ -618,7 +618,7 @@ class TestAnsweringRoster:
 
         with (
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=mock_responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(mock_responses)),
         ):
             result = await run_council(files={"app.py": "x = 1"}, config=_TWO_PROVIDER_CONFIG, mode="code-review")
 
@@ -633,7 +633,7 @@ class TestAnsweringRoster:
 
         with (
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=mock_responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(mock_responses)),
         ):
             result = await run_council(files={"app.py": "x = 1"}, config=_TWO_PROVIDER_CONFIG, mode="code-review")
 
@@ -663,7 +663,7 @@ class TestAnsweringRoster:
 
         with (
             patch("star_chamber.council.resolve_api_keys", return_value=config.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=mock_responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(mock_responses)),
         ):
             result = await run_council(files={"app.py": "x = 1"}, config=config, mode="code-review")
 
@@ -682,7 +682,7 @@ class TestAnsweringRoster:
 
         with (
             patch("star_chamber.council.resolve_api_keys", return_value=config.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=mock_responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(mock_responses)),
         ):
             result = await run_council(files={"app.py": "x = 1"}, config=config, mode="code-review")
 
@@ -696,7 +696,7 @@ class TestAnsweringRoster:
 
         with (
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=mock_responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(mock_responses)),
         ):
             result = await run_council(prompt="Monorepo?", config=_TWO_PROVIDER_CONFIG, mode="design-question")
 
@@ -711,7 +711,7 @@ class TestAnsweringRoster:
 
         with (
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=mock_responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(mock_responses)),
         ):
             result = await run_council(files={"app.py": "x = 1"}, config=_TWO_PROVIDER_CONFIG, mode="code-review")
 
@@ -1265,8 +1265,8 @@ class TestDesignConsensusRecommendation:
 class TestSessionSynthesis:
     """The closing assessment is written by a member, not assembled from the members."""
 
-    async def _failing(self, material: str, answered: Sequence[int]) -> Synthesis:
-        return Synthesis(error=ProviderError(provider="openai", error="Timeout."))
+    async def _failing(self, material: str, answered: Sequence[ProviderConfig]) -> Synthesis:
+        return Synthesis(author="openai", error=ProviderError(provider="openai", error="Timeout."))
 
     def test_code_review_carries_what_the_member_wrote(self):
         responses = [_success_response("openai", "gpt-4o", _code_review_json(summary="Member prose."))]
@@ -1306,9 +1306,9 @@ class TestSessionSynthesis:
     def test_the_material_withholds_member_names(self):
         seen: list[str] = []
 
-        async def recording(material: str, answered: Sequence[int]) -> Synthesis:
+        async def recording(material: str, answered: Sequence[ProviderConfig]) -> Synthesis:
             seen.append(material)
-            return Synthesis(text=SYNTHESIS)
+            return Synthesis(author="openai", text=SYNTHESIS)
 
         responses = [
             _success_response("openai", "gpt-4o", _code_review_json(issues=[_GOOD_ISSUE])),
@@ -1321,11 +1321,11 @@ class TestSessionSynthesis:
         assert "anthropic" not in seen[0]
 
     def test_only_the_members_that_answered_are_offered_as_authors(self):
-        seen: list[Sequence[int]] = []
+        seen: list[Sequence[ProviderConfig]] = []
 
-        async def recording(material: str, answered: Sequence[int]) -> Synthesis:
+        async def recording(material: str, answered: Sequence[ProviderConfig]) -> Synthesis:
             seen.append(answered)
-            return Synthesis(text=SYNTHESIS)
+            return Synthesis(author="openai", text=SYNTHESIS)
 
         responses = [
             _error_response("openai", "gpt-4o", "Timeout."),
@@ -1334,7 +1334,7 @@ class TestSessionSynthesis:
 
         build_code_review_result(responses, files_reviewed=("app.py",), synthesizer=recording)
 
-        assert list(seen[0]) == [1]
+        assert [config.identity for config in seen[0]] == ["anthropic"]
 
 
 class TestRunCouncilSynthesis:
@@ -1351,7 +1351,7 @@ class TestRunCouncilSynthesis:
 
         with (
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
             patch("star_chamber.synthesis.send_to_provider", send),
         ):
             result = await run_council(
@@ -1370,7 +1370,7 @@ class TestRunCouncilSynthesis:
 
         with (
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
             patch("star_chamber.synthesis.send_to_provider", send),
         ):
             result = await run_council(

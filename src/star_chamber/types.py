@@ -224,6 +224,8 @@ class CodeReviewSummary:
         synthesis_error: The member asked for the assessment and why it wrote
             none. Null when the assessment is present, and null when no member
             could be asked.
+        synthesized_by: The member asked for the assessment, whether or not it
+            wrote one. Null when no member was asked.
     """
 
     total_issues: int
@@ -231,6 +233,7 @@ class CodeReviewSummary:
     majority_count: int
     synthesis: str
     synthesis_error: ProviderError | None = None
+    synthesized_by: str | None = None
 
 
 @dataclass(frozen=True)
@@ -242,10 +245,13 @@ class DesignSummary:
         synthesis_error: The member asked for the assessment and why it wrote
             none. Null when the assessment is present, and null when no member
             could be asked.
+        synthesized_by: The member asked for the assessment, whether or not it
+            wrote one. Null when no member was asked.
     """
 
     synthesis: str
     synthesis_error: ProviderError | None = None
+    synthesized_by: str | None = None
 
 
 @dataclass(frozen=True)

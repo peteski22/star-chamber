@@ -372,9 +372,9 @@ class TestFanOut:
             results = asyncio.run(fan_out(configs, "Review this.", timeout=30.0))
 
         assert len(results) == 2
-        assert all(r.success for r in results)
-        providers = {r.provider for r in results}
-        assert providers == {"openai", "anthropic"}
+        assert all(response.success for _, response in results)
+        assert [config.provider for config, _ in results] == ["openai", "anthropic"]
+        assert all(config.provider == response.provider for config, response in results)
 
     def test_mixed_success_and_failure(self):
         mock_module = _make_mock_any_llm("Looks good.")
@@ -400,7 +400,7 @@ class TestFanOut:
             results = asyncio.run(fan_out(configs, "Review this.", timeout=30.0))
 
         assert len(results) == 2
-        by_provider = {r.provider: r for r in results}
+        by_provider = {config.provider: response for config, response in results}
         assert by_provider["openai"].success is False
         assert by_provider["anthropic"].success is True
 

@@ -18,8 +18,8 @@ from star_chamber.parsing import extract_json
 from star_chamber.schema import get_schema
 from star_chamber.synthesis import Synthesis
 from star_chamber.transport import ProviderResponse
-from star_chamber.types import ProviderError
-from tests.helpers import SYNTHESIS, build_code_review_result, build_design_result
+from star_chamber.types import ProviderConfig, ProviderError
+from tests.helpers import SYNTHESIS, SYNTHESIS_AUTHOR, build_code_review_result, build_design_result
 
 # The schema each example's recorded provider bodies answer to, keyed by example package.
 _EXAMPLE_BODY_SCHEMAS = {
@@ -59,9 +59,9 @@ def _design_body() -> str:
     )
 
 
-async def _failing_synthesizer(material: str, answered: Sequence[int]) -> Synthesis:
+async def _failing_synthesizer(material: str, answered: Sequence[ProviderConfig]) -> Synthesis:
     """Stand in for a member that was asked for an assessment and did not answer."""
-    return Synthesis(error=ProviderError(provider="openai", error="Timeout."))
+    return Synthesis(author="openai", error=ProviderError(provider="openai", error="Timeout."))
 
 
 _ISSUE = {
@@ -113,6 +113,21 @@ class TestCodeReviewOutput:
 
         jsonschema.validate(document, schema)
         assert document["summary"]["synthesis_error"] is None
+
+    def test_summary_names_the_member_that_wrote_the_synthesis(self, schema):
+        responses = [ProviderResponse("openai", "openai", "gpt-4o", True, _review_body())]
+        result = build_code_review_result(responses, files_reviewed=("app.py",))
+        document = _as_document(result)
+
+        jsonschema.validate(document, schema)
+        assert document["summary"]["synthesized_by"] == SYNTHESIS_AUTHOR
+
+    def test_summary_names_no_member_when_none_was_asked(self, schema):
+        result = build_code_review_result([], files_reviewed=())
+        document = _as_document(result)
+
+        jsonschema.validate(document, schema)
+        assert document["summary"]["synthesized_by"] is None
 
     def test_summary_carries_the_member_that_owed_a_synthesis(self, schema):
         responses = [ProviderResponse("openai", "openai", "gpt-4o", True, _review_body())]

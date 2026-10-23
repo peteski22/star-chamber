@@ -9,7 +9,7 @@ from click.testing import CliRunner
 from star_chamber.cli import main
 from star_chamber.transport import ProviderResponse
 from star_chamber.types import CouncilConfig, OtariConfig, ProviderConfig
-from tests.helpers import SYNTHESIS
+from tests.helpers import SYNTHESIS, exchanges
 
 # ---------------------------------------------------------------------------
 # Fixtures.
@@ -102,7 +102,7 @@ class TestReviewCommand:
         with (
             patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", str(src)])
@@ -122,7 +122,7 @@ class TestReviewCommand:
         with (
             patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
             patch("star_chamber.synthesis.send_to_provider", new_callable=AsyncMock, return_value=refusal),
         ):
             runner = CliRunner()
@@ -143,7 +143,7 @@ class TestReviewCommand:
         with (
             patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", "--format", "json", str(src)])
@@ -170,7 +170,9 @@ class TestReviewCommand:
         with (
             patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
             patch("star_chamber.council.resolve_api_keys", return_value=(_OPENAI_CONFIG,)),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+            patch(
+                "star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)
+            ) as mock_fan_out,
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", "-p", "openai", str(src)])
@@ -195,7 +197,7 @@ class TestReviewCommand:
         with (
             patch("star_chamber.cli._load_config", return_value=single_config),
             patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", "--output", str(output_file), str(src)])
@@ -221,7 +223,7 @@ class TestAskCommand:
         with (
             patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["ask", "Should we use Redis?"])
@@ -238,7 +240,7 @@ class TestAskCommand:
         with (
             patch("star_chamber.cli._load_config", return_value=single_config),
             patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["ask", "--format", "json", "Should we use Redis?"])
@@ -269,7 +271,9 @@ class TestContextFileFlag:
         with (
             patch("star_chamber.cli._load_config", return_value=single_config),
             patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+            patch(
+                "star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)
+            ) as mock_fan_out,
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", "--context-file", str(ctx), str(src)])
@@ -292,7 +296,9 @@ class TestContextFileFlag:
         with (
             patch("star_chamber.cli._load_config", return_value=single_config),
             patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+            patch(
+                "star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)
+            ) as mock_fan_out,
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["ask", "--context-file", str(ctx), "Should we use Redis?"])
@@ -323,7 +329,9 @@ class TestContextFileFlag:
         with (
             patch("star_chamber.cli._load_config", return_value=single_config),
             patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+            patch(
+                "star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)
+            ) as mock_fan_out,
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", str(src)])
@@ -485,7 +493,9 @@ class TestCouncilContextFlag:
         with (
             patch("star_chamber.cli._load_config", return_value=single_config),
             patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+            patch(
+                "star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)
+            ) as mock_fan_out,
         ):
             runner = CliRunner()
             result = runner.invoke(
@@ -511,7 +521,9 @@ class TestCouncilContextFlag:
         with (
             patch("star_chamber.cli._load_config", return_value=single_config),
             patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+            patch(
+                "star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)
+            ) as mock_fan_out,
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["ask", "--council-context", str(council), "Should we use Redis?"])
@@ -534,7 +546,9 @@ class TestCouncilContextFlag:
         with (
             patch("star_chamber.cli._load_config", return_value=single_config),
             patch("star_chamber.council.resolve_api_keys", return_value=single_config.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+            patch(
+                "star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)
+            ) as mock_fan_out,
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", str(src)])
@@ -607,7 +621,9 @@ class TestProviderDisplayNames:
         with (
             patch("star_chamber.cli._load_config", return_value=config),
             patch("star_chamber.council.resolve_api_keys", side_effect=lambda configs: configs),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+            patch(
+                "star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)
+            ) as mock_fan_out,
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", "-p", "gemini-3.1-pro", str(src)])
@@ -632,7 +648,9 @@ class TestProviderDisplayNames:
         with (
             patch("star_chamber.cli._load_config", return_value=config),
             patch("star_chamber.council.resolve_api_keys", side_effect=lambda configs: configs),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses) as mock_fan_out,
+            patch(
+                "star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)
+            ) as mock_fan_out,
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["ask", "-p", "gemini-3.1-pro", "Should we use Redis?"])
@@ -659,7 +677,7 @@ class TestRosterOutput:
         with (
             patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", str(src)])
@@ -687,7 +705,7 @@ class TestRosterOutput:
         with (
             patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", str(src)])
@@ -707,7 +725,7 @@ class TestRosterOutput:
         with (
             patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", str(src)])
@@ -727,7 +745,7 @@ class TestRosterOutput:
         with (
             patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
             patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
-            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
         ):
             runner = CliRunner()
             result = runner.invoke(main, ["review", "--format", "json", str(src)])

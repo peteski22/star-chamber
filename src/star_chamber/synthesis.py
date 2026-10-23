@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+from collections import Counter
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 
@@ -17,7 +19,18 @@ from star_chamber.types import (
     ProviderReview,
 )
 
+# A reply long enough to be prose rather than the sentence or two asked for.
+MAX_ASSESSMENT_CHARS = 2000
+
+_BOTH_STATES = "An assessment cannot carry both prose and a failure."
+_NO_AUTHOR = "An assessment and a failure each need the member they came from."
 _EMPTY_REPLY = "The member returned no assessment."
+_OVERLONG_REPLY = f"The member returned more than {MAX_ASSESSMENT_CHARS} characters instead of a sentence or two."
+
+# Worst first, so a reader meets the harshest verdict before the kindest.
+_RATING_ORDER = ("needs-work", "fair", "good", "excellent")
+
+_WHITESPACE_RUN = re.compile(r"\s+")
 
 
 @dataclass(frozen=True)
@@ -25,17 +38,34 @@ class Synthesis:
     """A council session's closing assessment, or the reason there is none.
 
     Attributes:
+        author: The member asked for the assessment. Empty when none was asked.
         text: The assessment in prose. Empty when no member wrote one.
         error: The member asked and why it wrote nothing. None when text is
-            present, and None when no member could be asked.
+            present, and None when no assessment was requested.
+
+    Raises:
+        ValueError: If prose and a failure are given together, or if either
+            arrives without an author.
+
+    NOTE: An empty assessment with no failure means none was requested, either
+    because no member answered or because there was nothing to assess. A reader
+    tells those apart by whether any member answered at all.
     """
 
+    author: str = ""
     text: str = ""
     error: ProviderError | None = None
 
+    def __post_init__(self) -> None:
+        """Reject a state the attributes above say cannot exist."""
+        if self.text and self.error is not None:
+            raise ValueError(_BOTH_STATES)
+        if (self.text or self.error is not None) and not self.author:
+            raise ValueError(_NO_AUTHOR)
 
-Synthesizer = Callable[[str, Sequence[int]], Awaitable[Synthesis]]
-"""Takes council material and the roster positions that answered, and returns the assessment."""
+
+Synthesizer = Callable[[str, Sequence[ProviderConfig]], Awaitable[Synthesis]]
+"""Takes council material and the members that answered, and returns the assessment."""
 
 
 def render_code_review_material(
@@ -49,14 +79,15 @@ def render_code_review_material(
         classification: The issues grouped by how many members raised them.
 
     Returns:
-        Markdown carrying the assessments, the ratings, and the grouped concerns.
+        Markdown carrying the verdict tally, the assessments, and the grouped concerns.
 
-    NOTE: The material names no member, so an assessment written from it cannot
-    attribute a point to one.
+    NOTE: The material names no member and preserves no member ordering, so an
+    assessment written from it can neither attribute a point to a member nor
+    count how many points each member raised.
     """
     sections: list[tuple[str, Sequence[str]]] = [
-        ("Quality ratings given", [review.quality_rating for review in reviews]),
-        ("Each assessment of its own", [review.summary for review in reviews if review.summary]),
+        ("Verdicts given", _rating_tally(reviews)),
+        ("Each assessment of its own", [review.summary for review in reviews]),
         ("Concerns every member raised", [issue.description for issue in classification.consensus_issues]),
         ("Concerns more than one member raised", [issue.description for issue in classification.majority_issues]),
         (
@@ -80,41 +111,19 @@ def render_design_material(
     Returns:
         Markdown carrying the assessments, the recommendations, and the approaches.
 
-    NOTE: The material names no member, so an assessment written from it cannot
-    attribute a point to one.
+    NOTE: The material names no member and preserves no member ordering, so an
+    assessment written from it can neither attribute a point to a member nor
+    count how many points each member raised.
     """
     sections: list[tuple[str, Sequence[str]]] = [
-        ("Each assessment of its own", [advice.summary for advice in advices if advice.summary]),
-        ("Each recommendation made", [advice.recommendation for advice in advices if advice.recommendation]),
+        ("Each assessment of its own", [advice.summary for advice in advices]),
+        ("Each recommendation made", [advice.recommendation for advice in advices]),
         (
             "Approaches named, and how many members recommended each",
             [f"{approach.name} (recommended by {approach.recommended_by})" for approach in approaches],
         ),
     ]
     return _render_sections(sections)
-
-
-def select_synthesizer(
-    configs: Sequence[ProviderConfig],
-    answered: Sequence[int],
-) -> ProviderConfig | None:
-    """Return the member that writes the closing assessment, or None when none can.
-
-    Args:
-        configs: The configured roster, in configuration order.
-        answered: Roster positions of the members that returned usable output.
-
-    Returns:
-        The earliest member in roster order that answered, or None when none did.
-
-    NOTE: Selection follows roster order rather than reply order, so one roster
-    always asks the same member. Positions identify a member where a display
-    name cannot, because two members may share one provider and carry no
-    display name. Each position must index into ``configs``.
-    """
-    if not answered:
-        return None
-    return configs[min(answered)]
 
 
 async def synthesize(
@@ -138,6 +147,8 @@ async def synthesize(
     NOTE: Blank material is nothing to assess, so no member is asked and the
     assessment comes back empty. Asking would invite prose invented from
     nothing.
+    NOTE: The member writing the assessment also wrote part of the material, so
+    it can recognize its own prose even though the material names nobody.
     """
     if not material.strip():
         return Synthesis()
@@ -145,21 +156,49 @@ async def synthesize(
     response = await send_to_provider(config, render_synthesis_prompt(material), timeout=timeout, otari=otari)
 
     if not response.success:
-        return Synthesis(error=ProviderError(provider=config.identity, error=response.error))
+        return Synthesis(author=config.identity, error=ProviderError(provider=config.identity, error=response.error))
 
-    text = response.content.strip()
+    text = _one_line(response.content)
     if not text:
-        return Synthesis(error=ProviderError(provider=config.identity, error=_EMPTY_REPLY))
+        return Synthesis(author=config.identity, error=ProviderError(provider=config.identity, error=_EMPTY_REPLY))
+    if len(text) > MAX_ASSESSMENT_CHARS:
+        return Synthesis(author=config.identity, error=ProviderError(provider=config.identity, error=_OVERLONG_REPLY))
 
-    return Synthesis(text=text)
+    return Synthesis(author=config.identity, text=text)
+
+
+def _one_line(text: str) -> str:
+    """Return text as one line, dropping characters that cannot be displayed."""
+    displayable = "".join(character for character in text if character.isprintable() or character.isspace())
+    return _WHITESPACE_RUN.sub(" ", displayable).strip()
+
+
+def _rating_tally(reviews: Sequence[ProviderReview]) -> list[str]:
+    """Return one entry counting how many members gave each verdict, worst verdict first.
+
+    A single tally rather than one entry per member, so the material carries
+    nothing a reader could line up against another section.
+    """
+    counts = Counter(_one_line(review.quality_rating) for review in reviews)
+    ordered = [rating for rating in _RATING_ORDER if counts[rating]]
+    ordered += sorted(rating for rating in counts if rating and rating not in _RATING_ORDER)
+    if not ordered:
+        return []
+    return [", ".join(f"{rating}: {counts[rating]}" for rating in ordered)]
 
 
 def _render_sections(sections: Sequence[tuple[str, Sequence[str]]]) -> str:
-    """Render each heading and its bullets, dropping a section that has no entries."""
+    """Render each heading and its bullets, dropping a section that has no entries.
+
+    Each entry is reduced to one line, then empty entries are dropped, then the
+    rest are sorted. That order matters: sorting first would let leading
+    whitespace decide the order, which only looks deterministic.
+    """
     parts: list[str] = []
     for heading, entries in sections:
-        if not entries:
+        bullets = sorted(entry for entry in (_one_line(entry) for entry in entries) if entry)
+        if not bullets:
             continue
-        bullets = "\n".join(f"- {entry}" for entry in entries)
-        parts.append(f"## {heading}\n{bullets}")
+        rendered = "\n".join(f"- {bullet}" for bullet in bullets)
+        parts.append(f"## {heading}\n{rendered}")
     return "\n\n".join(parts)

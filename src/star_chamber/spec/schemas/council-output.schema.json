@@ -192,6 +192,10 @@
         "synthesis_error": {
           "description": "The member asked for the synthesis and why it wrote none. Null when the synthesis is present, and null when no member could be asked.",
           "oneOf": [{ "$ref": "#/$defs/provider_error" }, { "type": "null" }]
+        },
+        "synthesized_by": {
+          "description": "Display name of the member asked for the synthesis, whether or not it wrote one. Null when no member was asked.",
+          "type": ["string", "null"]
         }
       },
       "additionalProperties": false

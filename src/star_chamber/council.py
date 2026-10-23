@@ -14,7 +14,6 @@ from star_chamber.synthesis import (
     Synthesizer,
     render_code_review_material,
     render_design_material,
-    select_synthesizer,
     synthesize,
 )
 from star_chamber.transport import ProviderResponse, fan_out, resolve_api_keys, resolve_otari
@@ -24,6 +23,7 @@ from star_chamber.types import (
     CouncilConfig,
     DesignQuestionResult,
     DesignSummary,
+    ProviderConfig,
     ProviderDesignAdvice,
     ProviderError,
     ProviderReview,
@@ -33,7 +33,7 @@ _VALID_MODES = frozenset({"code-review", "design-question"})
 
 
 async def _build_code_review_result(
-    responses: Sequence[ProviderResponse],
+    exchanges: Sequence[tuple[ProviderConfig, ProviderResponse]],
     files_reviewed: tuple[str, ...],
     threshold: int = 2,
     *,
@@ -42,7 +42,7 @@ async def _build_code_review_result(
     """Parse responses, classify issues, and build a CodeReviewResult.
 
     Args:
-        responses: Provider responses from the fan-out round.
+        exchanges: Each member of the fan-out round paired with its reply.
         files_reviewed: Paths of the files sent for review.
         threshold: Consensus threshold for classification.
         synthesizer: Writes the session's closing assessment.
@@ -56,9 +56,9 @@ async def _build_code_review_result(
     reviews: list[ProviderReview] = []
     failed: list[ProviderError] = []
     providers_used: list[str] = []
-    answered: list[int] = []
+    answered: list[ProviderConfig] = []
 
-    for position, response in enumerate(responses):
+    for config, response in exchanges:
         providers_used.append(response.display_name)
         if not response.success:
             failed.append(ProviderError(provider=response.display_name, error=response.error))
@@ -69,7 +69,7 @@ async def _build_code_review_result(
             failed.append(ProviderError(provider=response.display_name, error=str(exc)))
             continue
         reviews.append(review)
-        answered.append(position)
+        answered.append(config)
 
     # Classify issues across all successful reviews.
     classification = classify(reviews, threshold=threshold)
@@ -102,12 +102,13 @@ async def _build_code_review_result(
             majority_count=len(classification.majority_issues),
             synthesis=synthesis.text,
             synthesis_error=synthesis.error,
+            synthesized_by=synthesis.author or None,
         ),
     )
 
 
 async def _build_design_result(
-    responses: Sequence[ProviderResponse],
+    exchanges: Sequence[tuple[ProviderConfig, ProviderResponse]],
     prompt: str,
     *,
     synthesizer: Synthesizer,
@@ -115,7 +116,7 @@ async def _build_design_result(
     """Parse responses, aggregate approaches, and build a DesignQuestionResult.
 
     Args:
-        responses: Provider responses from the fan-out round.
+        exchanges: Each member of the fan-out round paired with its reply.
         prompt: The original design question.
         synthesizer: Writes the session's closing assessment.
 
@@ -128,9 +129,9 @@ async def _build_design_result(
     advices: list[ProviderDesignAdvice] = []
     failed: list[ProviderError] = []
     providers_used: list[str] = []
-    answered: list[int] = []
+    answered: list[ProviderConfig] = []
 
-    for position, response in enumerate(responses):
+    for config, response in exchanges:
         providers_used.append(response.display_name)
         if not response.success:
             failed.append(ProviderError(provider=response.display_name, error=response.error))
@@ -141,7 +142,7 @@ async def _build_design_result(
             failed.append(ProviderError(provider=response.display_name, error=str(exc)))
             continue
         advices.append(advice)
-        answered.append(position)
+        answered.append(config)
 
     approaches = aggregate_approaches(advices)
 
@@ -155,7 +156,11 @@ async def _build_design_result(
         failed_providers=tuple(failed),
         approaches=approaches,
         consensus_recommendation=consensus_recommendation(advices, approaches),
-        summary=DesignSummary(synthesis=synthesis.text, synthesis_error=synthesis.error),
+        summary=DesignSummary(
+            synthesis=synthesis.text,
+            synthesis_error=synthesis.error,
+            synthesized_by=synthesis.author or None,
+        ),
     )
 
 
@@ -174,7 +179,9 @@ async def run_council(
     fan-out to providers, parse responses, classify/aggregate results, and ask
     one member that answered for the session's closing assessment.
 
-    NOTE: The closing assessment costs one model call beyond the fan-out.
+    NOTE: The closing assessment costs one model call beyond the fan-out, and
+    it runs after them, so the worst-case wall time is two timeouts rather than
+    one.
 
     Args:
         files: Mapping of file paths to source content (required for code-review mode).
@@ -224,36 +231,34 @@ async def run_council(
         rendered_prompt = render_design_prompt(prompt, context=context, council_context=council_context)
 
     # Fan out to all providers.
-    responses = await fan_out(
+    exchanges = await fan_out(
         configs=resolved_providers,
         prompt=rendered_prompt,
         timeout=float(config.timeout_seconds),
         otari=resolved_otari,
     )
 
-    async def synthesizer(material: str, answered: Sequence[int]) -> Synthesis:
-        """Ask the roster's chosen member for the closing assessment."""
-        member = select_synthesizer(resolved_providers, answered)
-        if member is None:
+    async def synthesizer(material: str, answered: Sequence[ProviderConfig]) -> Synthesis:
+        """Ask the earliest member that answered for the closing assessment."""
+        if not answered:
             return Synthesis()
         return await synthesize(
             material,
-            member,
+            answered[0],
             timeout=float(config.timeout_seconds),
             otari=resolved_otari,
         )
 
-    # Build and return the appropriate result type.
     if mode == "code-review":
         return await _build_code_review_result(
-            responses,
+            exchanges,
             files_reviewed=tuple(files),  # type: ignore[arg-type]
             threshold=config.consensus_threshold,
             synthesizer=synthesizer,
         )
 
     return await _build_design_result(
-        responses,
+        exchanges,
         prompt=prompt,
         synthesizer=synthesizer,
     )

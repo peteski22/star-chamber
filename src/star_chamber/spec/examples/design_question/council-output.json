@@ -88,6 +88,7 @@
   ],
   "summary": {
     "synthesis": "The council rejected event sourcing for this volume and team, and converged on CRUD with a recorded audit trail. It divided over how far to go now: one side would publish domain events immediately, the other would keep a plain audit table until a consumer exists.",
-    "synthesis_error": null
+    "synthesis_error": null,
+    "synthesized_by": "openai"
   }
 }

@@ -172,6 +172,7 @@
     "consensus_count": 2,
     "majority_count": 0,
     "synthesis": "The council agreed on two blocking defects: password hashing that is unsuitable for passwords, and a variable referenced before it exists. The remaining concerns were raised singly and cover token storage, return value consistency, and missing docstrings.",
-    "synthesis_error": null
+    "synthesis_error": null,
+    "synthesized_by": "openai"
   }
 }

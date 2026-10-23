@@ -269,7 +269,9 @@ After the final round, one member writes the `summary.synthesis` the output carr
 
 **Material.** The orchestrator MUST pass each answering member's own summary, and MAY pass the ratings, recommendations, and the concerns or approaches already grouped by agreement level. It MUST NOT pass a member display name. Where the material is empty, no member is asked and `summary.synthesis` is empty, because an author given nothing can only invent.
 
-**Result.** The assessment MUST be 1-2 sentences of prose, and MUST NOT be assembled from the members' own summaries. Where the author returns nothing usable, `summary.synthesis` MUST be empty and `summary.synthesis_error` MUST name the member asked and the reason. A concatenation of the members' summaries is not a synthesis and MUST NOT stand in for one.
+**Material.** Every entry MUST be reduced to one line, then empty entries dropped, then the rest sorted. Sorting last is what makes the order independent of leading whitespace. Sorting at all is what stops the material preserving reply order or roster order, which would let a reader count each unnamed member's points or line one section up against another. A per-member verdict list MUST NOT appear; a tally of verdicts MAY.
+
+**Result.** The assessment MUST be 1-2 sentences of prose, and MUST NOT be assembled from the members' own summaries. `summary.synthesized_by` MUST name the member asked, whether or not it wrote one, so a reader can check the author against the rule above. Where the author returns nothing usable, including a reply too long to be the prose asked for, `summary.synthesis` MUST be empty and `summary.synthesis_error` MUST name the member asked and the reason. A concatenation of the members' summaries is not a synthesis and MUST NOT stand in for one. An empty assessment with no recorded failure means none was requested; a reader tells "no member answered" from "nothing to assess" by whether `providers_responded` is empty.
 
 **Cost.** The assessment costs one model call beyond the fan-out, and it runs after them, so a session's worst case is the fan-out timeout plus one more. Debate mode pays that second timeout once per round.
 
@@ -358,7 +360,7 @@ The structured output includes:
 - `individual_issues{}`: Issues keyed by member display name.
 - `quality_ratings{}`: Per-member quality rating, keyed by display name.
 - `reviews[]`: Each answering member's parsed review in full, including its raw response text.
-- `summary{}`: Counts (`total_issues`, `consensus_count`, `majority_count`), `synthesis` (1-2 sentence overall assessment, written as [section 7.2](#72-closing-assessment) requires, empty when no member wrote one), and `synthesis_error` (the member asked and the reason it wrote none, null otherwise). `total_issues` counts distinct issues across all three buckets.
+- `summary{}`: Counts (`total_issues`, `consensus_count`, `majority_count`), `synthesis` (1-2 sentence overall assessment, written as [section 7.2](#72-closing-assessment) requires, empty when no member wrote one), `synthesis_error` (the member asked and the reason it wrote none, null otherwise), and `synthesized_by` (the member asked, null when none was). `total_issues` counts distinct issues across all three buckets.
 - `debate{}` (optional): Debate metadata (rounds_completed, converged).
 
 **Markdown presentation** (for human consumption):
@@ -410,7 +412,7 @@ The structured output includes:
 - `failed_providers[]`: Members that failed or returned malformed responses, by display name.
 - `consensus_recommendation`: High-level directional agreement when every member that answered agrees. Differing specifics count only where a synthesis step establishes the shared direction. Without one the field carries the name of the one approach every member named, and is null otherwise, as section 9.3 requires.
 - `approaches[]`: All approaches mentioned by any provider, with `recommended_by` count, merged pros/cons, `risk_level`, and `fit_rating`. `risk_level` is `unknown` when no provider stated one. `fit_rating` is null when no provider assessed fit for the approach; when providers disagree, use the most common rating.
-- `summary{}`: Contains `synthesis` (1-2 sentence overall assessment, written as [section 7.2](#72-closing-assessment) requires, empty when no member wrote one) and `synthesis_error` (the member asked and the reason it wrote none, null otherwise).
+- `summary{}`: Contains `synthesis` (1-2 sentence overall assessment, written as [section 7.2](#72-closing-assessment) requires, empty when no member wrote one), `synthesis_error` (the member asked and the reason it wrote none, null otherwise), and `synthesized_by` (the member asked, null when none was).
 - `debate{}` (optional): Debate metadata (rounds_completed, converged).
 
 **Markdown presentation:**

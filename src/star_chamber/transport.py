@@ -241,7 +241,7 @@ async def fan_out(
     prompt: str,
     timeout: float | None = None,
     otari: OtariConfig | None = None,
-) -> list[ProviderResponse]:
+) -> list[tuple[ProviderConfig, ProviderResponse]]:
     """Send a prompt to all providers in parallel.
 
     Args:
@@ -251,10 +251,14 @@ async def fan_out(
         otari: Optional otari routing configuration.
 
     Returns:
-        List of ProviderResponse objects, one per provider, in the order of ``configs``.
+        Each member paired with its own reply, one pair per member.
+
+    NOTE: Returning the pairs keeps the member reachable from its reply, so a
+    caller never has to match the two sequences up itself.
     """
     tasks = [send_to_provider(cfg, prompt, timeout=timeout, otari=otari) for cfg in configs]
-    return list(await asyncio.gather(*tasks))
+    responses = await asyncio.gather(*tasks)
+    return list(zip(configs, responses, strict=True))
 
 
 def resolve_api_keys(

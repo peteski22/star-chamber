@@ -251,7 +251,7 @@ async def fan_out(
         otari: Optional otari routing configuration.
 
     Returns:
-        List of ProviderResponse objects, one per provider.
+        List of ProviderResponse objects, one per provider, in the order of ``configs``.
     """
     tasks = [send_to_provider(cfg, prompt, timeout=timeout, otari=otari) for cfg in configs]
     return list(await asyncio.gather(*tasks))

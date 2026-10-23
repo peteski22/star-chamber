@@ -34,8 +34,8 @@ class Synthesis:
     error: ProviderError | None = None
 
 
-Synthesizer = Callable[[str, Sequence[str]], Awaitable[Synthesis]]
-"""Takes council material and the display names that answered, and returns the assessment."""
+Synthesizer = Callable[[str, Sequence[int]], Awaitable[Synthesis]]
+"""Takes council material and the roster positions that answered, and returns the assessment."""
 
 
 def render_code_review_material(
@@ -96,25 +96,25 @@ def render_design_material(
 
 def select_synthesizer(
     configs: Sequence[ProviderConfig],
-    answered: Sequence[str],
+    answered: Sequence[int],
 ) -> ProviderConfig | None:
     """Return the member that writes the closing assessment, or None when none can.
 
     Args:
         configs: The configured roster, in configuration order.
-        answered: Display names of the members that returned usable output.
+        answered: Roster positions of the members that returned usable output.
 
     Returns:
-        The first configured member that answered, or None when none did.
+        The earliest member in roster order that answered, or None when none did.
 
     NOTE: Selection follows roster order rather than reply order, so one roster
-    always asks the same member.
+    always asks the same member. Positions identify a member where a display
+    name cannot, because two members may share one provider and carry no
+    display name. Each position must index into ``configs``.
     """
-    names = set(answered)
-    for config in configs:
-        if config.identity in names:
-            return config
-    return None
+    if not answered:
+        return None
+    return configs[min(answered)]
 
 
 async def synthesize(
@@ -134,7 +134,14 @@ async def synthesize(
 
     Returns:
         The assessment, or an empty one carrying the reason it is missing.
+
+    NOTE: Blank material is nothing to assess, so no member is asked and the
+    assessment comes back empty. Asking would invite prose invented from
+    nothing.
     """
+    if not material.strip():
+        return Synthesis()
+
     response = await send_to_provider(config, render_synthesis_prompt(material), timeout=timeout, otari=otari)
 
     if not response.success:

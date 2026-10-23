@@ -57,7 +57,7 @@ class TestSelectSynthesizer:
     def test_picks_the_first_member_that_answered(self):
         configs = (_config("openai"), _config("anthropic"), _config("gemini"))
 
-        chosen = select_synthesizer(configs, ["anthropic", "gemini"])
+        chosen = select_synthesizer(configs, [1, 2])
 
         assert chosen is not None
         assert chosen.provider == "anthropic"
@@ -65,18 +65,17 @@ class TestSelectSynthesizer:
     def test_follows_roster_order_not_answer_order(self):
         configs = (_config("openai"), _config("anthropic"))
 
-        chosen = select_synthesizer(configs, ["anthropic", "openai"])
+        chosen = select_synthesizer(configs, [1, 0])
 
         assert chosen is not None
         assert chosen.provider == "openai"
 
-    def test_matches_on_display_name(self):
-        configs = (_config("openai", display_name="scribe"),)
+    def test_tells_two_members_apart_that_share_a_provider_and_have_no_display_name(self):
+        configs = (_config("openai"), _config("openai"))
 
-        chosen = select_synthesizer(configs, ["scribe"])
+        chosen = select_synthesizer(configs, [1])
 
-        assert chosen is not None
-        assert chosen.display_name == "scribe"
+        assert chosen is configs[1]
 
     def test_returns_none_when_nobody_answered(self):
         configs = (_config("openai"), _config("anthropic"))
@@ -137,6 +136,18 @@ class TestSynthesize:
         assert result.text == ""
         assert result.error is not None
         assert result.error.provider == "openai"
+
+
+class TestSynthesizeWithNothingToAssess:
+    async def test_asks_nobody_when_the_material_is_blank(self):
+        send = AsyncMock()
+
+        with patch("star_chamber.synthesis.send_to_provider", send):
+            result = await synthesize("   \n  ", _config("openai"))
+
+        assert send.await_count == 0
+        assert result.text == ""
+        assert result.error is None
 
 
 class TestCodeReviewMaterial:

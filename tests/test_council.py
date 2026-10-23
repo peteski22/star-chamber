@@ -1265,7 +1265,7 @@ class TestDesignConsensusRecommendation:
 class TestSessionSynthesis:
     """The closing assessment is written by a member, not assembled from the members."""
 
-    async def _failing(self, material: str, answered: Sequence[str]) -> Synthesis:
+    async def _failing(self, material: str, answered: Sequence[int]) -> Synthesis:
         return Synthesis(error=ProviderError(provider="openai", error="Timeout."))
 
     def test_code_review_carries_what_the_member_wrote(self):
@@ -1306,7 +1306,7 @@ class TestSessionSynthesis:
     def test_the_material_withholds_member_names(self):
         seen: list[str] = []
 
-        async def recording(material: str, answered: Sequence[str]) -> Synthesis:
+        async def recording(material: str, answered: Sequence[int]) -> Synthesis:
             seen.append(material)
             return Synthesis(text=SYNTHESIS)
 
@@ -1321,9 +1321,9 @@ class TestSessionSynthesis:
         assert "anthropic" not in seen[0]
 
     def test_only_the_members_that_answered_are_offered_as_authors(self):
-        seen: list[Sequence[str]] = []
+        seen: list[Sequence[int]] = []
 
-        async def recording(material: str, answered: Sequence[str]) -> Synthesis:
+        async def recording(material: str, answered: Sequence[int]) -> Synthesis:
             seen.append(answered)
             return Synthesis(text=SYNTHESIS)
 
@@ -1334,7 +1334,7 @@ class TestSessionSynthesis:
 
         build_code_review_result(responses, files_reviewed=("app.py",), synthesizer=recording)
 
-        assert list(seen[0]) == ["anthropic"]
+        assert list(seen[0]) == [1]
 
 
 class TestRunCouncilSynthesis:

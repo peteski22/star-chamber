@@ -267,11 +267,11 @@ After the final round, one member writes the `summary.synthesis` the output carr
 
 **Author.** The orchestrator MUST ask the first member of the configured roster that returned usable output, so one roster always asks the same member. A council whose members all failed is asked for nothing.
 
-**Material.** The orchestrator MUST pass each answering member's own summary, and MAY pass the ratings, recommendations, and the concerns or approaches already grouped by agreement level. It MUST NOT pass a member display name.
+**Material.** The orchestrator MUST pass each answering member's own summary, and MAY pass the ratings, recommendations, and the concerns or approaches already grouped by agreement level. It MUST NOT pass a member display name. Where the material is empty, no member is asked and `summary.synthesis` is empty, because an author given nothing can only invent.
 
 **Result.** The assessment MUST be 1-2 sentences of prose, and MUST NOT be assembled from the members' own summaries. Where the author returns nothing usable, `summary.synthesis` MUST be empty and `summary.synthesis_error` MUST name the member asked and the reason. A concatenation of the members' summaries is not a synthesis and MUST NOT stand in for one.
 
-**Cost.** The assessment costs one model call beyond the fan-out.
+**Cost.** The assessment costs one model call beyond the fan-out, and it runs after them, so a session's worst case is the fan-out timeout plus one more. Debate mode pays that second timeout once per round.
 
 ## 8. Response Parsing
 

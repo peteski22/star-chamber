@@ -13,7 +13,7 @@ from star_chamber.types import CodeReviewResult, DesignQuestionResult
 SYNTHESIS = "The members broadly agreed."
 
 
-async def stub_synthesizer(material: str, answered: Sequence[str]) -> Synthesis:
+async def stub_synthesizer(material: str, answered: Sequence[int]) -> Synthesis:
     """Stand in for the member that writes the closing assessment."""
     return Synthesis(text=SYNTHESIS)
 

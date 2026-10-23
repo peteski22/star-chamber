@@ -56,17 +56,20 @@ async def _build_code_review_result(
     reviews: list[ProviderReview] = []
     failed: list[ProviderError] = []
     providers_used: list[str] = []
+    answered: list[int] = []
 
-    for response in responses:
+    for position, response in enumerate(responses):
         providers_used.append(response.display_name)
         if not response.success:
             failed.append(ProviderError(provider=response.display_name, error=response.error))
             continue
         try:
             review = parse_code_review(response.content, response.display_name, response.model)
-            reviews.append(review)
         except ParseError as exc:
             failed.append(ProviderError(provider=response.display_name, error=str(exc)))
+            continue
+        reviews.append(review)
+        answered.append(position)
 
     # Classify issues across all successful reviews.
     classification = classify(reviews, threshold=threshold)
@@ -74,10 +77,7 @@ async def _build_code_review_result(
     # Build quality ratings map.
     quality_ratings = {r.provider: r.quality_rating for r in reviews}
 
-    synthesis = await synthesizer(
-        render_code_review_material(reviews, classification),
-        [r.provider for r in reviews],
-    )
+    synthesis = await synthesizer(render_code_review_material(reviews, classification), answered)
 
     total_issues = (
         len(classification.consensus_issues)
@@ -128,24 +128,24 @@ async def _build_design_result(
     advices: list[ProviderDesignAdvice] = []
     failed: list[ProviderError] = []
     providers_used: list[str] = []
+    answered: list[int] = []
 
-    for response in responses:
+    for position, response in enumerate(responses):
         providers_used.append(response.display_name)
         if not response.success:
             failed.append(ProviderError(provider=response.display_name, error=response.error))
             continue
         try:
             advice = parse_design_advice(response.content, response.display_name, response.model)
-            advices.append(advice)
         except ParseError as exc:
             failed.append(ProviderError(provider=response.display_name, error=str(exc)))
+            continue
+        advices.append(advice)
+        answered.append(position)
 
     approaches = aggregate_approaches(advices)
 
-    synthesis = await synthesizer(
-        render_design_material(advices, approaches),
-        [a.provider for a in advices],
-    )
+    synthesis = await synthesizer(render_design_material(advices, approaches), answered)
 
     return DesignQuestionResult(
         mode="design-question",
@@ -231,7 +231,7 @@ async def run_council(
         otari=resolved_otari,
     )
 
-    async def synthesizer(material: str, answered: Sequence[str]) -> Synthesis:
+    async def synthesizer(material: str, answered: Sequence[int]) -> Synthesis:
         """Ask the roster's chosen member for the closing assessment."""
         member = select_synthesizer(resolved_providers, answered)
         if member is None:

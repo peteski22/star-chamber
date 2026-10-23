@@ -59,7 +59,7 @@ def _design_body() -> str:
     )
 
 
-async def _failing_synthesizer(material: str, answered: Sequence[str]) -> Synthesis:
+async def _failing_synthesizer(material: str, answered: Sequence[int]) -> Synthesis:
     """Stand in for a member that was asked for an assessment and did not answer."""
     return Synthesis(error=ProviderError(provider="openai", error="Timeout."))
 

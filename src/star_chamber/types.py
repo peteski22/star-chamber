@@ -69,12 +69,16 @@ class CouncilConfig:
         timeout_seconds: Per-provider timeout in seconds.
         consensus_threshold: Minimum providers that must agree for consensus.
         otari: Optional otari routing for non-local providers.
+        synthesis: Whether to ask a member for the session's closing
+            assessment. False spends no call on one and leaves the summary
+            saying none was requested.
     """
 
     providers: tuple[ProviderConfig, ...]
     timeout_seconds: int = 60
     consensus_threshold: int = 2
     otari: OtariConfig | None = None
+    synthesis: bool = True
 
 
 @dataclass(frozen=True)

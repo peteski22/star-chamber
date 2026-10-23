@@ -216,7 +216,7 @@ Results are sorted by severity within each bucket.
 
 Every session ends with a short overall assessment in `summary.synthesis`. One member writes it, and it is not assembled from the members' own summaries. The author is the first member in config order that answered, so the same roster always asks the same member, and the material it reads carries no member name, so the assessment cannot attribute a point to a member.
 
-`summary.synthesized_by` names the member asked, so you can check the author against the rule above. This costs one model call beyond the fan-out, so a council of three providers makes four calls per session. The call runs after the fan-out and uses the same `timeout_seconds`, so a session's worst-case wall time is two timeouts rather than one, and a debate pays the second one per round. When the author returns nothing usable, `summary.synthesis` is empty and `summary.synthesis_error` names the member asked and the reason.
+`summary.synthesized_by` names the member asked, so you can check the author against the rule above. Set `"synthesis": false` in the config, or pass `--no-synthesis`, to skip it and spend no call on it. This costs one model call beyond the fan-out, so a council of three providers makes four calls per session. The call runs after the fan-out and uses the same `timeout_seconds`, so a session's worst-case wall time is two timeouts rather than one, and a debate pays the second one per round. When the author returns nothing usable, `summary.synthesis` is empty and `summary.synthesis_error` names the member asked and the reason.
 
 ## License
 

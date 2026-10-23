@@ -110,6 +110,27 @@ class TestReviewCommand:
         assert result.exit_code == 0
         assert f"Summary: {SYNTHESIS}" in result.output
 
+    def test_review_no_synthesis_skips_the_summary_and_its_call(self, tmp_path: Path) -> None:
+        src = tmp_path / "hello.py"
+        src.write_text("print('hello')\n")
+
+        responses = [_success_response("openai", "gpt-4o", _code_review_json())]
+        send = AsyncMock()
+
+        with (
+            patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
+            patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
+            patch("star_chamber.synthesis.send_to_provider", send),
+        ):
+            runner = CliRunner()
+            result = runner.invoke(main, ["review", "--no-synthesis", str(src)])
+
+        assert result.exit_code == 0
+        assert send.await_count == 0
+        assert "Summary:" not in result.output
+        assert "No summary:" not in result.output
+
     def test_review_says_which_member_owed_a_summary(self, tmp_path: Path) -> None:
         src = tmp_path / "hello.py"
         src.write_text("print('hello')\n")

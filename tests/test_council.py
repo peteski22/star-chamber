@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from collections.abc import Sequence
 from unittest.mock import AsyncMock, patch
@@ -1363,6 +1364,27 @@ class TestRunCouncilSynthesis:
         assert send.await_count == 1
         assert send.await_args.args[0].provider == "anthropic"
         assert result.summary.synthesis == "Agreed."
+
+    async def test_asks_nobody_when_the_council_declined_the_assessment(self) -> None:
+        responses = [_success_response("openai", "gpt-4o", _code_review_json())]
+        send = AsyncMock()
+        declined = dataclasses.replace(_TWO_PROVIDER_CONFIG, synthesis=False)
+
+        with (
+            patch("star_chamber.council.resolve_api_keys", return_value=declined.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
+            patch("star_chamber.synthesis.send_to_provider", send),
+        ):
+            result = await run_council(
+                files={"app.py": "x = 1"},
+                config=declined,
+                mode="code-review",
+            )
+
+        assert send.await_count == 0
+        assert result.summary.synthesis == ""
+        assert result.summary.synthesis_error is None
+        assert result.summary.synthesized_by is None
 
     async def test_asks_nobody_when_no_member_answered(self) -> None:
         responses = [_error_response("openai", "gpt-4o", "Timeout.")]

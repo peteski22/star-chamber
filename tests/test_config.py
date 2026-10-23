@@ -9,6 +9,7 @@ import pytest
 from star_chamber.config import ConfigError, _default_config_path, load_config
 from star_chamber.schema import get_schema
 from star_chamber.transport import DEFAULT_MAX_TOKENS
+from star_chamber.types import CouncilConfig, ProviderConfig
 
 TESTDATA = Path(__file__).parent / "testdata"
 
@@ -141,6 +142,20 @@ class TestDefaults:
         assert cfg.timeout_seconds == 60
         assert cfg.consensus_threshold == 2
         assert cfg.otari is None
+        assert cfg.synthesis is True
+
+    def test_synthesis_can_be_declined(self, tmp_path) -> None:
+        declined = tmp_path / "declined.json"
+        declined.write_text(json.dumps({"providers": [{"provider": "openai", "model": "gpt-4o"}], "synthesis": False}))
+
+        assert load_config(declined).synthesis is False
+
+    def test_non_boolean_synthesis_raises(self, tmp_path) -> None:
+        bad = tmp_path / "bad_synthesis.json"
+        bad.write_text(json.dumps({"providers": [{"provider": "openai", "model": "gpt-4o"}], "synthesis": "no"}))
+
+        with pytest.raises(ConfigError, match="'synthesis' must be true or false"):
+            load_config(bad)
 
     def test_default_config_path(self, monkeypatch) -> None:
         # When STAR_CHAMBER_CONFIG is set, use it.
@@ -258,3 +273,9 @@ class TestDocumentedDefaults:
         schema = json.loads(get_schema("provider-config"))
 
         assert schema["properties"]["max_tokens"]["default"] == DEFAULT_MAX_TOKENS
+
+    def test_the_schema_states_whether_a_session_asks_for_a_synthesis(self) -> None:
+        schema = json.loads(get_schema("council-config"))
+        loaded = CouncilConfig(providers=(ProviderConfig(provider="openai", model="gpt-4o"),))
+
+        assert schema["properties"]["synthesis"]["default"] is loaded.synthesis

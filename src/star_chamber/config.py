@@ -166,9 +166,15 @@ def load_config(path: Path | None = None) -> CouncilConfig:
         raise ConfigError(msg)
     otari = _parse_otari(otari_raw) if otari_raw is not None else None
 
+    synthesis = raw.get("synthesis", True)
+    if not isinstance(synthesis, bool):
+        msg = f"'synthesis' must be true or false in {path}"
+        raise ConfigError(msg)
+
     return CouncilConfig(
         providers=providers,
         timeout_seconds=raw.get("timeout_seconds", 60),
         consensus_threshold=raw.get("consensus_threshold", 2),
         otari=otari,
+        synthesis=synthesis,
     )

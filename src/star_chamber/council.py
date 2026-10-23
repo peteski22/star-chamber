@@ -181,7 +181,7 @@ async def run_council(
 
     NOTE: The closing assessment costs one model call beyond the fan-out, and
     it runs after them, so the worst-case wall time is two timeouts rather than
-    one.
+    one. A config that turns the assessment off spends neither.
 
     Args:
         files: Mapping of file paths to source content (required for code-review mode).
@@ -240,7 +240,7 @@ async def run_council(
 
     async def synthesizer(material: str, answered: Sequence[ProviderConfig]) -> Synthesis:
         """Ask the earliest member that answered for the closing assessment."""
-        if not answered:
+        if not config.synthesis or not answered:
             return Synthesis()
         return await synthesize(
             material,

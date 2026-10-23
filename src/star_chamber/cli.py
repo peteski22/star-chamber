@@ -159,6 +159,12 @@ def main() -> None:
 @click.option("--config", "config_path", type=click.Path(), default=None, help="Path to providers.json.")
 @click.option("--timeout", type=int, default=None, help="Per-provider timeout in seconds.")
 @click.option(
+    "--no-synthesis",
+    is_flag=True,
+    default=False,
+    help="Skip the closing assessment, saving one model call per session.",
+)
+@click.option(
     "--context-file",
     type=click.Path(exists=True),
     default=None,
@@ -177,6 +183,7 @@ def review(
     providers: tuple[str, ...],
     config_path: str | None,
     timeout: int | None,
+    no_synthesis: bool,
     context_file: str | None,
     council_context: str | None,
     output: str | None,
@@ -197,21 +204,14 @@ def review(
         if not filtered:
             click.echo(f"Error: no configured providers match: {', '.join(providers)}", err=True)
             sys.exit(2)
-        config = CouncilConfig(
-            providers=filtered,
-            timeout_seconds=config.timeout_seconds,
-            consensus_threshold=config.consensus_threshold,
-            otari=config.otari,
-        )
+        config = dataclasses.replace(config, providers=filtered)
 
     # Override timeout if specified.
     if timeout is not None:
-        config = CouncilConfig(
-            providers=config.providers,
-            timeout_seconds=timeout,
-            consensus_threshold=config.consensus_threshold,
-            otari=config.otari,
-        )
+        config = dataclasses.replace(config, timeout_seconds=timeout)
+
+    if no_synthesis:
+        config = dataclasses.replace(config, synthesis=False)
 
     # Read context file if provided.
     context = ""
@@ -255,6 +255,12 @@ def review(
 @click.option("--config", "config_path", type=click.Path(), default=None, help="Path to providers.json.")
 @click.option("--timeout", type=int, default=None, help="Per-provider timeout in seconds.")
 @click.option(
+    "--no-synthesis",
+    is_flag=True,
+    default=False,
+    help="Skip the closing assessment, saving one model call per session.",
+)
+@click.option(
     "--context-file",
     type=click.Path(exists=True),
     default=None,
@@ -273,6 +279,7 @@ def ask(
     providers: tuple[str, ...],
     config_path: str | None,
     timeout: int | None,
+    no_synthesis: bool,
     context_file: str | None,
     council_context: str | None,
     output: str | None,
@@ -293,21 +300,14 @@ def ask(
         if not filtered:
             click.echo(f"Error: no configured providers match: {', '.join(providers)}", err=True)
             sys.exit(2)
-        config = CouncilConfig(
-            providers=filtered,
-            timeout_seconds=config.timeout_seconds,
-            consensus_threshold=config.consensus_threshold,
-            otari=config.otari,
-        )
+        config = dataclasses.replace(config, providers=filtered)
 
     # Override timeout if specified.
     if timeout is not None:
-        config = CouncilConfig(
-            providers=config.providers,
-            timeout_seconds=timeout,
-            consensus_threshold=config.consensus_threshold,
-            otari=config.otari,
-        )
+        config = dataclasses.replace(config, timeout_seconds=timeout)
+
+    if no_synthesis:
+        config = dataclasses.replace(config, synthesis=False)
 
     # Read context file if provided.
     context = ""

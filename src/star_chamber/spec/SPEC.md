@@ -275,6 +275,8 @@ After the final round, one member writes the `summary.synthesis` the output carr
 
 **Cost.** The assessment costs one model call beyond the fan-out, and it runs after them, so a session's worst case is the fan-out timeout plus one more. Debate mode pays that second timeout once per round.
 
+**Declining it.** An orchestrator MUST honor a council configured with `synthesis` false by asking no member and spending no call. The output then carries the same empty assessment and null failure as a session where none was requested for any other reason, because none was.
+
 ## 8. Response Parsing
 
 ### Algorithm

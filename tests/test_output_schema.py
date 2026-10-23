@@ -8,15 +8,18 @@ from __future__ import annotations
 
 import dataclasses
 import json
+from collections.abc import Sequence
 from importlib.resources import files
 
 import jsonschema
 import pytest
 
-from star_chamber.council import _build_code_review_result, _build_design_result
 from star_chamber.parsing import extract_json
 from star_chamber.schema import get_schema
+from star_chamber.synthesis import Synthesis
 from star_chamber.transport import ProviderResponse
+from star_chamber.types import ProviderError
+from tests.helpers import SYNTHESIS, build_code_review_result, build_design_result
 
 # The schema each example's recorded provider bodies answer to, keyed by example package.
 _EXAMPLE_BODY_SCHEMAS = {
@@ -56,6 +59,11 @@ def _design_body() -> str:
     )
 
 
+async def _failing_synthesizer(material: str, answered: Sequence[str]) -> Synthesis:
+    """Stand in for a member that was asked for an assessment and did not answer."""
+    return Synthesis(error=ProviderError(provider="openai", error="Timeout."))
+
+
 _ISSUE = {
     "severity": "high",
     "location": "app.py:10",
@@ -72,31 +80,48 @@ class TestCodeReviewOutput:
             ProviderResponse("anthropic", "anthropic", "claude-3", True, _review_body([_ISSUE])),
             ProviderResponse("gemini", "gemini", "g-2", False, error="Timeout."),
         ]
-        result = _build_code_review_result(responses, files_reviewed=("app.py",))
+        result = build_code_review_result(responses, files_reviewed=("app.py",))
 
         jsonschema.validate(_as_document(result), schema)
 
     def test_empty_result_validates(self, schema):
-        result = _build_code_review_result([], files_reviewed=())
+        result = build_code_review_result([], files_reviewed=())
 
         jsonschema.validate(_as_document(result), schema)
 
     def test_summary_carries_counts_and_synthesis(self, schema):
         responses = [ProviderResponse("openai", "openai", "gpt-4o", True, _review_body([_ISSUE]))]
-        result = _build_code_review_result(responses, files_reviewed=("app.py",))
+        result = build_code_review_result(responses, files_reviewed=("app.py",))
         document = _as_document(result)
 
         jsonschema.validate(document, schema)
         assert document["summary"]["total_issues"] == 1
         assert document["summary"]["consensus_count"] == 1
         assert document["summary"]["majority_count"] == 0
-        assert document["summary"]["synthesis"] == "Solid overall."
+        assert document["summary"]["synthesis"] == SYNTHESIS
 
     def test_files_reviewed_is_emitted(self, schema):
-        result = _build_code_review_result([], files_reviewed=("b.py", "a.py"))
+        result = build_code_review_result([], files_reviewed=("b.py", "a.py"))
 
         jsonschema.validate(_as_document(result), schema)
         assert _as_document(result)["files_reviewed"] == ["b.py", "a.py"]
+
+    def test_summary_carries_a_null_synthesis_error_when_the_synthesis_arrived(self, schema):
+        responses = [ProviderResponse("openai", "openai", "gpt-4o", True, _review_body())]
+        result = build_code_review_result(responses, files_reviewed=("app.py",))
+        document = _as_document(result)
+
+        jsonschema.validate(document, schema)
+        assert document["summary"]["synthesis_error"] is None
+
+    def test_summary_carries_the_member_that_owed_a_synthesis(self, schema):
+        responses = [ProviderResponse("openai", "openai", "gpt-4o", True, _review_body())]
+        result = build_code_review_result(responses, files_reviewed=("app.py",), synthesizer=_failing_synthesizer)
+        document = _as_document(result)
+
+        jsonschema.validate(document, schema)
+        assert document["summary"]["synthesis"] == ""
+        assert document["summary"]["synthesis_error"] == {"provider": "openai", "error": "Timeout."}
 
 
 class TestDesignOutput:
@@ -105,22 +130,22 @@ class TestDesignOutput:
             ProviderResponse("openai", "openai", "gpt-4o", True, _design_body()),
             ProviderResponse("anthropic", "anthropic", "claude-3", False, error="Timeout."),
         ]
-        result = _build_design_result(responses, prompt="Which data layer?")
+        result = build_design_result(responses, prompt="Which data layer?")
 
         jsonschema.validate(_as_document(result), schema)
 
     def test_empty_result_validates(self, schema):
-        result = _build_design_result([], prompt="Which data layer?")
+        result = build_design_result([], prompt="Which data layer?")
 
         jsonschema.validate(_as_document(result), schema)
 
     def test_summary_carries_synthesis(self, schema):
         responses = [ProviderResponse("openai", "openai", "gpt-4o", True, _design_body())]
-        result = _build_design_result(responses, prompt="Which data layer?")
+        result = build_design_result(responses, prompt="Which data layer?")
         document = _as_document(result)
 
         jsonschema.validate(document, schema)
-        assert document["summary"]["synthesis"] == "Repository fits best."
+        assert document["summary"]["synthesis"] == SYNTHESIS
 
     def test_absent_consensus_recommendation_validates(self, schema):
         """Providers that disagree leave consensus_recommendation null."""
@@ -140,7 +165,7 @@ class TestDesignOutput:
                 ),
             ),
         ]
-        result = _build_design_result(responses, prompt="Which data layer?")
+        result = build_design_result(responses, prompt="Which data layer?")
 
         assert result.consensus_recommendation is None
         jsonschema.validate(_as_document(result), schema)
@@ -162,7 +187,7 @@ class TestDesignOutput:
                 ),
             )
         ]
-        result = _build_design_result(responses, prompt="Which data layer?")
+        result = build_design_result(responses, prompt="Which data layer?")
 
         assert result.approaches[0].fit_rating is None
         jsonschema.validate(_as_document(result), schema)
@@ -177,7 +202,7 @@ class TestReviewsItems:
 
     def _document(self) -> dict:
         responses = [ProviderResponse("openai", "openai", "gpt-4o", True, _review_body([_ISSUE]))]
-        return _as_document(_build_code_review_result(responses, files_reviewed=("app.py",)))
+        return _as_document(build_code_review_result(responses, files_reviewed=("app.py",)))
 
     def test_every_field_of_a_real_review_is_declared(self, schema):
         document = self._document()
@@ -220,7 +245,7 @@ class TestReviewsItems:
 
     def test_design_output_may_not_carry_reviews(self, schema):
         responses = [ProviderResponse("openai", "openai", "gpt-4o", True, _design_body())]
-        document = _as_document(_build_design_result(responses, prompt="Which data layer?"))
+        document = _as_document(build_design_result(responses, prompt="Which data layer?"))
         document["reviews"] = []
 
         with pytest.raises(jsonschema.ValidationError):

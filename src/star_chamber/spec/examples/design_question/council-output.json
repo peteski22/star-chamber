@@ -87,6 +87,7 @@
     }
   ],
   "summary": {
-    "synthesis": "For a team of 3 with Django expertise and no event sourcing experience, CRUD with a dedicated audit log table is the pragmatic choice. The order volume (1000/day) doesn't justify the complexity of event sourcing. If the recommendation engine later needs an event stream, you can publish domain events from the CRUD layer without fully adopting event sourcing. CRUD with domain events strikes the best balance: it leverages the team's Django expertise, provides an audit trail, and creates the event stream the recommendation engine will need — all without the complexity of full event sourcing. Use Django signals to publish order events to a Celery queue, and store audit snapshots in a dedicated table. This positions you to evolve toward event sourcing incrementally if scale demands it."
+    "synthesis": "The council rejected event sourcing for this volume and team, and converged on CRUD with a recorded audit trail. It divided over how far to go now: one side would publish domain events immediately, the other would keep a plain audit table until a consumer exists.",
+    "synthesis_error": null
   }
 }

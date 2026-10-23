@@ -114,8 +114,7 @@ async def send_to_provider(
         A ProviderResponse indicating success or failure.  A reply the provider
         cut short, or withheld, is a failure rather than partial content.
     """
-    # The output identity: the configured display name, or the provider name.
-    identity = config.display_name or config.provider
+    identity = config.identity
 
     try:
         import any_llm  # noqa: F811

@@ -171,6 +171,7 @@
     "total_issues": 5,
     "consensus_count": 2,
     "majority_count": 0,
-    "synthesis": "All three providers identified the SHA-256 password hashing as a critical security flaw and the undefined auth_service as a runtime bug. Individual observations covered token storage, return value consistency, and missing docstrings."
+    "synthesis": "The council agreed on two blocking defects: password hashing that is unsuitable for passwords, and a variable referenced before it exists. The remaining concerns were raised singly and cover token storage, return value consistency, and missing docstrings.",
+    "synthesis_error": null
   }
 }

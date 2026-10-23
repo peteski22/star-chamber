@@ -9,6 +9,7 @@ from click.testing import CliRunner
 from star_chamber.cli import main
 from star_chamber.transport import ProviderResponse
 from star_chamber.types import CouncilConfig, OtariConfig, ProviderConfig
+from tests.helpers import SYNTHESIS
 
 # ---------------------------------------------------------------------------
 # Fixtures.
@@ -107,7 +108,28 @@ class TestReviewCommand:
             result = runner.invoke(main, ["review", str(src)])
 
         assert result.exit_code == 0
-        assert "Looks solid overall" in result.output
+        assert f"Summary: {SYNTHESIS}" in result.output
+
+    def test_review_says_which_member_owed_a_summary(self, tmp_path: Path):
+        src = tmp_path / "hello.py"
+        src.write_text("print('hello')\n")
+
+        responses = [_success_response("openai", "gpt-4o", _code_review_json())]
+        refusal = ProviderResponse(
+            provider="openai", display_name="openai", model="gpt-4o", success=False, error="Timeout."
+        )
+
+        with (
+            patch("star_chamber.cli._load_config", return_value=_TWO_PROVIDER_CONFIG),
+            patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.synthesis.send_to_provider", new_callable=AsyncMock, return_value=refusal),
+        ):
+            runner = CliRunner()
+            result = runner.invoke(main, ["review", str(src)])
+
+        assert result.exit_code == 0
+        assert "No summary: openai: Timeout." in result.output
 
     def test_review_format_json(self, tmp_path: Path):
         src = tmp_path / "app.py"

@@ -58,6 +58,16 @@ class TestProviderConfig:
         assert pc.local is True
         assert pc.display_name == "primary"
 
+    def test_identity_is_the_display_name_when_one_is_set(self):
+        pc = ProviderConfig(provider="openai", model="gpt-4", display_name="primary")
+
+        assert pc.identity == "primary"
+
+    def test_identity_falls_back_to_the_provider_name(self):
+        pc = ProviderConfig(provider="openai", model="gpt-4")
+
+        assert pc.identity == "openai"
+
     def test_defaults(self):
         pc = ProviderConfig(provider="anthropic", model="claude-3")
         assert pc.api_key is None

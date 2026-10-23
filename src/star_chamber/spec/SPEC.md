@@ -1,10 +1,10 @@
-# Council Protocol Specification v0.1
+# Council Protocol Specification v0.5
 
 This document specifies the portable council deliberation protocol — the invocation modes, prompt templates, response parsing, consensus classification, and output format that any orchestrator can implement independently.
 
 The orchestrator-specific implementation for Claude Code lives in `plugins/pragma/skills/star-chamber/PROTOCOL.md`. That document handles Bash subprocess isolation, `uv run` invocation, temp file management, and other runtime concerns. This spec covers only the portable protocol logic.
 
-**Status:** Draft (v0.1). Breaking changes may occur before v1.0.
+**Status:** Draft (v0.5). Breaking changes may occur before v1.0.
 
 ## Table of Contents
 
@@ -27,7 +27,7 @@ The council protocol defines how multiple LLM providers are queried in parallel,
 
 ### Versioning
 
-This spec follows [Semantic Versioning](https://semver.org/). The current version is **0.4** (pre-stable). The version will advance to 1.0 when the schema and algorithm definitions are considered stable.
+This spec follows [Semantic Versioning](https://semver.org/). The current version is **0.5** (pre-stable). The version will advance to 1.0 when the schema and algorithm definitions are considered stable.
 
 ### Terminology
 
@@ -195,7 +195,7 @@ Provide your advice as structured JSON:
 
 ### 6.1 Parallel Mode (default)
 
-All providers are queried simultaneously in a single round. Responses are collected and passed to the parsing and classification stages.
+All providers are queried simultaneously in a single round. Responses are collected and passed to the parsing and classification stages. One member that answered then writes the session's closing assessment (see [section 7.2](#72-closing-assessment)).
 
 ```
 Prompt → [Provider A] → Response A
@@ -228,6 +228,10 @@ INIT → ROUND_1 → SYNTHESIZE → ROUND_2 → SYNTHESIZE → ... → ROUND_N �
 
 ## 7. Anonymous Synthesis
 
+A synthesis reads across the members and reports on the session, never on a member. The protocol synthesizes at two points: between debate rounds, and once at the end of every session.
+
+### 7.1 Between Rounds
+
 Between debate rounds, the orchestrator creates a single anonymous summary of all responses from the previous round.
 
 ### Rules
@@ -256,6 +260,18 @@ Please provide your perspective on these points. Note where you agree, disagree,
 ```
 
 This approach follows [Chatham House rules](https://www.chathamhouse.org/about-us/chatham-house-rule): information can be used freely, but the identity of the source is not revealed.
+
+### 7.2 Closing Assessment
+
+After the final round, one member writes the `summary.synthesis` the output carries. The rules above apply unchanged: the material it reads carries no member identity, so the assessment cannot attribute a point to a member.
+
+**Author.** The orchestrator MUST ask the first member of the configured roster that returned usable output, so one roster always asks the same member. A council whose members all failed is asked for nothing.
+
+**Material.** The orchestrator MUST pass each answering member's own summary, and MAY pass the ratings, recommendations, and the concerns or approaches already grouped by agreement level. It MUST NOT pass a member display name.
+
+**Result.** The assessment MUST be 1-2 sentences of prose, and MUST NOT be assembled from the members' own summaries. Where the author returns nothing usable, `summary.synthesis` MUST be empty and `summary.synthesis_error` MUST name the member asked and the reason. A concatenation of the members' summaries is not a synthesis and MUST NOT stand in for one.
+
+**Cost.** The assessment costs one model call beyond the fan-out.
 
 ## 8. Response Parsing
 
@@ -342,7 +358,7 @@ The structured output includes:
 - `individual_issues{}`: Issues keyed by member display name.
 - `quality_ratings{}`: Per-member quality rating, keyed by display name.
 - `reviews[]`: Each answering member's parsed review in full, including its raw response text.
-- `summary{}`: Counts (`total_issues`, `consensus_count`, `majority_count`) and `synthesis` (1-2 sentence overall assessment). `total_issues` counts distinct issues across all three buckets.
+- `summary{}`: Counts (`total_issues`, `consensus_count`, `majority_count`), `synthesis` (1-2 sentence overall assessment, written as [section 7.2](#72-closing-assessment) requires, empty when no member wrote one), and `synthesis_error` (the member asked and the reason it wrote none, null otherwise). `total_issues` counts distinct issues across all three buckets.
 - `debate{}` (optional): Debate metadata (rounds_completed, converged).
 
 **Markdown presentation** (for human consumption):
@@ -394,7 +410,7 @@ The structured output includes:
 - `failed_providers[]`: Members that failed or returned malformed responses, by display name.
 - `consensus_recommendation`: High-level directional agreement when every member that answered agrees. Differing specifics count only where a synthesis step establishes the shared direction. Without one the field carries the name of the one approach every member named, and is null otherwise, as section 9.3 requires.
 - `approaches[]`: All approaches mentioned by any provider, with `recommended_by` count, merged pros/cons, `risk_level`, and `fit_rating`. `risk_level` is `unknown` when no provider stated one. `fit_rating` is null when no provider assessed fit for the approach; when providers disagree, use the most common rating.
-- `summary{}`: Contains `synthesis` (1-2 sentence overall assessment).
+- `summary{}`: Contains `synthesis` (1-2 sentence overall assessment, written as [section 7.2](#72-closing-assessment) requires, empty when no member wrote one) and `synthesis_error` (the member asked and the reason it wrote none, null otherwise).
 - `debate{}` (optional): Debate metadata (rounds_completed, converged).
 
 **Markdown presentation:**
@@ -467,6 +483,10 @@ Each provider MAY have a configurable timeout (`timeout_seconds` in the council 
 ### Malformed Response
 
 If a provider returns a response that cannot be parsed (see [section 8](#8-response-parsing)), mark it as failed and continue with other providers.
+
+### Synthesis Failure
+
+If the closing assessment cannot be obtained, report it as [section 7.2](#72-closing-assessment) requires. The rest of the output is unaffected.
 
 ---
 

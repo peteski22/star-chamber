@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from star_chamber.council import _build_code_review_result, _build_design_result, run_council
+from star_chamber.council import run_council
+from star_chamber.synthesis import Synthesis
 from star_chamber.transport import ProviderResponse
 from star_chamber.types import (
     CodeReviewResult,
     CouncilConfig,
     DesignQuestionResult,
     ProviderConfig,
+    ProviderError,
 )
+from tests.helpers import SYNTHESIS, build_code_review_result, build_design_result
 
 # ---------------------------------------------------------------------------
 # Fixtures.
@@ -113,7 +117,7 @@ class TestBuildCodeReviewResult:
             _success_response("anthropic", "claude-3", _code_review_json(issues=[issue_data])),
         ]
 
-        result = _build_code_review_result(responses, files_reviewed=("app.py",), threshold=2)
+        result = build_code_review_result(responses, files_reviewed=("app.py",), threshold=2)
 
         assert isinstance(result.reviews, tuple)
         assert len(result.reviews) == 2
@@ -128,7 +132,7 @@ class TestBuildCodeReviewResult:
             _success_response("anthropic", "claude-3", "not valid json at all"),
         ]
 
-        result = _build_code_review_result(responses, files_reviewed=("app.py",), threshold=2)
+        result = build_code_review_result(responses, files_reviewed=("app.py",), threshold=2)
 
         assert len(result.reviews) == 1
         assert result.reviews[0].provider == "openai"
@@ -142,7 +146,7 @@ class TestBuildCodeReviewResult:
             _error_response("anthropic", "claude-3", "Timeout: provider anthropic did not respond in time."),
         ]
 
-        result = _build_code_review_result(responses, files_reviewed=("app.py",), threshold=2)
+        result = build_code_review_result(responses, files_reviewed=("app.py",), threshold=2)
 
         assert len(result.reviews) == 1
         assert len(result.failed_providers) == 1
@@ -155,7 +159,7 @@ class TestBuildCodeReviewResult:
             _success_response("anthropic", "claude-3", _code_review_json(quality="good")),
         ]
 
-        result = _build_code_review_result(responses, files_reviewed=("app.py",), threshold=2)
+        result = build_code_review_result(responses, files_reviewed=("app.py",), threshold=2)
 
         assert result.quality_ratings["openai"] == "excellent"
         assert result.quality_ratings["anthropic"] == "good"
@@ -173,7 +177,7 @@ class TestBuildDesignQuestionResult:
             _success_response("anthropic", "claude-3", _design_json(recommendation="Use approach B.")),
         ]
 
-        result = _build_design_result(responses, prompt="How should we structure the API?")
+        result = build_design_result(responses, prompt="How should we structure the API?")
 
         assert isinstance(result.approaches, tuple)
         assert len(result.approaches) == 1
@@ -187,7 +191,7 @@ class TestBuildDesignQuestionResult:
             _success_response("anthropic", "claude-3", "garbage response"),
         ]
 
-        result = _build_design_result(responses, prompt="Design question?")
+        result = build_design_result(responses, prompt="Design question?")
 
         assert len(result.approaches) == 1
         assert len(result.failed_providers) == 1
@@ -199,7 +203,7 @@ class TestBuildDesignQuestionResult:
             _success_response("anthropic", "claude-3", _design_json(recommendation="Use Approach A.")),
         ]
 
-        result = _build_design_result(responses, prompt="How to improve perf?")
+        result = build_design_result(responses, prompt="How to improve perf?")
 
         assert result.consensus_recommendation == "Approach A"
 
@@ -209,7 +213,7 @@ class TestBuildDesignQuestionResult:
             _success_response("anthropic", "claude-3", _design_json(recommendation="Optimize queries.")),
         ]
 
-        result = _build_design_result(responses, prompt="How to improve perf?")
+        result = build_design_result(responses, prompt="How to improve perf?")
 
         assert result.consensus_recommendation is None
 
@@ -760,7 +764,7 @@ class TestRosterComplement:
         ],
     )
     def test_code_review_rosters_partition_the_members_asked(self, responses):
-        result = _build_code_review_result(responses, files_reviewed=("app.py",))
+        result = build_code_review_result(responses, files_reviewed=("app.py",))
 
         failed = {f.provider for f in result.failed_providers}
         assert tuple(p for p in result.providers_used if p not in failed) == result.providers_responded
@@ -790,7 +794,7 @@ class TestRosterComplement:
         ],
     )
     def test_design_rosters_partition_the_members_asked(self, responses):
-        result = _build_design_result(responses, prompt="Monorepo?")
+        result = build_design_result(responses, prompt="Monorepo?")
 
         failed = {f.provider for f in result.failed_providers}
         assert tuple(p for p in result.providers_used if p not in failed) == result.providers_responded
@@ -820,7 +824,7 @@ class TestMalformedMemberFailsAlone:
             _success_response("gemini", "gemini-2.0", _code_review_json(issues=[dict(_GOOD_ISSUE)])),
         ]
 
-        result = _build_code_review_result(responses, files_reviewed=("app.py",))
+        result = build_code_review_result(responses, files_reviewed=("app.py",))
 
         assert result.providers_responded == ("openai", "gemini")
         assert [failure.provider for failure in result.failed_providers] == ["anthropic"]
@@ -834,7 +838,7 @@ class TestMalformedMemberFailsAlone:
             _success_response("gemini", "gemini-2.0", _code_review_json(issues=[dict(_GOOD_ISSUE)])),
         ]
 
-        result = _build_code_review_result(responses, files_reviewed=("app.py",))
+        result = build_code_review_result(responses, files_reviewed=("app.py",))
 
         assert len(result.consensus_issues) == 1
         assert result.summary.consensus_count == 1
@@ -854,7 +858,7 @@ class TestMalformedMemberFailsAlone:
             _success_response("anthropic", "claude-opus-5", _design_json(approaches=approaches)),
         ]
 
-        result = _build_design_result(responses, prompt="Which data layer?")
+        result = build_design_result(responses, prompt="Which data layer?")
 
         assert result.providers_responded == ("openai",)
         assert [failure.provider for failure in result.failed_providers] == ["anthropic"]
@@ -863,7 +867,7 @@ class TestMalformedMemberFailsAlone:
         bad = {**_GOOD_ISSUE, "location": None}
         responses = [_success_response("anthropic", "claude-opus-5", _code_review_json(issues=[bad]))]
 
-        result = _build_code_review_result(responses, files_reviewed=("app.py",))
+        result = build_code_review_result(responses, files_reviewed=("app.py",))
 
         assert "location" in result.failed_providers[0].error
         assert "null" in result.failed_providers[0].error
@@ -901,7 +905,7 @@ class TestDesignApproachAggregation:
 
     def _result(self, *bodies: str):
         responses = [_success_response(f"member-{index}", "model", body) for index, body in enumerate(bodies)]
-        return _build_design_result(responses, prompt="Which data layer?")
+        return build_design_result(responses, prompt="Which data layer?")
 
     def test_same_approach_from_two_members_merges(self):
         result = self._result(
@@ -1051,7 +1055,7 @@ class TestDesignAggregationVoting:
 
     def _result(self, *bodies: str):
         responses = [_success_response(f"member-{index}", "model", body) for index, body in enumerate(bodies)]
-        return _build_design_result(responses, prompt="Which data layer?")
+        return build_design_result(responses, prompt="Which data layer?")
 
     def test_provider_naming_an_approach_twice_casts_one_risk_vote(self):
         result = self._result(
@@ -1110,7 +1114,7 @@ class TestDesignApproachNameMatching:
 
     def _result(self, *bodies: str):
         responses = [_success_response(f"member-{index}", "model", body) for index, body in enumerate(bodies)]
-        return _build_design_result(responses, prompt="Which data layer?")
+        return build_design_result(responses, prompt="Which data layer?")
 
     def test_a_name_outside_the_latin_alphabet_is_reported(self):
         result = self._result(_design_json(approaches=[_approach("事件溯源")]))
@@ -1219,7 +1223,7 @@ class TestDesignConsensusRecommendation:
 
     def _result(self, *bodies: str):
         responses = [_success_response(f"member-{index}", "model", body) for index, body in enumerate(bodies)]
-        return _build_design_result(responses, prompt="Which data layer?")
+        return build_design_result(responses, prompt="Which data layer?")
 
     def test_identical_prose_naming_a_shared_approach_reports_the_approach_name(self):
         result = self._result(
@@ -1251,3 +1255,130 @@ class TestDesignConsensusRecommendation:
         )
 
         assert result.consensus_recommendation == "Repository"
+
+
+# ---------------------------------------------------------------------------
+# Session synthesis.
+# ---------------------------------------------------------------------------
+
+
+class TestSessionSynthesis:
+    """The closing assessment is written by a member, not assembled from the members."""
+
+    async def _failing(self, material: str, answered: Sequence[str]) -> Synthesis:
+        return Synthesis(error=ProviderError(provider="openai", error="Timeout."))
+
+    def test_code_review_carries_what_the_member_wrote(self):
+        responses = [_success_response("openai", "gpt-4o", _code_review_json(summary="Member prose."))]
+
+        result = build_code_review_result(responses, files_reviewed=("app.py",))
+
+        assert result.summary.synthesis == SYNTHESIS
+        assert result.summary.synthesis_error is None
+
+    def test_design_carries_what_the_member_wrote(self):
+        responses = [_success_response("openai", "gpt-4o", _design_json(summary="Member prose."))]
+
+        result = build_design_result(responses, prompt="Which data layer?")
+
+        assert result.summary.synthesis == SYNTHESIS
+        assert result.summary.synthesis_error is None
+
+    def test_a_failed_call_leaves_the_assessment_empty_and_names_the_member(self):
+        responses = [_success_response("openai", "gpt-4o", _code_review_json(summary="Member prose."))]
+
+        result = build_code_review_result(responses, files_reviewed=("app.py",), synthesizer=self._failing)
+
+        assert result.summary.synthesis == ""
+        assert result.summary.synthesis_error == ProviderError(provider="openai", error="Timeout.")
+
+    def test_a_failed_call_does_not_fall_back_to_the_member_summaries(self):
+        responses = [
+            _success_response("openai", "gpt-4o", _code_review_json(summary="First prose.")),
+            _success_response("anthropic", "claude-3", _code_review_json(summary="Second prose.")),
+        ]
+
+        result = build_code_review_result(responses, files_reviewed=("app.py",), synthesizer=self._failing)
+
+        assert "First prose." not in result.summary.synthesis
+        assert "Second prose." not in result.summary.synthesis
+
+    def test_the_material_withholds_member_names(self):
+        seen: list[str] = []
+
+        async def recording(material: str, answered: Sequence[str]) -> Synthesis:
+            seen.append(material)
+            return Synthesis(text=SYNTHESIS)
+
+        responses = [
+            _success_response("openai", "gpt-4o", _code_review_json(issues=[_GOOD_ISSUE])),
+            _success_response("anthropic", "claude-3", _code_review_json(issues=[_GOOD_ISSUE])),
+        ]
+
+        build_code_review_result(responses, files_reviewed=("app.py",), synthesizer=recording)
+
+        assert "openai" not in seen[0]
+        assert "anthropic" not in seen[0]
+
+    def test_only_the_members_that_answered_are_offered_as_authors(self):
+        seen: list[Sequence[str]] = []
+
+        async def recording(material: str, answered: Sequence[str]) -> Synthesis:
+            seen.append(answered)
+            return Synthesis(text=SYNTHESIS)
+
+        responses = [
+            _error_response("openai", "gpt-4o", "Timeout."),
+            _success_response("anthropic", "claude-3", _code_review_json()),
+        ]
+
+        build_code_review_result(responses, files_reviewed=("app.py",), synthesizer=recording)
+
+        assert list(seen[0]) == ["anthropic"]
+
+
+class TestRunCouncilSynthesis:
+    async def test_asks_the_first_member_that_answered(self):
+        responses = [
+            _error_response("openai", "gpt-4o", "Timeout."),
+            _success_response("anthropic", "claude-3", _code_review_json()),
+        ]
+        send = AsyncMock(
+            return_value=ProviderResponse(
+                provider="anthropic", display_name="anthropic", model="claude-3", success=True, content="Agreed."
+            )
+        )
+
+        with (
+            patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.synthesis.send_to_provider", send),
+        ):
+            result = await run_council(
+                files={"app.py": "x = 1"},
+                config=_TWO_PROVIDER_CONFIG,
+                mode="code-review",
+            )
+
+        assert send.await_count == 1
+        assert send.await_args.args[0].provider == "anthropic"
+        assert result.summary.synthesis == "Agreed."
+
+    async def test_asks_nobody_when_no_member_answered(self):
+        responses = [_error_response("openai", "gpt-4o", "Timeout.")]
+        send = AsyncMock()
+
+        with (
+            patch("star_chamber.council.resolve_api_keys", return_value=_TWO_PROVIDER_CONFIG.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=responses),
+            patch("star_chamber.synthesis.send_to_provider", send),
+        ):
+            result = await run_council(
+                files={"app.py": "x = 1"},
+                config=_TWO_PROVIDER_CONFIG,
+                mode="code-review",
+            )
+
+        assert send.await_count == 0
+        assert result.summary.synthesis == ""
+        assert result.summary.synthesis_error is None

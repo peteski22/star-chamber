@@ -9,6 +9,14 @@ from star_chamber.config import load_config
 from star_chamber.consensus import aggregate_approaches, classify, consensus_recommendation
 from star_chamber.parsing import ParseError, parse_code_review, parse_design_advice
 from star_chamber.prompt import render_code_review_prompt, render_design_prompt
+from star_chamber.synthesis import (
+    Synthesis,
+    Synthesizer,
+    render_code_review_material,
+    render_design_material,
+    select_synthesizer,
+    synthesize,
+)
 from star_chamber.transport import ProviderResponse, fan_out, resolve_api_keys, resolve_otari
 from star_chamber.types import (
     CodeReviewResult,
@@ -24,10 +32,12 @@ from star_chamber.types import (
 _VALID_MODES = frozenset({"code-review", "design-question"})
 
 
-def _build_code_review_result(
+async def _build_code_review_result(
     responses: Sequence[ProviderResponse],
     files_reviewed: tuple[str, ...],
     threshold: int = 2,
+    *,
+    synthesizer: Synthesizer,
 ) -> CodeReviewResult:
     """Parse responses, classify issues, and build a CodeReviewResult.
 
@@ -35,6 +45,7 @@ def _build_code_review_result(
         responses: Provider responses from the fan-out round.
         files_reviewed: Paths of the files sent for review.
         threshold: Consensus threshold for classification.
+        synthesizer: Writes the session's closing assessment.
 
     Returns:
         A fully populated CodeReviewResult.
@@ -63,9 +74,10 @@ def _build_code_review_result(
     # Build quality ratings map.
     quality_ratings = {r.provider: r.quality_rating for r in reviews}
 
-    # Build summary from individual review summaries.
-    summaries = [r.summary for r in reviews if r.summary]
-    synthesis = " ".join(summaries) if summaries else ""
+    synthesis = await synthesizer(
+        render_code_review_material(reviews, classification),
+        [r.provider for r in reviews],
+    )
 
     total_issues = (
         len(classification.consensus_issues)
@@ -88,20 +100,24 @@ def _build_code_review_result(
             total_issues=total_issues,
             consensus_count=len(classification.consensus_issues),
             majority_count=len(classification.majority_issues),
-            synthesis=synthesis,
+            synthesis=synthesis.text,
+            synthesis_error=synthesis.error,
         ),
     )
 
 
-def _build_design_result(
+async def _build_design_result(
     responses: Sequence[ProviderResponse],
     prompt: str,
+    *,
+    synthesizer: Synthesizer,
 ) -> DesignQuestionResult:
     """Parse responses, aggregate approaches, and build a DesignQuestionResult.
 
     Args:
         responses: Provider responses from the fan-out round.
         prompt: The original design question.
+        synthesizer: Writes the session's closing assessment.
 
     Returns:
         A fully populated DesignQuestionResult.
@@ -126,8 +142,10 @@ def _build_design_result(
 
     approaches = aggregate_approaches(advices)
 
-    summaries = [a.summary for a in advices if a.summary]
-    synthesis = " ".join(summaries) if summaries else ""
+    synthesis = await synthesizer(
+        render_design_material(advices, approaches),
+        [a.provider for a in advices],
+    )
 
     return DesignQuestionResult(
         mode="design-question",
@@ -137,7 +155,7 @@ def _build_design_result(
         failed_providers=tuple(failed),
         approaches=approaches,
         consensus_recommendation=consensus_recommendation(advices, approaches),
-        summary=DesignSummary(synthesis=synthesis),
+        summary=DesignSummary(synthesis=synthesis.text, synthesis_error=synthesis.error),
     )
 
 
@@ -153,7 +171,10 @@ async def run_council(
     """Run a multi-LLM council session.
 
     Orchestrates the full council flow: resolve API keys, build prompt,
-    fan-out to providers, parse responses, and classify/aggregate results.
+    fan-out to providers, parse responses, classify/aggregate results, and ask
+    one member that answered for the session's closing assessment.
+
+    NOTE: The closing assessment costs one model call beyond the fan-out.
 
     Args:
         files: Mapping of file paths to source content (required for code-review mode).
@@ -210,17 +231,31 @@ async def run_council(
         otari=resolved_otari,
     )
 
+    async def synthesizer(material: str, answered: Sequence[str]) -> Synthesis:
+        """Ask the roster's chosen member for the closing assessment."""
+        member = select_synthesizer(resolved_providers, answered)
+        if member is None:
+            return Synthesis()
+        return await synthesize(
+            material,
+            member,
+            timeout=float(config.timeout_seconds),
+            otari=resolved_otari,
+        )
+
     # Build and return the appropriate result type.
     if mode == "code-review":
-        return _build_code_review_result(
+        return await _build_code_review_result(
             responses,
             files_reviewed=tuple(files),  # type: ignore[arg-type]
             threshold=config.consensus_threshold,
+            synthesizer=synthesizer,
         )
 
-    return _build_design_result(
+    return await _build_design_result(
         responses,
         prompt=prompt,
+        synthesizer=synthesizer,
     )
 
 

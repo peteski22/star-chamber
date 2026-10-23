@@ -3,7 +3,7 @@
 from importlib.metadata import PackageNotFoundError, version
 
 from star_chamber.council import run_council, run_council_sync
-from star_chamber.schema import get_schema, list_schemas
+from star_chamber.schema import get_schema, list_schemas, strict_variant
 from star_chamber.types import (
     CodeReviewResult,
     CouncilConfig,
@@ -34,4 +34,5 @@ __all__ = [
     "list_schemas",
     "run_council",
     "run_council_sync",
+    "strict_variant",
 ]

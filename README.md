@@ -43,6 +43,14 @@ Create `~/.config/star-chamber/providers.json`:
 
 API keys can be literal values or `${ENV_VAR}` references that are resolved at runtime.
 
+### Response token budget
+
+`max_tokens` is optional. When it is omitted, a member may spend 16384 tokens on its reply.
+
+The field is a budget for the response, not a property of the model. The value is sent to the provider as given, and no limit is ever read back from one, so there is nothing to look up before adding a member.
+
+A budget that is too low makes the member fail rather than return half a review, and the error names the budget that was reached, so raise it from that number or send fewer files. A budget above what the model permits is rejected by the provider. Omit the field until a member reports a cut-off reply.
+
 ### Provider display names
 
 When several council members share one provider — for example, multiple models behind an OpenAI-compatible gateway such as OpenRouter — give each entry a unique `display_name`. It becomes that member's identity in council output (consensus classification, `flagged_by`, quality ratings, individual issues) and is matched by `--provider` filters. Without it, same-provider members collapse into a single vote and unanimous consensus becomes unreachable:

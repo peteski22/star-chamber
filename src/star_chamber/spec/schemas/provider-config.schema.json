@@ -20,7 +20,7 @@
     },
     "max_tokens": {
       "type": "integer",
-      "description": "Max response tokens.",
+      "description": "Budget in tokens for this member's reply, sent to the provider as given. This is not a capability read from the model: a budget the reply does not fit fails the member with an error naming it, and a budget the model does not permit is rejected by the provider. Omit to use the default.",
       "default": 16384,
       "minimum": 1
     },

@@ -187,7 +187,7 @@
         },
         "synthesis": {
           "type": "string",
-          "description": "1-2 sentence overall synthesis. Empty when no member wrote one."
+          "description": "A short overall synthesis, one or two sentences as asked of its author. Empty when no member wrote one."
         },
         "synthesis_error": {
           "description": "The member asked for the synthesis and why it wrote none. Null when the synthesis is present, and null when no member could be asked.",

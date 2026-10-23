@@ -99,6 +99,21 @@ class TestSynthesize:
         assert result.error is not None
         assert str(MAX_ASSESSMENT_CHARS) in result.error.error
 
+    async def test_keeps_a_reply_that_runs_to_a_third_sentence(self) -> None:
+        reply = ProviderResponse(
+            provider="openai",
+            display_name="openai",
+            model="m",
+            success=True,
+            content="The council agreed. It split on scope. One member would not merge.",
+        )
+
+        with patch("star_chamber.synthesis.send_to_provider", new_callable=AsyncMock, return_value=reply):
+            result = await synthesize("material", _config("openai"))
+
+        assert result.text == "The council agreed. It split on scope. One member would not merge."
+        assert result.error is None
+
     async def test_reduces_a_reply_to_one_line(self) -> None:
         reply = ProviderResponse(
             provider="openai",

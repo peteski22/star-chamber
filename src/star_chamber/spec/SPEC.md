@@ -67,10 +67,12 @@ Provider configuration defines which LLM providers the council consults and how 
 | `provider` | Yes | Provider name (e.g., `openai`, `anthropic`, `llamafile`, `ollama`). |
 | `model` | Yes | Model identifier (e.g., `gpt-4o`, `claude-sonnet-4-20250514`). |
 | `api_key` | No | API key or `${ENV_VAR}` reference. Omit when routing through Otari or for keyless local providers. |
-| `max_tokens` | No | Max response tokens. Default: 16384. |
+| `max_tokens` | No | Budget in tokens for this member's reply, sent to the provider as given. Not a capability read from the model. Default: 16384. |
 | `api_base` | No | Custom base URL. Use for local/self-hosted LLMs. Omit for cloud providers — SDKs use built-in defaults. |
 | `local` | No | Set to `true` for local/self-hosted providers. Default: `false`. |
 | `display_name` | No | Unique identity for this member in council output, used in place of the provider name. Lets several entries share one provider (e.g. an OpenAI-compatible gateway) while staying distinct voters. Defaults to the provider name. |
+
+`max_tokens` is a budget, so an orchestrator neither reads a limit from the model nor checks the value against one. A budget the reply does not fit is reported by the orchestrator, and a budget the model does not permit is reported by the provider.
 
 ### API Key Resolution
 

@@ -14,7 +14,8 @@ class ProviderConfig:
         model: Model name to use with this provider.
         api_key: Optional API key override.
         api_base: Optional base URL override.
-        max_tokens: Optional maximum token limit.
+        max_tokens: Optional budget in tokens for this provider's reply, rather
+            than a capability read from the model.
         local: Whether this provider runs locally.
         display_name: Optional unique identity for council output, used in
             place of the provider name. Lets multiple entries share one

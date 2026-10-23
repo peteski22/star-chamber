@@ -7,6 +7,8 @@ from unittest.mock import patch
 import pytest
 
 from star_chamber.config import ConfigError, _default_config_path, load_config
+from star_chamber.schema import get_schema
+from star_chamber.transport import DEFAULT_MAX_TOKENS
 
 TESTDATA = Path(__file__).parent / "testdata"
 
@@ -243,3 +245,16 @@ class TestProviderDisplayName:
 
         with pytest.raises(ConfigError, match="display_name"):
             load_config(path)
+
+
+class TestDocumentedDefaults:
+    """The shipped schema states the defaults a config author reads.
+
+    A stated default that drifts from the code teaches the wrong number to
+    every author who omits the field, and nothing else would catch it.
+    """
+
+    def test_the_schema_states_the_max_tokens_budget_the_transport_applies(self):
+        schema = json.loads(get_schema("provider-config"))
+
+        assert schema["properties"]["max_tokens"]["default"] == DEFAULT_MAX_TOKENS

@@ -623,6 +623,7 @@ class TestCodeReviewResult:
             "majority_issues",
             "individual_issues",
             "quality_ratings",
+            "spec_version",
             "summary",
         }
         assert set(data.keys()) == expected_keys
@@ -693,6 +694,7 @@ class TestDesignQuestionResult:
             "failed_providers",
             "approaches",
             "consensus_recommendation",
+            "spec_version",
             "summary",
         }
         assert set(data.keys()) == expected_keys

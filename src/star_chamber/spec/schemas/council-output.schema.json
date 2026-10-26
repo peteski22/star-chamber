@@ -11,6 +11,10 @@
       "enum": ["code-review", "design-question"],
       "description": "Invocation mode."
     },
+    "spec_version": {
+      "type": "string",
+      "description": "The council protocol version that produced this document. A consumer compares it with the version its own instructions were written against, and when this one is newer it renders the document and reports that its field-level reading is unverified. An absent value means the document was produced before 0.7. A consumer must not select behavior per field for a version newer than the one it was written against, and may do so for a version at or below that, because those are a closed set this protocol documents. The schema constrains the value no further than a string on purpose, because a consumer that rejected the document could not read the field that tells it to be careful."
+    },
     "files_reviewed": {
       "type": "array",
       "description": "List of reviewed file paths (code-review mode).",

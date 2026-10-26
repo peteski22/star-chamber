@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from star_chamber.spec import SPEC_VERSION
 
 
 @dataclass(frozen=True)
@@ -276,6 +278,10 @@ class CodeReviewResult:
         individual_issues: Issues keyed by provider name.
         quality_ratings: Quality ratings keyed by provider name.
         summary: Counts and prose for the session.
+        spec_version: The protocol version that produced this document, for a
+            consumer to compare against the version its instructions were
+            written against. Not a constructor argument, because a document
+            states the version its producer implements and no other.
     """
 
     mode: str
@@ -289,6 +295,7 @@ class CodeReviewResult:
     individual_issues: dict[str, tuple[Issue, ...]]
     quality_ratings: dict[str, str]
     summary: CodeReviewSummary
+    spec_version: str = field(default=SPEC_VERSION, init=False)
 
 
 @dataclass(frozen=True)
@@ -305,6 +312,10 @@ class DesignQuestionResult:
         approaches: Aggregated design approaches.
         consensus_recommendation: Recommendation all providers agreed on.
         summary: Prose for the session.
+        spec_version: The protocol version that produced this document, for a
+            consumer to compare against the version its instructions were
+            written against. Not a constructor argument, because a document
+            states the version its producer implements and no other.
     """
 
     mode: str
@@ -315,3 +326,4 @@ class DesignQuestionResult:
     approaches: tuple[Approach, ...]
     summary: DesignSummary
     consensus_recommendation: str | None = None
+    spec_version: str = field(default=SPEC_VERSION, init=False)

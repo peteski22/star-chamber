@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import dataclasses
 import json
+import re
 from collections.abc import Iterator, Sequence
 from importlib.resources import files
 from typing import Any
@@ -20,6 +21,7 @@ import pytest
 
 from star_chamber.parsing import extract_json
 from star_chamber.schema import get_schema, list_schemas, strict_variant
+from star_chamber.spec import SPEC_VERSION
 from star_chamber.synthesis import Synthesis
 from star_chamber.transport import ProviderResponse
 from star_chamber.types import ProviderConfig, ProviderError
@@ -39,6 +41,13 @@ _RECEIVED_SCHEMAS = sorted(set(list_schemas()) - {"council-output"})
 
 # A key no spec declares, used to find an object the derivation failed to reach.
 _CANARY = "a_key_no_spec_declares"
+
+# Every form in which SPEC.md states its own version, each capturing that version.
+_VERSION_STATEMENTS = {
+    "heading": r"# Council Protocol Specification v([0-9]+\.[0-9]+)",
+    "status": r"\*\*Status:\*\* Draft \(v([0-9]+\.[0-9]+)\)",
+    "versioning": r"current version is \*\*([0-9]+\.[0-9]+)\*\*",
+}
 
 # Keywords the spec forbids the derivation from entering, because a subschema
 # they hold constrains the same instance as the schema that carries it.
@@ -600,3 +609,113 @@ class TestCompositionReach:
         for rule in published["allOf"]:
             summary = rule.get("then", {}).get("properties", {}).get("summary", {})
             assert set(summary.get("required", [])) <= declared
+
+
+class TestSpecVersion:
+    """Output carries the protocol version so a consumer can tell its reading is stale.
+
+    The field is optional, because a document without it predates the field and
+    that absence is the answer rather than missing data.
+    """
+
+    @pytest.mark.parametrize("document_name", sorted(_STRICT_DOCUMENTS))
+    def test_the_producer_emits_the_version_it_implements(
+        self,
+        schema: dict[str, Any],
+        document_name: str,
+    ) -> None:
+        document = _STRICT_DOCUMENTS[document_name]()
+
+        jsonschema.validate(document, schema)
+        assert document["spec_version"] == SPEC_VERSION
+
+    def test_a_document_without_a_version_still_validates(self, published: dict[str, Any]) -> None:
+        """A consumer reads the absence, so the schema must not require the field."""
+        document = _as_document(build_code_review_result([], files_reviewed=()))
+        del document["spec_version"]
+
+        jsonschema.validate(document, published)
+        jsonschema.validate(document, strict_variant(published))
+
+    def test_the_version_is_constrained_no_further_than_a_string(self, published: dict[str, Any]) -> None:
+        """A pattern here would let a consumer reject the document that says it is stale."""
+        declared = published["properties"]["spec_version"]
+
+        assert declared["type"] == "string"
+        assert set(declared) == {"description", "type"}
+
+    def test_a_version_the_schema_has_never_seen_is_accepted(self, published: dict[str, Any]) -> None:
+        document = _as_document(build_code_review_result([], files_reviewed=()))
+        document["spec_version"] = "99.1"
+
+        jsonschema.validate(document, published)
+        jsonschema.validate(document, strict_variant(published))
+
+
+class TestSpecVersionAgreement:
+    """Every statement of the protocol version has to agree with the others.
+
+    The spec states its version in three places and the package states it in a
+    fourth. A release that advances one and not the rest leaves a document
+    claiming a version whose rules it was not built from, and nothing about the
+    document reveals it.
+    """
+
+    def _spec(self) -> str:
+        return files("star_chamber.spec").joinpath("SPEC.md").read_text(encoding="utf-8")
+
+    @pytest.mark.parametrize("template", sorted(_VERSION_STATEMENTS))
+    def test_the_spec_states_the_version_the_package_implements(self, template: str) -> None:
+        assert re.search(_VERSION_STATEMENTS[template], self._spec()) is not None
+
+    def test_the_spec_states_no_other_version_of_itself(self) -> None:
+        """A stale statement left beside a new one is the failure this guards against."""
+        spec = self._spec()
+        stated = {version for pattern in _VERSION_STATEMENTS.values() for version in re.findall(pattern, spec)}
+
+        assert stated == {SPEC_VERSION}
+
+    @pytest.mark.parametrize("package", sorted(_EXAMPLE_BODY_SCHEMAS))
+    def test_a_shipped_example_claims_the_current_version(self, package: str) -> None:
+        assert _shipped_example(package)["spec_version"] == SPEC_VERSION
+
+
+class TestDocumentedFields:
+    """Section 10 of the spec is the field list a second orchestrator implements from.
+
+    A field the schema declares and that section omits is emitted by nobody who
+    works from the spec, and a field that section describes and the schema does
+    not declare is rejected by every consumer. Either way the two artifacts
+    disagree and only a reader of both would notice.
+    """
+
+    def _documented(self, heading: str) -> set[str]:
+        """Return the field names one output section lists, without their shape suffix."""
+        spec = files("star_chamber.spec").joinpath("SPEC.md").read_text(encoding="utf-8")
+        body = spec.split(heading, 1)[1].split("**Markdown presentation", 1)[0]
+        return {name.rstrip("[]{}") for name in re.findall(r"^- `([^`]+)`", body, re.MULTILINE)}
+
+    def _declared(self, published: dict[str, Any]) -> dict[str, set[str]]:
+        """Return the field names the schema declares for each mode."""
+        every = set(published["properties"])
+        declared = {}
+        for rule in published["allOf"]:
+            mode = rule["if"]["properties"]["mode"]["const"]
+            withheld = {entry["required"][0] for entry in rule["then"]["not"]["anyOf"]}
+            declared[mode] = every - withheld
+        return declared
+
+    @pytest.mark.parametrize(
+        ("heading", "mode"),
+        [
+            ("### 10.1 Code Review Output", "code-review"),
+            ("### 10.2 Design Question Output", "design-question"),
+        ],
+    )
+    def test_the_spec_lists_every_field_the_schema_declares(
+        self,
+        published: dict[str, Any],
+        heading: str,
+        mode: str,
+    ) -> None:
+        assert self._documented(heading) == self._declared(published)[mode]

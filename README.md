@@ -143,9 +143,13 @@ star-chamber schema list
 star-chamber schema code-review-result
 ```
 
+Output carries `spec_version`, the protocol version that produced the document, which `star_chamber.SPEC_VERSION` also states. Compare it with the version your own handling was written against. When the document is newer, still render it, and say that it came from a newer protocol version so your field-level reading is unverified. Do not pick behavior per field for a version above the one you were written against, because such a rule goes stale without announcing it; picking behavior for a version at or below yours is fine, since those are documented. A document with no `spec_version` was produced before 0.7.
+
 `council-output` is published open: its fixed objects state no `additionalProperties`, so validating a document against this copy accepts output from a newer producer instead of rejecting it on fields the copy predates. The maps keyed by member name, `individual_issues` and `quality_ratings`, still constrain the shape of their values. Every other schema describes input the council receives and stays closed.
 
-Validating against the published copy therefore no longer catches a field this package should not have emitted. The producer is held to a strict variant derived from the published schema, so a released document still carries nothing the schema does not declare. A consumer wanting the same check runs the same derivation:
+Validating against the published copy therefore no longer catches a field this package should not have emitted. The producer is held to a strict variant derived from the published schema, so a released document still carries nothing the schema does not declare.
+
+The derivation below is a producer-side check. A consumer that applies it to its own pinned copy of the schema gives up the forward compatibility the open schema provides, and gives up the staleness guard with it: a document is then rejected on the newer field, including on `spec_version` itself, before anything can read the field that says the document is newer. Derive the strict variant to check output you produced, not output you received.
 
 ```python
 import json

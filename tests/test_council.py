@@ -107,9 +107,9 @@ def _error_response(provider: str, model: str, error: str, display_name: str | N
 class TestBuildCodeReviewResult:
     def test_successful_two_providers(self) -> None:
         issue_data = {
-            "severity": "warning",
+            "severity": "medium",
             "location": "main.py:10",
-            "category": "style",
+            "category": "craftsmanship",
             "description": "Missing docstring.",
             "suggestion": "Add a docstring.",
         }
@@ -227,9 +227,9 @@ class TestBuildDesignQuestionResult:
 class TestRunCouncilCodeReview:
     async def test_successful_code_review(self) -> None:
         issue_data = {
-            "severity": "warning",
+            "severity": "medium",
             "location": "app.py:5",
-            "category": "style",
+            "category": "craftsmanship",
             "description": "Unused import.",
             "suggestion": "Remove the import.",
         }
@@ -299,7 +299,7 @@ class TestRunCouncilCodeReview:
         issue_data = {
             "severity": "high",
             "location": "auth.py:15",
-            "category": "security",
+            "category": "architecture",
             "description": "SQL injection risk.",
             "suggestion": "Use parameterized queries.",
         }
@@ -319,7 +319,7 @@ class TestRunCouncilCodeReview:
             )
 
         assert len(result.consensus_issues) == 1
-        assert result.consensus_issues[0].category == "security"
+        assert result.consensus_issues[0].category == "architecture"
 
     async def test_parse_error_becomes_failed_provider(self) -> None:
         mock_responses = [
@@ -645,7 +645,7 @@ class TestAnsweringRoster:
         issue_data = {
             "severity": "high",
             "location": "app.py:5",
-            "category": "style",
+            "category": "craftsmanship",
             "description": "Unused import.",
             "suggestion": "Remove the import.",
         }

@@ -3,8 +3,72 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 from star_chamber.spec import SPEC_VERSION
+
+
+class Ranked(StrEnum):
+    """A closed set whose declaration order carries meaning."""
+
+    @property
+    def rank(self) -> int:
+        """Position in declaration order, so an ordered set needs no table beside it."""
+        return list(type(self)).index(self)
+
+
+class Severity(Ranked):
+    """How urgent an issue is. Declared most urgent first, which is the order issues sort in."""
+
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class IssueCategory(StrEnum):
+    """What kind of concern an issue raises."""
+
+    ARCHITECTURE = "architecture"
+    CORRECTNESS = "correctness"
+    CRAFTSMANSHIP = "craftsmanship"
+    INVARIANTS = "invariants"
+    MAINTAINABILITY = "maintainability"
+
+
+class QualityRating(StrEnum):
+    """A member's verdict on the code it reviewed."""
+
+    EXCELLENT = "excellent"
+    FAIR = "fair"
+    GOOD = "good"
+    NEEDS_WORK = "needs-work"
+
+
+class RiskLevel(Ranked):
+    """How risky an approach is. Declared most cautious first, which is how a tie resolves.
+
+    NOTE: UNKNOWN is the council's own value for an approach no member rated.
+    A member may not send it.
+    """
+
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    UNKNOWN = "unknown"
+
+    @property
+    def stated(self) -> bool:
+        """Whether a member stated this level, which UNKNOWN reports that none did."""
+        return self is not RiskLevel.UNKNOWN
+
+
+class FitRating(Ranked):
+    """How well an approach fits the project. Declared most cautious first, which is how a tie resolves."""
+
+    POOR = "poor"
+    FAIR = "fair"
+    GOOD = "good"
+    EXCELLENT = "excellent"
 
 
 @dataclass(frozen=True)
@@ -88,16 +152,16 @@ class Issue:
     """A single review issue.
 
     Attributes:
-        severity: Issue severity level (e.g. "error", "warning").
+        severity: How urgent the issue is.
         location: File and line location string.
-        category: Issue category (e.g. "security", "style", "bug").
+        category: What kind of concern the issue raises.
         description: Human-readable description of the issue.
         suggestion: Suggested fix or improvement.
     """
 
-    severity: str
+    severity: Severity
     location: str
-    category: str
+    category: IssueCategory
     description: str
     suggestion: str
 
@@ -107,18 +171,18 @@ class MajorityIssue:
     """An issue flagged by multiple (but not all) providers.
 
     Attributes:
-        severity: Issue severity level.
+        severity: How urgent the issue is.
         location: File and line location string.
-        category: Issue category.
+        category: What kind of concern the issue raises.
         description: Human-readable description of the issue.
         suggestion: Suggested fix or improvement.
         provider_count: Number of providers that flagged this issue.
         flagged_by: Names of providers that flagged this issue.
     """
 
-    severity: str
+    severity: Severity
     location: str
-    category: str
+    category: IssueCategory
     description: str
     suggestion: str
     provider_count: int
@@ -156,7 +220,7 @@ class ProviderReview:
     Attributes:
         provider: Name of the provider.
         model: Model used for this review.
-        quality_rating: Overall quality rating string.
+        quality_rating: This member's verdict on the code it reviewed.
         issues: Tuple of issues found by this provider.
         praise: Tuple of positive observations.
         summary: Provider's summary of the review.
@@ -165,7 +229,7 @@ class ProviderReview:
 
     provider: str
     model: str
-    quality_rating: str
+    quality_rating: QualityRating
     issues: tuple[Issue, ...]
     praise: tuple[str, ...]
     summary: str
@@ -181,8 +245,8 @@ class Approach:
         recommended_by: Number of providers recommending this approach.
         pros: Tuple of advantages.
         cons: Tuple of disadvantages.
-        risk_level: Risk assessment string.
-        fit_rating: Fitness rating, or None where none was stated.
+        risk_level: How risky the approach is.
+        fit_rating: How well the approach fits, or None where none was stated.
 
     NOTE: fit_rating has no default. A site that failed to state it would claim
     nobody rated the approach, which is what a null here reports.
@@ -192,8 +256,8 @@ class Approach:
     recommended_by: int
     pros: tuple[str, ...]
     cons: tuple[str, ...]
-    risk_level: str
-    fit_rating: str | None
+    risk_level: RiskLevel
+    fit_rating: FitRating | None
 
 
 @dataclass(frozen=True)

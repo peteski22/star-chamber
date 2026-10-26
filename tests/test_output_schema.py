@@ -868,6 +868,63 @@ class TestDocumentedFields:
         assert self._documented(heading) == self._declared(published)[mode]
 
 
+class TestMemberVocabulary:
+    """A member answering in its own vocabulary cannot make the document non-conformant.
+
+    That member is recorded as a failure instead, so the document still
+    validates against the copy a consumer holds.
+    """
+
+    def test_a_review_outside_the_protocol_s_sets_fails_its_member(
+        self,
+        published: dict[str, Any],
+        schema: dict[str, Any],
+    ) -> None:
+        body = json.dumps(
+            {
+                "quality_rating": "solid",
+                "issues": [
+                    {
+                        "severity": "critical",
+                        "location": "app.py:1",
+                        "category": "security",
+                        "description": "Off-by-one.",
+                        "suggestion": "Use <=.",
+                    }
+                ],
+                "praise": [],
+                "summary": "Fine.",
+            }
+        )
+        responses = [ProviderResponse("openai", "openai", "gpt-4o", True, body)]
+        document = _as_document(build_code_review_result(responses, files_reviewed=("app.py",)))
+
+        jsonschema.validate(document, published)
+        jsonschema.validate(document, schema)
+        assert document["providers_responded"] == []
+        assert "quality_rating" in document["failed_providers"][0]["error"]
+
+    def test_advice_outside_the_protocol_s_sets_fails_its_member(
+        self,
+        published: dict[str, Any],
+        schema: dict[str, Any],
+    ) -> None:
+        body = json.dumps(
+            {
+                "recommendation": "Use a repository.",
+                "approaches": [{"name": "Repository", "risk_level": "severe", "fit_rating": "great"}],
+                "summary": "Fine.",
+            }
+        )
+        responses = [ProviderResponse("openai", "openai", "gpt-4o", True, body)]
+        document = _as_document(build_design_result(responses, prompt="Which data layer?"))
+
+        jsonschema.validate(document, published)
+        jsonschema.validate(document, schema)
+        assert document["providers_responded"] == []
+        assert "risk_level" in document["failed_providers"][0]["error"]
+
+
 class TestFailureKeepsTheReply:
     """A failed member's reply reaches the output document, which is its only copy.
 

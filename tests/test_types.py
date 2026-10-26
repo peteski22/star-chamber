@@ -160,23 +160,23 @@ class TestOtariConfig:
 class TestIssue:
     def test_all_fields_set(self) -> None:
         issue = Issue(
-            severity="error",
+            severity="high",
             location="main.py:10",
-            category="security",
+            category="architecture",
             description="SQL injection",
             suggestion="Use parameterised queries",
         )
-        assert issue.severity == "error"
+        assert issue.severity == "high"
         assert issue.location == "main.py:10"
-        assert issue.category == "security"
+        assert issue.category == "architecture"
         assert issue.description == "SQL injection"
         assert issue.suggestion == "Use parameterised queries"
 
     def test_frozen(self) -> None:
         issue = Issue(
-            severity="error",
+            severity="high",
             location="main.py:10",
-            category="security",
+            category="architecture",
             description="SQL injection",
             suggestion="Use parameterised queries",
         )
@@ -185,9 +185,9 @@ class TestIssue:
 
     def test_json_round_trip(self) -> None:
         issue = Issue(
-            severity="warning",
+            severity="medium",
             location="utils.py:42",
-            category="style",
+            category="craftsmanship",
             description="Long line",
             suggestion="Break the line",
         )
@@ -202,23 +202,23 @@ class TestIssue:
 class TestMajorityIssue:
     def test_all_fields_set(self) -> None:
         mi = MajorityIssue(
-            severity="error",
+            severity="high",
             location="app.py:5",
-            category="bug",
+            category="correctness",
             description="Null deref",
             suggestion="Add null check",
             provider_count=2,
             flagged_by=("openai", "anthropic"),
         )
-        assert mi.severity == "error"
+        assert mi.severity == "high"
         assert mi.provider_count == 2
         assert mi.flagged_by == ("openai", "anthropic")
 
     def test_frozen(self) -> None:
         mi = MajorityIssue(
-            severity="error",
+            severity="high",
             location="app.py:5",
-            category="bug",
+            category="correctness",
             description="Null deref",
             suggestion="Add null check",
             provider_count=2,
@@ -229,9 +229,9 @@ class TestMajorityIssue:
 
     def test_json_round_trip(self) -> None:
         mi = MajorityIssue(
-            severity="warning",
+            severity="medium",
             location="x.py:1",
-            category="perf",
+            category="maintainability",
             description="Slow loop",
             suggestion="Vectorise",
             provider_count=3,
@@ -283,9 +283,9 @@ class TestProviderReview:
             quality_rating="good",
             issues=(
                 Issue(
-                    severity="warning",
+                    severity="medium",
                     location="a.py:1",
-                    category="style",
+                    category="craftsmanship",
                     description="bad name",
                     suggestion="rename",
                 ),
@@ -470,16 +470,16 @@ class TestProviderDesignAdvice:
 class TestClassificationResult:
     def test_all_fields_set(self) -> None:
         issue = Issue(
-            severity="error",
+            severity="high",
             location="x.py:1",
-            category="bug",
+            category="correctness",
             description="desc",
             suggestion="fix",
         )
         mi = MajorityIssue(
-            severity="warning",
+            severity="medium",
             location="y.py:2",
-            category="style",
+            category="craftsmanship",
             description="desc2",
             suggestion="fix2",
             provider_count=2,
@@ -505,9 +505,9 @@ class TestClassificationResult:
 
     def test_json_round_trip(self) -> None:
         issue = Issue(
-            severity="error",
+            severity="high",
             location="z.py:3",
-            category="sec",
+            category="invariants",
             description="vuln",
             suggestion="patch",
         )
@@ -543,16 +543,16 @@ class TestCodeReviewResult:
     @pytest.fixture()
     def result(self):
         issue = Issue(
-            severity="error",
+            severity="high",
             location="m.py:1",
-            category="bug",
+            category="correctness",
             description="crash",
             suggestion="fix it",
         )
         mi = MajorityIssue(
-            severity="warning",
+            severity="medium",
             location="m.py:2",
-            category="style",
+            category="craftsmanship",
             description="naming",
             suggestion="rename",
             provider_count=2,

@@ -4,9 +4,23 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from collections.abc import Iterable
+from enum import StrEnum
+from typing import Any, TypeVar
 
-from star_chamber.types import Approach, Issue, ProviderDesignAdvice, ProviderReview
+from star_chamber.types import (
+    Approach,
+    FitRating,
+    Issue,
+    IssueCategory,
+    ProviderDesignAdvice,
+    ProviderReview,
+    QualityRating,
+    RiskLevel,
+    Severity,
+)
+
+_ChoiceT = TypeVar("_ChoiceT", bound=StrEnum)
 
 # Matches ```json ... ``` or ``` ... ``` code blocks.
 _CODE_BLOCK_RE = re.compile(r"```(?:json)?\s*\n(.*?)\n```", re.DOTALL)
@@ -15,6 +29,9 @@ _CODE_BLOCK_RE = re.compile(r"```(?:json)?\s*\n(.*?)\n```", re.DOTALL)
 _OPEN_FENCE_RE = re.compile(r"^\s*```(?:json)?\s*\n")
 
 _JSON_START_RE = re.compile(r"[{\[]")
+
+# The risk levels a member may send. UNKNOWN is the council's own value for a level nobody stated.
+_MEMBER_RISK_LEVELS = tuple(level for level in RiskLevel if level.stated)
 
 # JSON shape names, so a parse failure describes what the provider sent in protocol terms.
 _JSON_TYPE_NAMES: dict[type, str] = {
@@ -30,6 +47,29 @@ _JSON_TYPE_NAMES: dict[type, str] = {
 
 class ParseError(Exception):
     """Raised when response parsing fails."""
+
+
+def _choose(text: str, field: str, context: str, permitted: Iterable[_ChoiceT]) -> _ChoiceT:
+    """Return the permitted value the text names.
+
+    Args:
+        text: What the member sent.
+        field: Field name, as the protocol spells it.
+        context: Where the field sits, for the error message.
+        permitted: The values a member may send.
+
+    Returns:
+        The permitted value the text names.
+
+    Raises:
+        ParseError: If the text names no permitted value.
+    """
+    allowed = tuple(permitted)
+    for value in allowed:
+        if text == value:
+            return value
+    msg = f"Field {field} in {context} must be one of {', '.join(allowed)}, got {text!r}"
+    raise ParseError(msg)
 
 
 def _describe_unparsable(content: str) -> str:
@@ -87,6 +127,58 @@ def _object_list(container: dict[str, Any], field: str, context: str) -> list[di
             msg = f"Every entry of {field} in {context} must be an object, got {_json_type_name(item)}"
             raise ParseError(msg)
     return value
+
+
+def _optional_choice(
+    container: dict[str, Any],
+    field: str,
+    context: str,
+    permitted: Iterable[_ChoiceT],
+    default: _ChoiceT,
+) -> _ChoiceT:
+    """Return a closed-set field, or ``default`` when absent.
+
+    Args:
+        container: Decoded JSON object that may hold the field.
+        field: Field name, as the protocol spells it.
+        context: Where the field sits, for the error message.
+        permitted: The values a member may send.
+        default: Value to use when the field is absent.
+
+    Returns:
+        The member the field names, or the default.
+
+    Raises:
+        ParseError: If the field is present and names no permitted value.
+    """
+    if field not in container:
+        return default
+    return _require_choice(container, field, context, permitted)
+
+
+def _optional_choice_or_none(
+    container: dict[str, Any],
+    field: str,
+    context: str,
+    permitted: Iterable[_ChoiceT],
+) -> _ChoiceT | None:
+    """Return a closed-set field that may be null, None when absent or null.
+
+    Args:
+        container: Decoded JSON object that may hold the field.
+        field: Field name, as the protocol spells it.
+        context: Where the field sits, for the error message.
+        permitted: The values a member may send.
+
+    Returns:
+        The member the field names, or None.
+
+    Raises:
+        ParseError: If the field is present and names no permitted value.
+    """
+    if container.get(field) is None:
+        return None
+    return _require_choice(container, field, context, permitted)
 
 
 def _optional_text(container: dict[str, Any], field: str, context: str, default: str) -> str:
@@ -181,6 +273,29 @@ def _optional_whole_number(container: dict[str, Any], field: str, context: str, 
     return value
 
 
+def _require_choice(
+    container: dict[str, Any],
+    field: str,
+    context: str,
+    permitted: Iterable[_ChoiceT],
+) -> _ChoiceT:
+    """Return a required field whose value must name one of a closed set.
+
+    Args:
+        container: Decoded JSON object that should hold the field.
+        field: Field name, as the protocol spells it.
+        context: Where the field sits, for the error message.
+        permitted: The values a member may send, which is not always every member of the set.
+
+    Returns:
+        The member the field names.
+
+    Raises:
+        ParseError: If the field is absent, is not text, or names no permitted value.
+    """
+    return _choose(_require_text(container, field, context), field, context, permitted)
+
+
 def _require_text(container: dict[str, Any], field: str, context: str) -> str:
     """Return a required text field.
 
@@ -266,12 +381,12 @@ def parse_code_review(content: str, provider: str, model: str) -> ProviderReview
     context = f"{provider} response"
     issue_context = f"an issue in {provider} response"
 
-    quality_rating = _require_text(data, "quality_rating", context)
+    quality_rating = _require_choice(data, "quality_rating", context, QualityRating)
     issues = tuple(
         Issue(
-            severity=_require_text(issue, "severity", issue_context),
+            severity=_require_choice(issue, "severity", issue_context, Severity),
             location=_require_text(issue, "location", issue_context),
-            category=_require_text(issue, "category", issue_context),
+            category=_require_choice(issue, "category", issue_context, IssueCategory),
             description=_require_text(issue, "description", issue_context),
             suggestion=_require_text(issue, "suggestion", issue_context),
         )
@@ -329,8 +444,10 @@ def parse_design_advice(content: str, provider: str, model: str) -> ProviderDesi
             recommended_by=_optional_whole_number(approach, "recommended_by", approach_context, 0),
             pros=_optional_text_list(approach, "pros", approach_context),
             cons=_optional_text_list(approach, "cons", approach_context),
-            risk_level=_optional_text(approach, "risk_level", approach_context, "unknown"),
-            fit_rating=_optional_text_or_none(approach, "fit_rating", approach_context),
+            risk_level=_optional_choice(
+                approach, "risk_level", approach_context, _MEMBER_RISK_LEVELS, RiskLevel.UNKNOWN
+            ),
+            fit_rating=_optional_choice_or_none(approach, "fit_rating", approach_context, FitRating),
         )
         for approach in _object_list(data, "approaches", context)
     )

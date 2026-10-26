@@ -716,7 +716,7 @@ class TestRosterOutput:
         issue_data = {
             "severity": "high",
             "location": "app.py:1",
-            "category": "style",
+            "category": "craftsmanship",
             "description": "Unused import.",
             "suggestion": "Remove the import.",
         }

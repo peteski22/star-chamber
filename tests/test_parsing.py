@@ -6,7 +6,17 @@ from pathlib import Path
 import pytest
 
 from star_chamber.parsing import ParseError, extract_json, parse_code_review, parse_design_advice
-from star_chamber.types import Approach, Issue, ProviderDesignAdvice, ProviderReview
+from star_chamber.types import (
+    Approach,
+    FitRating,
+    Issue,
+    IssueCategory,
+    ProviderDesignAdvice,
+    ProviderReview,
+    QualityRating,
+    RiskLevel,
+    Severity,
+)
 
 FIXTURES = Path(__file__).parent / "testdata" / "provider_responses"
 
@@ -343,4 +353,56 @@ class TestDesignFieldTypes:
         assert approach.pros == ()
         assert approach.cons == ()
         assert approach.risk_level == "unknown"
+        assert approach.fit_rating is None
+
+
+# What a member may send for each closed-set field, which is not every member of the set for risk_level.
+_MEMBER_CHOICES = {
+    "category": tuple(IssueCategory),
+    "fit_rating": tuple(FitRating),
+    "quality_rating": tuple(QualityRating),
+    "risk_level": tuple(level for level in RiskLevel if level.stated),
+    "severity": tuple(Severity),
+}
+
+
+def _carrying(field: str, value: object) -> Issue | ProviderReview | Approach:
+    """Parse a reply carrying one value, from whichever shape declares that field."""
+    if field in ("category", "severity"):
+        return _parse_review(_review(issues=[dict(_ISSUE) | {field: value}])).issues[0]
+    if field == "quality_rating":
+        return _parse_review(_review(**{field: value}))
+    return _parse_advice(_advice(approaches=[{"name": "Repository", field: value}])).approaches[0]
+
+
+class TestClosedSets:
+    """Five fields name a closed set, so a member's own vocabulary is a parse failure.
+
+    The council would otherwise report that member as a success and emit a
+    document that fails the schema the package itself ships.
+    """
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [(field, value) for field, values in sorted(_MEMBER_CHOICES.items()) for value in values],
+    )
+    def test_a_value_the_protocol_names_is_accepted(self, field: str, value: str) -> None:
+        assert getattr(_carrying(field, value), field) == value
+
+    @pytest.mark.parametrize("field", sorted(_MEMBER_CHOICES))
+    def test_a_value_outside_the_set_is_rejected(self, field: str) -> None:
+        allowed = ", ".join(_MEMBER_CHOICES[field])
+
+        with pytest.raises(ParseError, match=rf"Field {field} in .* must be one of {allowed}, got 'solid'"):
+            _carrying(field, "solid")
+
+    def test_a_member_may_not_state_the_council_s_own_risk_level(self) -> None:
+        """UNKNOWN reports that no member rated the approach, so no member can claim it."""
+        with pytest.raises(ParseError, match=r"Field risk_level in .* must be one of high, medium, low, got 'unknown'"):
+            _carrying("risk_level", RiskLevel.UNKNOWN.value)
+
+    def test_an_unrated_approach_keeps_the_council_s_own_risk_level(self) -> None:
+        approach = _parse_advice(_advice(approaches=[{"name": "Repository"}])).approaches[0]
+
+        assert approach.risk_level is RiskLevel.UNKNOWN
         assert approach.fit_rating is None

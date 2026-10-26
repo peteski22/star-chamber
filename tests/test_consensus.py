@@ -6,7 +6,7 @@ from star_chamber.consensus import (
     _parse_location,
     classify,
 )
-from star_chamber.types import Issue, ProviderReview
+from star_chamber.types import Issue, IssueCategory, ProviderReview, QualityRating, Severity
 
 # ---------------------------------------------------------------------------
 # Test helpers.
@@ -17,7 +17,7 @@ def _review(provider: str, issues: list[Issue], rating: str = "good") -> Provide
     return ProviderReview(
         provider=provider,
         model="test-model",
-        quality_rating=rating,
+        quality_rating=QualityRating(rating),
         issues=tuple(issues),
         praise=(),
         summary="test summary",
@@ -26,10 +26,11 @@ def _review(provider: str, issues: list[Issue], rating: str = "good") -> Provide
 
 
 def _issue(location: str, category: str, severity: str = "high") -> Issue:
+    """Build an issue from the wire spellings, so a fixture outside the protocol's sets fails here."""
     return Issue(
-        severity=severity,
+        severity=Severity(severity),
         location=location,
-        category=category,
+        category=IssueCategory(category),
         description=f"Issue at {location}",
         suggestion=f"Fix {category}",
     )
@@ -61,48 +62,48 @@ class TestParseLocation:
 
 class TestIssueKey:
     def test_basic_key(self) -> None:
-        issue = _issue("auth.py:10", "security")
-        assert _issue_key(issue) == ("auth.py", (10, 10), "security")
+        issue = _issue("auth.py:10", "architecture")
+        assert _issue_key(issue) == ("auth.py", (10, 10), "architecture")
 
     def test_key_without_line(self) -> None:
-        issue = _issue("auth.py", "security")
-        assert _issue_key(issue) == ("auth.py", None, "security")
+        issue = _issue("auth.py", "architecture")
+        assert _issue_key(issue) == ("auth.py", None, "architecture")
 
 
 class TestIssuesMatch:
     def test_exact_match(self) -> None:
-        key_a = ("auth.py", (10, 10), "security")
-        key_b = ("auth.py", (10, 10), "security")
+        key_a = ("auth.py", (10, 10), "architecture")
+        key_b = ("auth.py", (10, 10), "architecture")
         assert _issues_match(key_a, key_b) is True
 
     def test_within_tolerance(self) -> None:
-        key_a = ("auth.py", (10, 10), "security")
-        key_b = ("auth.py", (15, 15), "security")
+        key_a = ("auth.py", (10, 10), "architecture")
+        key_b = ("auth.py", (15, 15), "architecture")
         assert _issues_match(key_a, key_b) is True
 
     def test_beyond_tolerance(self) -> None:
-        key_a = ("auth.py", (10, 10), "security")
-        key_b = ("auth.py", (16, 16), "security")
+        key_a = ("auth.py", (10, 10), "architecture")
+        key_b = ("auth.py", (16, 16), "architecture")
         assert _issues_match(key_a, key_b) is False
 
     def test_different_category(self) -> None:
-        key_a = ("auth.py", (10, 10), "security")
-        key_b = ("auth.py", (10, 10), "style")
+        key_a = ("auth.py", (10, 10), "architecture")
+        key_b = ("auth.py", (10, 10), "craftsmanship")
         assert _issues_match(key_a, key_b) is False
 
     def test_different_file(self) -> None:
-        key_a = ("auth.py", (10, 10), "security")
-        key_b = ("models.py", (10, 10), "security")
+        key_a = ("auth.py", (10, 10), "architecture")
+        key_b = ("models.py", (10, 10), "architecture")
         assert _issues_match(key_a, key_b) is False
 
     def test_absent_spans_match(self) -> None:
-        key_a = ("auth.py", None, "security")
-        key_b = ("auth.py", None, "security")
+        key_a = ("auth.py", None, "architecture")
+        key_b = ("auth.py", None, "architecture")
         assert _issues_match(key_a, key_b) is True
 
     def test_one_absent_span_no_match(self) -> None:
-        key_a = ("auth.py", None, "security")
-        key_b = ("auth.py", (10, 10), "security")
+        key_a = ("auth.py", None, "architecture")
+        key_b = ("auth.py", (10, 10), "architecture")
         assert _issues_match(key_a, key_b) is False
 
 
@@ -113,7 +114,7 @@ class TestIssuesMatch:
 
 class TestClassify:
     def test_all_providers_agree_is_consensus(self) -> None:
-        issue = _issue("auth.py:10", "security")
+        issue = _issue("auth.py:10", "architecture")
         reviews = [
             _review("openai", [issue]),
             _review("anthropic", [issue]),
@@ -123,13 +124,13 @@ class TestClassify:
         result = classify(reviews)
 
         assert len(result.consensus_issues) == 1
-        assert result.consensus_issues[0].category == "security"
+        assert result.consensus_issues[0].category == "architecture"
         assert result.consensus_issues[0].location == "auth.py:10"
         assert len(result.majority_issues) == 0
         assert len(result.individual_issues) == 0
 
     def test_two_of_three_is_majority(self) -> None:
-        issue = _issue("auth.py:10", "security")
+        issue = _issue("auth.py:10", "architecture")
         reviews = [
             _review("openai", [issue]),
             _review("anthropic", [issue]),
@@ -146,7 +147,7 @@ class TestClassify:
         assert len(result.individual_issues) == 0
 
     def test_single_provider_is_individual(self) -> None:
-        issue = _issue("auth.py:10", "security")
+        issue = _issue("auth.py:10", "architecture")
         reviews = [
             _review("openai", [issue]),
             _review("anthropic", []),
@@ -159,25 +160,25 @@ class TestClassify:
         assert len(result.majority_issues) == 0
         assert "openai" in result.individual_issues
         assert len(result.individual_issues["openai"]) == 1
-        assert result.individual_issues["openai"][0].category == "security"
+        assert result.individual_issues["openai"][0].category == "architecture"
 
     def test_line_tolerance_groups_nearby_lines(self) -> None:
         reviews = [
-            _review("openai", [_issue("auth.py:23", "security")]),
-            _review("anthropic", [_issue("auth.py:25", "security")]),
-            _review("gemini", [_issue("auth.py:27", "security")]),
+            _review("openai", [_issue("auth.py:23", "architecture")]),
+            _review("anthropic", [_issue("auth.py:25", "architecture")]),
+            _review("gemini", [_issue("auth.py:27", "architecture")]),
         ]
 
         result = classify(reviews)
 
         # All within +-5 tolerance of each other, so consensus.
         assert len(result.consensus_issues) == 1
-        assert result.consensus_issues[0].category == "security"
+        assert result.consensus_issues[0].category == "architecture"
 
     def test_different_category_not_grouped(self) -> None:
         reviews = [
-            _review("openai", [_issue("auth.py:10", "security")]),
-            _review("anthropic", [_issue("auth.py:10", "style")]),
+            _review("openai", [_issue("auth.py:10", "architecture")]),
+            _review("anthropic", [_issue("auth.py:10", "craftsmanship")]),
         ]
 
         result = classify(reviews)
@@ -190,8 +191,8 @@ class TestClassify:
 
     def test_different_file_not_grouped(self) -> None:
         reviews = [
-            _review("openai", [_issue("auth.py:10", "security")]),
-            _review("anthropic", [_issue("models.py:10", "security")]),
+            _review("openai", [_issue("auth.py:10", "architecture")]),
+            _review("anthropic", [_issue("models.py:10", "architecture")]),
         ]
 
         result = classify(reviews)
@@ -210,14 +211,14 @@ class TestClassify:
         assert result.individual_issues == {}
 
     def test_single_provider(self) -> None:
-        issue = _issue("auth.py:10", "security")
+        issue = _issue("auth.py:10", "architecture")
         reviews = [_review("openai", [issue])]
 
         result = classify(reviews)
 
         # Single provider trivially agrees with itself => consensus.
         assert len(result.consensus_issues) == 1
-        assert result.consensus_issues[0].category == "security"
+        assert result.consensus_issues[0].category == "architecture"
 
     def test_all_providers_no_issues(self) -> None:
         reviews = [
@@ -232,7 +233,7 @@ class TestClassify:
         assert result.individual_issues == {}
 
     def test_consensus_threshold(self) -> None:
-        issue = _issue("auth.py:10", "security")
+        issue = _issue("auth.py:10", "architecture")
         reviews = [
             _review("openai", [issue]),
             _review("anthropic", [issue]),
@@ -251,22 +252,22 @@ class TestClassify:
             _review(
                 "openai",
                 [
-                    _issue("auth.py:10", "security", severity="low"),
-                    _issue("auth.py:20", "bug", severity="high"),
+                    _issue("auth.py:10", "architecture", severity="low"),
+                    _issue("auth.py:20", "correctness", severity="high"),
                 ],
             ),
             _review(
                 "anthropic",
                 [
-                    _issue("auth.py:10", "security", severity="low"),
-                    _issue("auth.py:20", "bug", severity="high"),
+                    _issue("auth.py:10", "architecture", severity="low"),
+                    _issue("auth.py:20", "correctness", severity="high"),
                 ],
             ),
             _review(
                 "gemini",
                 [
-                    _issue("auth.py:10", "security", severity="low"),
-                    _issue("auth.py:20", "bug", severity="high"),
+                    _issue("auth.py:10", "architecture", severity="low"),
+                    _issue("auth.py:20", "correctness", severity="high"),
                 ],
             ),
         ]
@@ -280,11 +281,11 @@ class TestClassify:
 
     def test_multiple_issues_mixed_classification(self) -> None:
         # Issue that all three agree on.
-        consensus_issue = _issue("auth.py:10", "security")
+        consensus_issue = _issue("auth.py:10", "architecture")
         # Issue that two of three agree on.
-        majority_issue = _issue("models.py:30", "bug")
+        majority_issue = _issue("models.py:30", "correctness")
         # Issue from only one provider.
-        individual_issue = _issue("views.py:5", "style")
+        individual_issue = _issue("views.py:5", "craftsmanship")
 
         reviews = [
             _review("openai", [consensus_issue, majority_issue, individual_issue]),
@@ -295,20 +296,20 @@ class TestClassify:
         result = classify(reviews)
 
         assert len(result.consensus_issues) == 1
-        assert result.consensus_issues[0].category == "security"
+        assert result.consensus_issues[0].category == "architecture"
 
         assert len(result.majority_issues) == 1
-        assert result.majority_issues[0].category == "bug"
+        assert result.majority_issues[0].category == "correctness"
         assert result.majority_issues[0].provider_count == 2
 
         assert "openai" in result.individual_issues
         assert len(result.individual_issues["openai"]) == 1
-        assert result.individual_issues["openai"][0].category == "style"
+        assert result.individual_issues["openai"][0].category == "craftsmanship"
 
     def test_line_number_parsing_with_path(self) -> None:
         reviews = [
-            _review("openai", [_issue("backend/app/auth.py:23", "security")]),
-            _review("anthropic", [_issue("backend/app/auth.py:24", "security")]),
+            _review("openai", [_issue("backend/app/auth.py:23", "architecture")]),
+            _review("anthropic", [_issue("backend/app/auth.py:24", "architecture")]),
         ]
 
         result = classify(reviews)
@@ -333,9 +334,9 @@ class TestLabelledGatewayMembers:
 
     def test_distinct_labels_are_distinct_voters(self) -> None:
         reviews = [
-            _review("gpt-5.2", [_issue("app.py:10", "bug")]),
-            _review("gemini-3.1-pro", [_issue("app.py:12", "bug")]),
-            _review("grok-4.3", [_issue("app.py:11", "bug")]),
+            _review("gpt-5.2", [_issue("app.py:10", "correctness")]),
+            _review("gemini-3.1-pro", [_issue("app.py:12", "correctness")]),
+            _review("grok-4.3", [_issue("app.py:11", "correctness")]),
         ]
 
         result = classify(reviews, threshold=2)
@@ -345,9 +346,9 @@ class TestLabelledGatewayMembers:
 
     def test_two_of_three_labelled_members_form_majority(self) -> None:
         reviews = [
-            _review("gpt-5.2", [_issue("other.py:5", "bug")]),
-            _review("gemini-3.1-pro", [_issue("app.py:12", "bug")]),
-            _review("grok-4.3", [_issue("app.py:11", "bug")]),
+            _review("gpt-5.2", [_issue("other.py:5", "correctness")]),
+            _review("gemini-3.1-pro", [_issue("app.py:12", "correctness")]),
+            _review("grok-4.3", [_issue("app.py:11", "correctness")]),
         ]
 
         result = classify(reviews, threshold=2)
@@ -380,19 +381,19 @@ class TestLineSpans:
         assert _parse_location(r"C:\src\auth.py") == (r"C:\src\auth.py", None)
 
     def test_overlapping_ranges_match(self) -> None:
-        assert _issues_match(("auth.py", (203, 207), "bug"), ("auth.py", (203, 205), "bug"))
+        assert _issues_match(("auth.py", (203, 207), "correctness"), ("auth.py", (203, 205), "correctness"))
 
     def test_range_matches_a_single_line_inside_it(self) -> None:
-        assert _issues_match(("auth.py", (203, 207), "bug"), ("auth.py", (205, 205), "bug"))
+        assert _issues_match(("auth.py", (203, 207), "correctness"), ("auth.py", (205, 205), "correctness"))
 
     def test_range_matches_a_single_line_within_tolerance_of_its_edge(self) -> None:
-        assert _issues_match(("auth.py", (203, 207), "bug"), ("auth.py", (212, 212), "bug"))
+        assert _issues_match(("auth.py", (203, 207), "correctness"), ("auth.py", (212, 212), "correctness"))
 
     def test_distant_ranges_do_not_match(self) -> None:
-        assert not _issues_match(("auth.py", (203, 207), "bug"), ("auth.py", (300, 310), "bug"))
+        assert not _issues_match(("auth.py", (203, 207), "correctness"), ("auth.py", (300, 310), "correctness"))
 
     def test_ranges_in_different_files_do_not_match(self) -> None:
-        assert not _issues_match(("auth.py", (203, 207), "bug"), ("db.py", (203, 207), "bug"))
+        assert not _issues_match(("auth.py", (203, 207), "correctness"), ("db.py", (203, 207), "correctness"))
 
     def test_unanimous_finding_cited_in_three_formats_is_consensus(self) -> None:
         reviews = [
@@ -447,10 +448,10 @@ class TestSpanWidthLimit:
         assert _parse_location("app.py:100-150") == ("app.py", None)
 
     def test_file_wide_span_does_not_absorb_a_specific_line(self) -> None:
-        assert not _issues_match(("app.py", None, "bug"), ("app.py", (50, 50), "bug"))
+        assert not _issues_match(("app.py", None, "correctness"), ("app.py", (50, 50), "correctness"))
 
     def test_file_wide_citations_still_group_together(self) -> None:
-        assert _issues_match(("app.py", None, "bug"), ("app.py", None, "bug"))
+        assert _issues_match(("app.py", None, "correctness"), ("app.py", None, "correctness"))
 
     def test_a_wide_citation_cannot_suppress_other_findings(self) -> None:
         reviews = [

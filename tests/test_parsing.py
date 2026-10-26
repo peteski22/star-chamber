@@ -401,6 +401,11 @@ class TestClosedSets:
         with pytest.raises(ParseError, match=r"Field risk_level in .* must be one of high, medium, low, got 'unknown'"):
             _carrying("risk_level", RiskLevel.UNKNOWN.value)
 
+    def test_an_overlong_value_is_reported_by_length(self) -> None:
+        """A member can put a whole reply in a field the protocol says holds one short word."""
+        with pytest.raises(ParseError, match=r"must be one of .*, got 5000 characters of text"):
+            _carrying("severity", "x" * 5000)
+
     def test_an_unrated_approach_keeps_the_council_s_own_risk_level(self) -> None:
         approach = _parse_advice(_advice(approaches=[{"name": "Repository"}])).approaches[0]
 

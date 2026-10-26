@@ -30,6 +30,9 @@ _OPEN_FENCE_RE = re.compile(r"^\s*```(?:json)?\s*\n")
 
 _JSON_START_RE = re.compile(r"[{\[]")
 
+# A rejected value is quoted back only while it is as short as the values it was measured against.
+_MAX_ECHOED_VALUE_CHARS = 40
+
 # The risk levels a member may send. UNKNOWN is the council's own value for a level nobody stated.
 _MEMBER_RISK_LEVELS = tuple(level for level in RiskLevel if level.stated)
 
@@ -68,7 +71,7 @@ def _choose(text: str, field: str, context: str, permitted: Iterable[_ChoiceT]) 
     for value in allowed:
         if text == value:
             return value
-    msg = f"Field {field} in {context} must be one of {', '.join(allowed)}, got {text!r}"
+    msg = f"Field {field} in {context} must be one of {', '.join(allowed)}, got {_describe_value(text)}"
     raise ParseError(msg)
 
 
@@ -95,6 +98,23 @@ def _describe_unparsable(content: str) -> str:
     if not body.endswith(("}", "]")):
         return f"{length} characters, ends mid-structure"
     return f"{length} characters, malformed JSON"
+
+
+def _describe_value(text: str) -> str:
+    """Quote a rejected value back, reporting its length instead once it is long.
+
+    A member can put a whole completion in a field the protocol says holds one
+    short word, and this value reaches the terminal and the output document.
+
+    Args:
+        text: What the member sent.
+
+    Returns:
+        The value quoted, or a phrase naming its length.
+    """
+    if len(text) <= _MAX_ECHOED_VALUE_CHARS:
+        return repr(text)
+    return f"{len(text)} characters of text"
 
 
 def _json_type_name(value: object) -> str:
@@ -146,7 +166,7 @@ def _optional_choice(
         default: Value to use when the field is absent.
 
     Returns:
-        The member the field names, or the default.
+        The value the field names, or the default.
 
     Raises:
         ParseError: If the field is present and names no permitted value.
@@ -171,7 +191,7 @@ def _optional_choice_or_none(
         permitted: The values a member may send.
 
     Returns:
-        The member the field names, or None.
+        The value the field names, or None.
 
     Raises:
         ParseError: If the field is present and names no permitted value.
@@ -288,7 +308,7 @@ def _require_choice(
         permitted: The values a member may send, which is not always every member of the set.
 
     Returns:
-        The member the field names.
+        The value the field names.
 
     Raises:
         ParseError: If the field is absent, is not text, or names no permitted value.

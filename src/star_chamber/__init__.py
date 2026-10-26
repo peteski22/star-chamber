@@ -4,6 +4,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 from star_chamber.council import run_council, run_council_sync
 from star_chamber.schema import get_schema, list_schemas, strict_variant
+from star_chamber.spec import SPEC_VERSION
 from star_chamber.types import (
     CodeReviewResult,
     CouncilConfig,
@@ -29,6 +30,7 @@ __all__ = [
     "ProviderConfig",
     "ProviderError",
     "ProviderReview",
+    "SPEC_VERSION",
     "__version__",
     "get_schema",
     "list_schemas",

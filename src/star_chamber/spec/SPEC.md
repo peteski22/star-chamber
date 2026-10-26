@@ -1,10 +1,10 @@
-# Council Protocol Specification v0.6
+# Council Protocol Specification v0.7
 
 This document specifies the portable council deliberation protocol — the invocation modes, prompt templates, response parsing, consensus classification, and output format that any orchestrator can implement independently.
 
 The orchestrator-specific implementation for Claude Code lives in `plugins/pragma/skills/star-chamber/PROTOCOL.md`. That document handles Bash subprocess isolation, `uv run` invocation, temp file management, and other runtime concerns. This spec covers only the portable protocol logic.
 
-**Status:** Draft (v0.6). Breaking changes may occur before v1.0.
+**Status:** Draft (v0.7). Breaking changes may occur before v1.0.
 
 ## Table of Contents
 
@@ -27,7 +27,25 @@ The council protocol defines how multiple LLM providers are queried in parallel,
 
 ### Versioning
 
-This spec follows [Semantic Versioning](https://semver.org/). The current version is **0.6** (pre-stable). The version will advance to 1.0 when the schema and algorithm definitions are considered stable.
+This spec follows [Semantic Versioning](https://semver.org/). The current version is **0.7** (pre-stable). The version will advance to 1.0 when the schema and algorithm definitions are considered stable.
+
+### Spec Version in Output
+
+An orchestrator implementing version 0.7 or later MUST emit `spec_version`, and MUST emit the version of this spec rather than its own package version, because a package can release a patch without changing the protocol. The schema leaves the property optional so that a document produced before 0.7 still validates, and that is the only reason it is optional. A producer at 0.7 or later that omits it makes its own output indistinguishable from a document written years earlier.
+
+A consumer that finds the field absent is therefore reading a document produced before 0.7. That is a closed range rather than missing data. The consumer MAY apply the semantics this spec documented for those versions, and MUST treat as ambiguous any field whose meaning changed within that range, because the document does not say which of those versions produced it. `summary.synthesis` and `recommended_by` are both in that set.
+
+The field exists to guard against staleness, and guarding is its only sanctioned use. A consumer reading a document produced by a version above the one its own instructions were written against MUST state, in whatever it produces, that the document comes from a newer version of this protocol and that its field-level reading is therefore unverified. It MUST NOT abort on that ground alone, and it MUST NOT silently drop a field it does not recognize. Rendering the document with that statement attached is the required behavior, because the alternative is withholding a document the reader can still mostly use.
+
+A consumer MAY select behavior per field for a version at or below the one its instructions were written against. Those versions form a closed set that this spec documents, so a rule written for them stays correct, and a reader can check it.
+
+A consumer MUST NOT select behavior per field for a version above that. Such a rule guesses at semantics this spec had not defined when the rule was written, and it goes silent at the next version without announcing it, which converts an open ambiguity into a closed enumeration that someone has to maintain, in a document that cannot be recompiled and that an agent executes literally. Reporting an unverified reading keeps the ambiguity open and visible, which is the weaker claim and the honest one.
+
+A consumer that forwards part of a document, such as passing only `summary` into a prompt, MUST carry the version with it or state it alongside. A fragment carries no provenance of its own, and whoever reads the fragment has no way to ask.
+
+The schema MUST constrain the value no further than a string. A pattern or an enum on this field would let a consumer reject the whole document on the value of the one field that exists to tell it the document is newer than its instructions, which is the failure the field was added to prevent. The same reasoning applies to the version this spec states for itself: it is a version, not a format that consumers parse.
+
+Opening a published schema and carrying the version answer different questions. The open schema stops a consumer rejecting a document it could otherwise read. The version tells a consumer that its reading may be out of date. Neither substitutes for the other, and the version is only reachable by a consumer whose schema already accepts the document, which is why the output schema is published open before this field is relied upon.
 
 ### Schema Strictness
 
@@ -379,6 +397,7 @@ Orchestrators MAY apply per-provider calibration weights to adjust confidence, b
 The structured output includes:
 
 - `mode`: `"code-review"`
+- `spec_version` (optional): The version of this spec that produced the document, as [section 1](#spec-version-in-output) requires.
 - `files_reviewed[]`: List of reviewed file paths.
 - `providers_used[]`: The roster asked. All council members consulted, including those that failed, by display name.
 - `providers_responded[]`: The roster that answered. Members that returned a usable review, by display name. This is the denominator the classifications below were computed over.
@@ -434,6 +453,7 @@ Issues raised by a single provider. May be valid specialised insights.
 The structured output includes:
 
 - `mode`: `"design-question"`
+- `spec_version` (optional): The version of this spec that produced the document, as [section 1](#spec-version-in-output) requires.
 - `prompt`: The original design question (enables rendering the Markdown template without external context).
 - `providers_used[]`: The roster asked. All council members consulted, including those that failed, by display name.
 - `providers_responded[]`: The roster that answered. Members that returned usable advice, by display name. This is the denominator `consensus_recommendation` was computed over.

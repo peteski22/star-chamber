@@ -18,6 +18,7 @@ from typing import Any
 import pytest
 
 from star_chamber.schema import get_schema
+from star_chamber.types import FitRating, IssueCategory, QualityRating, RiskLevel, Severity
 
 
 @dataclass(frozen=True)
@@ -62,6 +63,45 @@ _INLINE_COPIES = {
         source_schema="code-review-result",
         source_path=(),
         required_adds=frozenset({"model", "raw_content"}),
+    ),
+}
+
+
+@dataclass(frozen=True)
+class _Vocabulary:
+    """One closed set this package names, and the shipped schema that defines what a member may send."""
+
+    members: tuple[str, ...]
+    source_schema: str
+    source_path: tuple[str, ...]
+
+
+# Each closed set the package names in Python, beside the schema that defines it.
+_VOCABULARIES = {
+    "category": _Vocabulary(
+        members=tuple(IssueCategory),
+        source_schema="code-review-result",
+        source_path=("properties", "issues", "items", "properties", "category"),
+    ),
+    "fit_rating": _Vocabulary(
+        members=tuple(FitRating),
+        source_schema="design-advice-result",
+        source_path=("properties", "approaches", "items", "properties", "fit_rating"),
+    ),
+    "quality_rating": _Vocabulary(
+        members=tuple(QualityRating),
+        source_schema="code-review-result",
+        source_path=("properties", "quality_rating"),
+    ),
+    "risk_level": _Vocabulary(
+        members=tuple(level for level in RiskLevel if level.stated),
+        source_schema="design-advice-result",
+        source_path=("properties", "approaches", "items", "properties", "risk_level"),
+    ),
+    "severity": _Vocabulary(
+        members=tuple(Severity),
+        source_schema="code-review-result",
+        source_path=("properties", "issues", "items", "properties", "severity"),
     ),
 }
 
@@ -126,3 +166,25 @@ class TestInlineCopies:
         source = _shape(duplicate.source_schema, duplicate.source_path)
 
         assert duplicate.required_adds.isdisjoint(source["properties"])
+
+
+class TestVocabularies:
+    """A closed set is written in Python and in a shipped schema, so the two are pinned together.
+
+    The parse boundary validates a member's value against the Python set, and
+    a consumer validates the document against the schema, so the sets drifting
+    apart means a reply one accepts the other rejects.
+    """
+
+    @pytest.mark.parametrize("named", sorted(_VOCABULARIES))
+    def test_the_package_names_what_a_member_may_send(self, named: str) -> None:
+        vocabulary = _VOCABULARIES[named]
+        declared = _shape(vocabulary.source_schema, vocabulary.source_path)
+
+        assert set(vocabulary.members) == set(declared["enum"])
+
+    def test_the_council_adds_the_level_no_member_states(self) -> None:
+        """The output carries one risk level a member may not send, for an approach nobody rated."""
+        declared = _shape("council-output", ("properties", "approaches", "items", "properties", "risk_level"))
+
+        assert set(RiskLevel) == set(declared["enum"])

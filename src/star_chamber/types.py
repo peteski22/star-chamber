@@ -1,4 +1,4 @@
-"""Frozen dataclass types for all council protocol wire formats."""
+"""Frozen dataclass types and closed-set vocabularies for the council protocol wire formats."""
 
 from __future__ import annotations
 
@@ -35,13 +35,13 @@ class IssueCategory(StrEnum):
     MAINTAINABILITY = "maintainability"
 
 
-class QualityRating(StrEnum):
-    """A member's verdict on the code it reviewed."""
+class QualityRating(Ranked):
+    """A member's verdict on the code it reviewed. Declared worst first, which is the order a tally reads in."""
 
-    EXCELLENT = "excellent"
+    NEEDS_WORK = "needs-work"
     FAIR = "fair"
     GOOD = "good"
-    NEEDS_WORK = "needs-work"
+    EXCELLENT = "excellent"
 
 
 class RiskLevel(Ranked):
@@ -354,7 +354,7 @@ class CodeReviewResult:
         consensus_issues: Issues all providers agree on.
         majority_issues: Issues flagged by most providers.
         individual_issues: Issues keyed by provider name.
-        quality_ratings: Quality ratings keyed by provider name.
+        quality_ratings: Each member's verdict, keyed by provider name.
         summary: Counts and prose for the session.
         spec_version: The protocol version that produced this document, for a
             consumer to compare against the version its instructions were
@@ -371,7 +371,7 @@ class CodeReviewResult:
     consensus_issues: tuple[Issue, ...]
     majority_issues: tuple[MajorityIssue, ...]
     individual_issues: dict[str, tuple[Issue, ...]]
-    quality_ratings: dict[str, str]
+    quality_ratings: dict[str, QualityRating]
     summary: CodeReviewSummary
     spec_version: str = field(default=SPEC_VERSION, init=False)
 

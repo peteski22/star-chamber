@@ -19,6 +19,7 @@ from star_chamber.types import (
     ClassificationResult,
     FitRating,
     Issue,
+    IssueCategory,
     MajorityIssue,
     ProviderDesignAdvice,
     ProviderReview,
@@ -45,7 +46,7 @@ _MAX_SPAN_LINES = 50
 _LineSpan = tuple[int, int]
 
 # A grouping key: file path, line span, and category.
-_IssueKey = tuple[str, _LineSpan | None, str]
+_IssueKey = tuple[str, _LineSpan | None, IssueCategory]
 
 
 def _parse_location(location: str) -> tuple[str, _LineSpan | None]:

@@ -1,10 +1,10 @@
-# Council Protocol Specification v0.8
+# Council Protocol Specification v0.9
 
 This document specifies the portable council deliberation protocol — the invocation modes, prompt templates, response parsing, consensus classification, and output format that any orchestrator can implement independently.
 
 The orchestrator-specific implementation for Claude Code lives in `plugins/pragma/skills/star-chamber/PROTOCOL.md`. That document handles Bash subprocess isolation, `uv run` invocation, temp file management, and other runtime concerns. This spec covers only the portable protocol logic.
 
-**Status:** Draft (v0.8). Breaking changes may occur before v1.0.
+**Status:** Draft (v0.9). Breaking changes may occur before v1.0.
 
 ## Table of Contents
 
@@ -27,7 +27,7 @@ The council protocol defines how multiple LLM providers are queried in parallel,
 
 ### Versioning
 
-This spec follows [Semantic Versioning](https://semver.org/). The current version is **0.8** (pre-stable). The version will advance to 1.0 when the schema and algorithm definitions are considered stable.
+This spec follows [Semantic Versioning](https://semver.org/). The current version is **0.9** (pre-stable). The version will advance to 1.0 when the schema and algorithm definitions are considered stable.
 
 ### Spec Version in Output
 
@@ -316,6 +316,10 @@ After the final round, one member writes the `summary.synthesis` the output carr
 **Material.** Every entry MUST be reduced to one line, then empty entries dropped, then the rest sorted. Sorting last is what makes the order independent of leading whitespace. Sorting at all is what stops the material preserving reply order or roster order, which would let a reader count each unnamed member's points or line one section up against another. A per-member verdict list MUST NOT appear; a tally of verdicts MAY.
 
 **Result.** The prompt MUST ask its author for one or two sentences of prose, and the assessment MUST NOT be assembled from the members' own summaries. The orchestrator MUST NOT reject an assessment on a sentence count. A sentence count cannot be decided reliably on prose, where an abbreviation ends a sentence that continues, and a reader is better served by a third sentence than by the empty field a false rejection would leave. Length is bounded instead, as the next rule describes. `summary.synthesized_by` MUST name the member asked, whether or not it wrote one, so a reader can check the author against the rule above. Where the author returns nothing usable, including a reply too long to be the prose asked for, `summary.synthesis` MUST be empty and `summary.synthesis_error` MUST name the member asked and the reason. A concatenation of the members' summaries is not a synthesis and MUST NOT stand in for one. An empty assessment with no recorded failure means none was requested; a reader tells "no member answered" from "nothing to assess" by whether `providers_responded` is empty.
+
+**Reporting it.** `summary.synthesis_error` and `summary.synthesized_by` MUST both be present. Where a member was asked, `summary.synthesized_by` names it, and `summary.synthesis_error` is null unless that member wrote nothing usable. Where no member was asked, both MUST be null. An absent field states nothing, so the schema requires both rather than leaving the question to the reader. The schema states the pairing as a conditional on `summary`, because a failure recorded against no member reports a contradiction rather than an absence. The version moves to 0.9 for these rules. The schema of an earlier version accepted a document that breaks them, so the version is what tells a consumer which check its own copy carried.
+
+**Older documents.** A consumer validating against this version's schema rejects a document whose summary omits either field, and one whose summary carries a combination these rules forbid. A document produced before 0.5 carried neither field. A document produced from 0.5 to 0.8 was described by prose that stated both, while its schema declared both and required neither, so a producer could omit one and pass. That rejection does not contradict [Schema Strictness](#schema-strictness). Open publication stops a consumer rejecting a document newer than its own schema, where the undeclared key is still readable and `spec_version` warns that the reading may be stale. A missing required field is the opposite case, because the document is older rather than newer, and a document from before 0.7 cannot say how much older it is. A reader that cannot tell which member was asked cannot check the author against the rule above, and that check is the reason both fields exist.
 
 **Cost.** The assessment costs one model call beyond the fan-out, and it runs after them, so a session's worst case is the fan-out timeout plus one more. Debate mode pays that second timeout once per round.
 

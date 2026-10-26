@@ -131,11 +131,22 @@ class ProviderError:
 
     Attributes:
         provider: Name of the provider that failed.
+        model: Model that was asked, which the provider name does not give when
+            several members share one provider.
         error: Error message or description.
+        raw_content: What the provider sent, when it sent anything, so the
+            failure can be diagnosed from the reply rather than from its
+            description alone. None when the call produced no reply at all.
+            Empty when a reply arrived carrying no content.
+
+    NOTE: raw_content has no default. A site that failed to state it would
+    claim no reply arrived, which is the evidence the field exists to keep.
     """
 
     provider: str
+    model: str
     error: str
+    raw_content: str | None
 
 
 @dataclass(frozen=True)

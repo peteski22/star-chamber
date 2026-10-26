@@ -282,17 +282,25 @@
       }
     },
     "provider_error": {
-      "description": "One member and the reason it produced nothing usable.",
+      "description": "One member, the model it was asked for, the reason it produced nothing usable, and what it sent.",
       "type": "object",
-      "required": ["provider", "error"],
+      "required": ["provider", "model", "error", "raw_content"],
       "properties": {
         "provider": {
           "type": "string",
           "description": "Member display name."
         },
+        "model": {
+          "type": "string",
+          "description": "Model that was asked, which the member display name does not give when several members share one provider."
+        },
         "error": {
           "type": "string",
           "description": "Error description."
+        },
+        "raw_content": {
+          "description": "What the member sent, so the failure can be diagnosed from the reply rather than from its description alone. Null when the call produced no reply at all, such as a timeout. Empty when a reply arrived carrying no content. Retained whole rather than truncated, because a reply that ends mid-structure is diagnosed from its end.",
+          "type": ["string", "null"]
         }
       }
     }

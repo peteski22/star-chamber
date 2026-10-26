@@ -1,6 +1,6 @@
 {
   "mode": "code-review",
-  "spec_version": "0.7",
+  "spec_version": "0.8",
   "files_reviewed": [
     "backend/app/services/auth.py",
     "backend/app/api/routes/auth.py"
@@ -10,7 +10,9 @@
   "failed_providers": [
     {
       "provider": "deepseek",
-      "error": "Request timed out after 60s"
+      "model": "deepseek-chat",
+      "error": "Request timed out after 60s",
+      "raw_content": null
     }
   ],
   "consensus_issues": [

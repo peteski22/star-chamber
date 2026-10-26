@@ -61,12 +61,26 @@ async def _build_code_review_result(
     for config, response in exchanges:
         providers_used.append(response.display_name)
         if not response.success:
-            failed.append(ProviderError(provider=response.display_name, error=response.error))
+            failed.append(
+                ProviderError(
+                    provider=response.display_name,
+                    model=response.model,
+                    error=response.error,
+                    raw_content=response.content,
+                )
+            )
             continue
         try:
             review = parse_code_review(response.content, response.display_name, response.model)
         except ParseError as exc:
-            failed.append(ProviderError(provider=response.display_name, error=str(exc)))
+            failed.append(
+                ProviderError(
+                    provider=response.display_name,
+                    model=response.model,
+                    error=str(exc),
+                    raw_content=response.content,
+                )
+            )
             continue
         reviews.append(review)
         answered.append(config)
@@ -134,12 +148,26 @@ async def _build_design_result(
     for config, response in exchanges:
         providers_used.append(response.display_name)
         if not response.success:
-            failed.append(ProviderError(provider=response.display_name, error=response.error))
+            failed.append(
+                ProviderError(
+                    provider=response.display_name,
+                    model=response.model,
+                    error=response.error,
+                    raw_content=response.content,
+                )
+            )
             continue
         try:
             advice = parse_design_advice(response.content, response.display_name, response.model)
         except ParseError as exc:
-            failed.append(ProviderError(provider=response.display_name, error=str(exc)))
+            failed.append(
+                ProviderError(
+                    provider=response.display_name,
+                    model=response.model,
+                    error=str(exc),
+                    raw_content=response.content,
+                )
+            )
             continue
         advices.append(advice)
         answered.append(config)

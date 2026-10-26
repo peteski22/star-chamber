@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -60,7 +61,11 @@ def _issue(description: str) -> Issue:
 class TestSynthesisStates:
     def test_rejects_prose_and_a_failure_together(self) -> None:
         with pytest.raises(ValueError, match="both prose and a failure"):
-            Synthesis(author="openai", text="Agreed.", error=ProviderError(provider="openai", error="Timeout."))
+            Synthesis(
+                author="openai",
+                text="Agreed.",
+                error=ProviderError(provider="openai", model="gpt-4o", error="Timeout.", raw_content=None),
+            )
 
     def test_rejects_prose_with_no_author(self) -> None:
         with pytest.raises(ValueError, match="the member they came from"):
@@ -68,7 +73,7 @@ class TestSynthesisStates:
 
     def test_rejects_a_failure_with_no_author(self) -> None:
         with pytest.raises(ValueError, match="the member they came from"):
-            Synthesis(error=ProviderError(provider="openai", error="Timeout."))
+            Synthesis(error=ProviderError(provider="openai", model="gpt-4o", error="Timeout.", raw_content=None))
 
     def test_allows_the_state_where_nothing_was_requested(self) -> None:
         assert Synthesis() == Synthesis(author="", text="", error=None)
@@ -338,3 +343,80 @@ class TestMaterialOrderAndShape:
 
         assert material.index("Alpha fits.") < material.index("Zebra fits.")
         assert material.index("Use Alpha.") < material.index("Use Zebra.")
+
+
+class TestAssessmentFailureKeepsTheReply:
+    """The member asked for the closing assessment has its reply kept on failure.
+
+    The assessment is one extra call whose reply is never shown anywhere else,
+    so a failure that records only its description loses the reply entirely.
+    """
+
+    def test_a_reply_too_long_to_be_an_assessment_is_kept(self) -> None:
+        overlong = "word " * 1000
+        config = ProviderConfig(provider="openai", model="gpt-4o")
+
+        async def reply(*args: object, **kwargs: object) -> ProviderResponse:
+            return ProviderResponse("openai", "openai", "gpt-4o", True, overlong)
+
+        with patch("star_chamber.synthesis.send_to_provider", reply):
+            result = asyncio.run(synthesize("## Verdicts given\n- good: 1", config))
+
+        assert result.error is not None
+        assert result.error.raw_content == overlong
+
+    def test_a_reply_carrying_no_assessment_is_kept(self) -> None:
+        config = ProviderConfig(provider="openai", model="gpt-4o")
+
+        async def reply(*args: object, **kwargs: object) -> ProviderResponse:
+            return ProviderResponse("openai", "openai", "gpt-4o", True, "   \n\t  ")
+
+        with patch("star_chamber.synthesis.send_to_provider", reply):
+            result = asyncio.run(synthesize("## Verdicts given\n- good: 1", config))
+
+        assert result.error is not None
+        assert result.error.raw_content == "   \n\t  "
+
+    def test_a_failure_before_any_reply_keeps_nothing(self) -> None:
+        config = ProviderConfig(provider="openai", model="gpt-4o")
+
+        async def reply(*args: object, **kwargs: object) -> ProviderResponse:
+            return ProviderResponse("openai", "openai", "gpt-4o", False, error="Timeout.")
+
+        with patch("star_chamber.synthesis.send_to_provider", reply):
+            result = asyncio.run(synthesize("## Verdicts given\n- good: 1", config))
+
+        assert result.error is not None
+        assert result.error.raw_content is None
+
+
+class TestAssessmentFailureIsIsolated:
+    """An unexpected failure asking for the assessment must not end the session.
+
+    The whole output document is built after the assessment call, so an
+    exception there discards every member's reply along with the assessment.
+    """
+
+    def test_an_unanticipated_failure_becomes_the_assessment_failure(self) -> None:
+        config = ProviderConfig(provider="openai", model="gpt-4o")
+
+        async def blows_up(*args: object, **kwargs: object) -> ProviderResponse:
+            raise AttributeError("'NoneType' object has no attribute 'choices'")
+
+        with patch("star_chamber.synthesis.send_to_provider", blows_up):
+            result = asyncio.run(synthesize("## Verdicts given\n- good: 1", config))
+
+        assert result.text == ""
+        assert result.error is not None
+        assert result.error.provider == "openai"
+        assert "Unexpected failure" in result.error.error
+
+    def test_cancellation_still_propagates(self) -> None:
+        """Cancellation is the caller's decision, not the member's failure."""
+        config = ProviderConfig(provider="openai", model="gpt-4o")
+
+        async def canceled(*args: object, **kwargs: object) -> ProviderResponse:
+            raise asyncio.CancelledError
+
+        with patch("star_chamber.synthesis.send_to_provider", canceled), pytest.raises(asyncio.CancelledError):
+            asyncio.run(synthesize("## Verdicts given\n- good: 1", config))

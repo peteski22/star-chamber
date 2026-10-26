@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from click.testing import CliRunner
 
-from star_chamber.cli import main
+from star_chamber.cli import _print_code_review_result, main
 from star_chamber.transport import ProviderResponse
 from star_chamber.types import CouncilConfig, OtariConfig, ProviderConfig
-from tests.helpers import SYNTHESIS, exchanges
+from tests.helpers import SYNTHESIS, build_code_review_result, exchanges
 
 # ---------------------------------------------------------------------------
 # Fixtures.
@@ -775,3 +777,31 @@ class TestRosterOutput:
         parsed = json.loads(result.output)
         assert parsed["providers_used"] == ["openai", "anthropic"]
         assert parsed["providers_responded"] == ["openai"]
+
+
+class TestFailedProviderOutput:
+    """Text output says a failed member's reply was kept, so a reader knows to look.
+
+    The reply itself is too long for this output and is diagnosed from its end,
+    so a prefix of it would mislead rather than help.
+    """
+
+    def test_a_retained_reply_is_announced(self) -> None:
+        responses = [ProviderResponse("openai", "openai", "gpt-4o", True, '{"quality_rating": "goo')]
+        result = build_code_review_result(responses, files_reviewed=("app.py",))
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            _print_code_review_result(result)
+
+        assert "reply retained in --format json" in output.getvalue()
+
+    def test_a_failure_with_no_reply_announces_nothing(self) -> None:
+        responses = [ProviderResponse("gemini", "gemini", "g-2", False, error="Timeout.")]
+        result = build_code_review_result(responses, files_reviewed=("app.py",))
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            _print_code_review_result(result)
+
+        assert "reply retained" not in output.getvalue()

@@ -12,10 +12,10 @@ from star_chamber.transport import (
     DEFAULT_MAX_TOKENS,
     ProviderResponse,
     _is_auth_error,
-    _sanitize_error,
     fan_out,
     resolve_api_keys,
     resolve_otari,
+    sanitize_error,
     send_to_provider,
     validate_otari_api_base,
 )
@@ -61,29 +61,41 @@ class TestProviderResponse:
             pr.content = "changed"  # type: ignore[misc]
 
     def test_defaults(self) -> None:
+        """A failure that states no content produced no reply, rather than an empty one."""
         pr = ProviderResponse(provider="openai", display_name="openai", model="gpt-4", success=False)
-        assert pr.content == ""
+        assert pr.content is None
         assert pr.error == ""
 
+    def test_a_success_carrying_no_content_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="content"):
+            ProviderResponse(provider="openai", display_name="openai", model="gpt-4", success=True)
 
-# -- _sanitize_error ----------------------------------------------------------
+    def test_a_reply_that_arrived_empty_is_not_the_same_as_no_reply(self) -> None:
+        arrived = ProviderResponse(provider="openai", display_name="openai", model="gpt-4", success=False, content="")
+        never = ProviderResponse(provider="openai", display_name="openai", model="gpt-4", success=False)
+
+        assert arrived.content == ""
+        assert never.content is None
+
+
+# -- sanitize_error ----------------------------------------------------------
 
 
 class TestSanitizeError:
     def test_redacts_bearer_token(self) -> None:
         msg = "Authorization: Bearer sk-abc123xyz failed"
-        result = _sanitize_error(msg)
+        result = sanitize_error(msg)
         assert "sk-abc123xyz" not in result
         assert "REDACTED" in result
 
     def test_redacts_sk_key(self) -> None:
         msg = "Invalid key: sk-1234567890abcdef"
-        result = _sanitize_error(msg)
+        result = sanitize_error(msg)
         assert "sk-1234567890abcdef" not in result
 
     def test_passthrough_safe_message(self) -> None:
         msg = "Connection refused to host"
-        assert _sanitize_error(msg) == msg
+        assert sanitize_error(msg) == msg
 
 
 # -- _is_auth_error -----------------------------------------------------------
@@ -324,15 +336,17 @@ class TestSendToProvider:
         assert result.success is True
         assert result.content == "Great code!"
 
-    def test_absent_content_becomes_an_empty_string(self) -> None:
+    def test_absent_content_fails_and_is_recorded_as_an_empty_reply(self) -> None:
+        """A message arrived carrying nothing, which is not the same as no reply."""
         mock_module = _make_mock_any_llm(None, finish_reason="stop")
         config = ProviderConfig(provider="anthropic", model="claude-3")
 
         with patch.dict(sys.modules, {"any_llm": mock_module}):
             result = asyncio.run(send_to_provider(config, "Review this."))
 
-        assert result.success is True
+        assert result.success is False
         assert result.content == ""
+        assert "no content" in result.error
 
     def test_gemini_timeout_passed_as_kwarg(self) -> None:
         """Gemini receives timeout as a direct request kwarg."""
@@ -683,3 +697,131 @@ class TestResolveApiKeysPreservesFields:
         assert result[0].display_name == "gpt-5.2"
         assert result[0].api_base == "https://gw.example"
         assert result[0].max_tokens == 1024
+
+
+class TestFailureKeepsTheReply:
+    """A reply the provider cut short or withheld is kept on the failure.
+
+    The reply shows where it stopped, which the error message only describes,
+    and nothing else holds a copy once the session ends.
+    """
+
+    def test_a_reply_cut_short_at_the_token_limit_is_kept(self) -> None:
+        mock_module = _make_mock_any_llm('{"quality_rating": "go', finish_reason="length")
+        config = ProviderConfig(provider="anthropic", model="claude-3", max_tokens=20000)
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            result = asyncio.run(send_to_provider(config, "Review this."))
+
+        assert result.success is False
+        assert result.content == '{"quality_rating": "go'
+
+    def test_a_withheld_reply_keeps_whatever_arrived(self) -> None:
+        mock_module = _make_mock_any_llm("I will not answer that.", finish_reason="content_filter")
+        config = ProviderConfig(provider="anthropic", model="claude-3")
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            result = asyncio.run(send_to_provider(config, "Review this."))
+
+        assert result.success is False
+        assert result.content == "I will not answer that."
+
+    def test_a_failure_before_any_reply_keeps_nothing(self) -> None:
+        """A timeout produced no reply, which is not the same as an empty one."""
+        mock_module = _make_mock_any_llm()
+        mock_module.acompletion = AsyncMock(side_effect=TimeoutError())
+        config = ProviderConfig(provider="anthropic", model="claude-3")
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            result = asyncio.run(send_to_provider(config, "Review this."))
+
+        assert result.success is False
+        assert result.content is None
+
+
+class TestFanOutIsolatesAMember:
+    """One member must not discard every other member's reply along with its own.
+
+    The result document is the only durable record of a session, so a run that
+    aborts loses the replies of members that answered perfectly well.
+    """
+
+    def test_an_unanticipated_failure_becomes_a_recorded_failure(self) -> None:
+        configs = (
+            ProviderConfig(provider="openai", model="gpt-4o"),
+            ProviderConfig(provider="gemini", model="g-2"),
+        )
+
+        async def one_blows_up(config, prompt, *, timeout=None, otari=None):  # noqa: ANN001, ANN202
+            if config.provider == "gemini":
+                raise AttributeError("'NoneType' object has no attribute 'message'")
+            return ProviderResponse(config.provider, config.identity, config.model, True, "a usable review")
+
+        with patch("star_chamber.transport.send_to_provider", one_blows_up):
+            pairs = asyncio.run(fan_out(configs, "Review this."))
+
+        assert [config.provider for config, _ in pairs] == ["openai", "gemini"]
+        assert pairs[0][1].success is True
+        assert pairs[0][1].content == "a usable review"
+        assert pairs[1][1].success is False
+        assert "gemini" in pairs[1][1].error
+
+    def test_a_canceled_run_still_cancels(self) -> None:
+        """Cancellation is the caller's decision, not a member's failure."""
+        configs = (ProviderConfig(provider="openai", model="gpt-4o"),)
+
+        async def canceled(config, prompt, *, timeout=None, otari=None):  # noqa: ANN001, ANN202
+            raise asyncio.CancelledError
+
+        with patch("star_chamber.transport.send_to_provider", canceled), pytest.raises(asyncio.CancelledError):
+            asyncio.run(fan_out(configs, "Review this."))
+
+
+class TestDeclinedReply:
+    """A provider that declines states its reason outside the content.
+
+    Dropping it leaves a failure saying only that no content arrived, when the
+    provider explained itself.
+    """
+
+    def test_a_stated_refusal_is_kept_as_the_reply(self) -> None:
+        mock_module = _make_mock_any_llm(None, finish_reason="stop")
+        mock_module.acompletion.return_value.choices[0].message.refusal = "I will not review that."
+        config = ProviderConfig(provider="anthropic", model="claude-3")
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            result = asyncio.run(send_to_provider(config, "Review this."))
+
+        assert result.success is False
+        assert result.content == "I will not review that."
+        assert "declined" in result.error
+
+
+class TestWithheldReplyKeepsAStatedRefusal:
+    """A filtered reply with no content still has the provider's own explanation.
+
+    Discarding it leaves a failure saying only that the provider blocked
+    itself, when the provider said why.
+    """
+
+    def test_a_filtered_reply_falls_back_to_the_refusal(self) -> None:
+        mock_module = _make_mock_any_llm(None, finish_reason="content_filter")
+        mock_module.acompletion.return_value.choices[0].message.refusal = "That request is not allowed."
+        config = ProviderConfig(provider="anthropic", model="claude-3")
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            result = asyncio.run(send_to_provider(config, "Review this."))
+
+        assert result.success is False
+        assert result.content == "That request is not allowed."
+
+    def test_a_reply_cut_short_falls_back_to_the_refusal(self) -> None:
+        mock_module = _make_mock_any_llm(None, finish_reason="length")
+        mock_module.acompletion.return_value.choices[0].message.refusal = "I stopped there."
+        config = ProviderConfig(provider="anthropic", model="claude-3")
+
+        with patch.dict(sys.modules, {"any_llm": mock_module}):
+            result = asyncio.run(send_to_provider(config, "Review this."))
+
+        assert result.success is False
+        assert result.content == "I stopped there."

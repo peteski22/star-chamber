@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 
 from star_chamber.prompt import render_synthesis_prompt
-from star_chamber.transport import send_to_provider
+from star_chamber.transport import sanitize_error, send_to_provider
 from star_chamber.types import (
     Approach,
     ClassificationResult,
@@ -149,20 +149,41 @@ async def synthesize(
     nothing.
     NOTE: The member writing the assessment also wrote part of the material, so
     it can recognize its own prose even though the material names nobody.
+    NOTE: A failure nothing anticipated becomes the assessment's own failure
+    rather than an exception, because the session's whole output is built after
+    this call and an exception here discards every member's reply.
     """
     if not material.strip():
         return Synthesis()
 
-    response = await send_to_provider(config, render_synthesis_prompt(material), timeout=timeout, otari=otari)
+    try:
+        response = await send_to_provider(config, render_synthesis_prompt(material), timeout=timeout, otari=otari)
+    except Exception as exc:
+        error = ProviderError(
+            provider=config.identity,
+            model=config.model,
+            error=f"Unexpected failure asking {config.identity} for the assessment: {sanitize_error(str(exc))}",
+            raw_content=None,
+        )
+        return Synthesis(author=config.identity, error=error)
 
     if not response.success:
-        return Synthesis(author=config.identity, error=ProviderError(provider=config.identity, error=response.error))
+        error = ProviderError(
+            provider=config.identity, model=config.model, error=response.error, raw_content=response.content
+        )
+        return Synthesis(author=config.identity, error=error)
 
     text = _one_line(response.content)
     if not text:
-        return Synthesis(author=config.identity, error=ProviderError(provider=config.identity, error=_EMPTY_REPLY))
+        error = ProviderError(
+            provider=config.identity, model=config.model, error=_EMPTY_REPLY, raw_content=response.content
+        )
+        return Synthesis(author=config.identity, error=error)
     if len(text) > MAX_ASSESSMENT_CHARS:
-        return Synthesis(author=config.identity, error=ProviderError(provider=config.identity, error=_OVERLONG_REPLY))
+        error = ProviderError(
+            provider=config.identity, model=config.model, error=_OVERLONG_REPLY, raw_content=response.content
+        )
+        return Synthesis(author=config.identity, error=error)
 
     return Synthesis(author=config.identity, text=text)
 

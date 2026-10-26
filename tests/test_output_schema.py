@@ -94,7 +94,9 @@ def _design_body() -> str:
 
 async def _failing_synthesizer(material: str, answered: Sequence[ProviderConfig]) -> Synthesis:
     """Stand in for a member that was asked for an assessment and did not answer."""
-    return Synthesis(author="openai", error=ProviderError(provider="openai", error="Timeout."))
+    return Synthesis(
+        author="openai", error=ProviderError(provider="openai", model="gpt-4o", error="Timeout.", raw_content=None)
+    )
 
 
 _ISSUE = {
@@ -252,7 +254,12 @@ class TestCodeReviewOutput:
 
         jsonschema.validate(document, schema)
         assert document["summary"]["synthesis"] == ""
-        assert document["summary"]["synthesis_error"] == {"provider": "openai", "error": "Timeout."}
+        assert document["summary"]["synthesis_error"] == {
+            "provider": "openai",
+            "model": "gpt-4o",
+            "error": "Timeout.",
+            "raw_content": None,
+        }
 
 
 class TestDesignOutput:
@@ -719,3 +726,76 @@ class TestDocumentedFields:
         mode: str,
     ) -> None:
         assert self._documented(heading) == self._declared(published)[mode]
+
+
+class TestFailureKeepsTheReply:
+    """A failed member's reply reaches the output document, which is its only copy.
+
+    An orchestrator holds a reply for the length of one session and nothing
+    else persists it, so a failure that records only its own description
+    cannot be diagnosed afterwards at all.
+    """
+
+    def test_an_unparsed_reply_is_kept_whole(self, schema: dict[str, Any]) -> None:
+        truncated = '{"quality_rating": "goo'
+        responses = [ProviderResponse("openai", "openai", "gpt-4o", True, truncated)]
+        document = _as_document(build_code_review_result(responses, files_reviewed=("app.py",)))
+
+        jsonschema.validate(document, schema)
+        assert document["failed_providers"][0]["raw_content"] == truncated
+
+    def test_an_unparsed_reply_is_kept_for_a_design_question(self, schema: dict[str, Any]) -> None:
+        truncated = '{"recommendation": "Use a rep'
+        responses = [ProviderResponse("openai", "openai", "gpt-4o", True, truncated)]
+        document = _as_document(build_design_result(responses, prompt="Which data layer?"))
+
+        jsonschema.validate(document, schema)
+        assert document["failed_providers"][0]["raw_content"] == truncated
+
+    def test_a_failure_before_any_reply_reports_null(self, schema: dict[str, Any]) -> None:
+        responses = [ProviderResponse("gemini", "gemini", "g-2", False, error="Timeout.")]
+        document = _as_document(build_code_review_result(responses, files_reviewed=("app.py",)))
+
+        jsonschema.validate(document, schema)
+        assert document["failed_providers"][0]["raw_content"] is None
+
+    def test_a_reply_that_arrived_empty_reports_empty_rather_than_null(self, schema: dict[str, Any]) -> None:
+        """An empty reply and no reply are different facts about the member."""
+        responses = [ProviderResponse("openai", "openai", "gpt-4o", True, "")]
+        document = _as_document(build_code_review_result(responses, files_reviewed=("app.py",)))
+
+        jsonschema.validate(document, schema)
+        assert document["failed_providers"][0]["raw_content"] == ""
+
+    def test_a_cut_short_reply_that_arrived_empty_reports_empty(self, schema: dict[str, Any]) -> None:
+        """A provider that returned a reply object carrying nothing did still reply."""
+        responses = [ProviderResponse("openai", "openai", "gpt-4o", False, content="", error="Token limit.")]
+        document = _as_document(build_code_review_result(responses, files_reviewed=("app.py",)))
+
+        jsonschema.validate(document, schema)
+        assert document["failed_providers"][0]["raw_content"] == ""
+
+    def test_a_cut_short_reply_is_kept_on_the_failure(self, schema: dict[str, Any]) -> None:
+        partial = '{"quality_rating": "goo'
+        responses = [ProviderResponse("openai", "openai", "gpt-4o", False, content=partial, error="Token limit.")]
+        document = _as_document(build_code_review_result(responses, files_reviewed=("app.py",)))
+
+        jsonschema.validate(document, schema)
+        assert document["failed_providers"][0]["raw_content"] == partial
+
+    def test_a_failure_omitting_the_reply_is_rejected(self, schema: dict[str, Any]) -> None:
+        responses = [ProviderResponse("gemini", "gemini", "g-2", False, error="Timeout.")]
+        document = _as_document(build_code_review_result(responses, files_reviewed=("app.py",)))
+        del document["failed_providers"][0]["raw_content"]
+
+        with pytest.raises(jsonschema.ValidationError, match="raw_content"):
+            jsonschema.validate(document, schema)
+
+    def test_the_published_schema_requires_it_too(self, published: dict[str, Any]) -> None:
+        """Opening the schema for consumers did not relax what a failure must state."""
+        responses = [ProviderResponse("gemini", "gemini", "g-2", False, error="Timeout.")]
+        document = _as_document(build_code_review_result(responses, files_reviewed=("app.py",)))
+        del document["failed_providers"][0]["raw_content"]
+
+        with pytest.raises(jsonschema.ValidationError, match="raw_content"):
+            jsonschema.validate(document, published)

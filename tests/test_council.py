@@ -1267,7 +1267,9 @@ class TestSessionSynthesis:
     """The closing assessment is written by a member, not assembled from the members."""
 
     async def _failing(self, material: str, answered: Sequence[ProviderConfig]) -> Synthesis:
-        return Synthesis(author="openai", error=ProviderError(provider="openai", error="Timeout."))
+        return Synthesis(
+            author="openai", error=ProviderError(provider="openai", model="gpt-4o", error="Timeout.", raw_content=None)
+        )
 
     def test_code_review_carries_what_the_member_wrote(self) -> None:
         responses = [_success_response("openai", "gpt-4o", _code_review_json(summary="Member prose."))]
@@ -1291,7 +1293,9 @@ class TestSessionSynthesis:
         result = build_code_review_result(responses, files_reviewed=("app.py",), synthesizer=self._failing)
 
         assert result.summary.synthesis == ""
-        assert result.summary.synthesis_error == ProviderError(provider="openai", error="Timeout.")
+        assert result.summary.synthesis_error == ProviderError(
+            provider="openai", model="gpt-4o", error="Timeout.", raw_content=None
+        )
 
     def test_a_failed_call_does_not_fall_back_to_the_member_summaries(self) -> None:
         responses = [

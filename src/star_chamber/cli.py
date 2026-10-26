@@ -33,6 +33,18 @@ def _load_config(config_path: str | None) -> CouncilConfig:
     return config
 
 
+def _retained_reply(failure: ProviderError) -> str:
+    """Say that a failed member's reply was kept, and where to read it.
+
+    The reply is whatever the member sent, so it is too long for this output
+    and is diagnosed from its end rather than its start. Saying it was kept
+    tells a reader evidence exists, without showing a misleading prefix.
+    """
+    if failure.raw_content is None:
+        return ""
+    return " (reply retained in --format json)"
+
+
 def _print_rosters(result: CodeReviewResult | DesignQuestionResult) -> None:
     """Print the roster of members asked and the roster that answered.
 
@@ -72,7 +84,7 @@ def _print_code_review_result(result: CodeReviewResult) -> None:
     if result.failed_providers:
         click.echo(f"\nFailed providers ({len(result.failed_providers)}):")
         for fp in result.failed_providers:
-            click.echo(f"  - {fp.provider}: {fp.error}")
+            click.echo(f"  - {fp.provider}: {fp.error}{_retained_reply(fp)}")
 
     if result.quality_ratings:
         click.echo("\nQuality ratings:")
@@ -117,7 +129,7 @@ def _print_design_result(result: DesignQuestionResult) -> None:
     if result.failed_providers:
         click.echo(f"\nFailed providers ({len(result.failed_providers)}):")
         for fp in result.failed_providers:
-            click.echo(f"  - {fp.provider}: {fp.error}")
+            click.echo(f"  - {fp.provider}: {fp.error}{_retained_reply(fp)}")
 
     if result.consensus_recommendation:
         click.echo(

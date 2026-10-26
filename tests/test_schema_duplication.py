@@ -12,11 +12,13 @@ allow.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Any
 
 import pytest
 
+from star_chamber.prompt import render_code_review_prompt, render_design_prompt
 from star_chamber.schema import get_schema
 from star_chamber.types import FitRating, IssueCategory, QualityRating, RiskLevel, Severity
 
@@ -188,3 +190,20 @@ class TestVocabularies:
         declared = _shape("council-output", ("properties", "approaches", "items", "properties", "risk_level"))
 
         assert set(RiskLevel) == set(declared["enum"])
+
+
+class TestPromptVocabularies:
+    """The request templates list the same closed sets, so they are pinned to the types as well.
+
+    A value the template invites and the set omits now fails the whole reply,
+    so the two drifting apart costs a member's whole review rather than one
+    field.
+    """
+
+    @pytest.mark.parametrize("named", sorted(_VOCABULARIES))
+    def test_the_template_invites_what_a_member_may_send(self, named: str) -> None:
+        asked = render_code_review_prompt(files={"app.py": "x = 1"}) + render_design_prompt(question="Which layer?")
+        listed = re.search(rf'"{named}": "([^"]+)"', asked)
+
+        assert listed is not None, f"no template lists {named}"
+        assert {value.strip() for value in listed.group(1).split("|")} == set(_VOCABULARIES[named].members)

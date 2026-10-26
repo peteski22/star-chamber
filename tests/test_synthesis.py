@@ -19,11 +19,14 @@ from star_chamber.types import (
     Approach,
     ClassificationResult,
     Issue,
+    IssueCategory,
     MajorityIssue,
     ProviderConfig,
     ProviderDesignAdvice,
     ProviderError,
     ProviderReview,
+    RiskLevel,
+    Severity,
 )
 
 
@@ -55,7 +58,13 @@ def _advice(provider: str, summary: str = "s", recommendation: str = "r") -> Pro
 
 
 def _issue(description: str) -> Issue:
-    return Issue(severity="high", location="a.py:1", category="correctness", description=description, suggestion="fix")
+    return Issue(
+        severity=Severity.HIGH,
+        location="a.py:1",
+        category=IssueCategory.CORRECTNESS,
+        description=description,
+        suggestion="fix",
+    )
 
 
 class TestSynthesisStates:
@@ -219,9 +228,9 @@ class TestCodeReviewMaterial:
             consensus_issues=(_issue("SHA-256 for passwords"),),
             majority_issues=(
                 MajorityIssue(
-                    severity="medium",
+                    severity=Severity.MEDIUM,
                     location="a.py:2",
-                    category="maintainability",
+                    category=IssueCategory.MAINTAINABILITY,
                     description="No tests for the token path",
                     suggestion="add tests",
                     provider_count=2,
@@ -255,7 +264,7 @@ class TestDesignMaterial:
             _advice("anthropic", summary="Service fits.", recommendation="Use Approach B."),
         )
         approaches = (
-            Approach(name="Approach A", recommended_by=1, pros=(), cons=(), risk_level="low", fit_rating=None),
+            Approach(name="Approach A", recommended_by=1, pros=(), cons=(), risk_level=RiskLevel.LOW, fit_rating=None),
         )
 
         material = render_design_material(advices, approaches)
@@ -266,8 +275,8 @@ class TestDesignMaterial:
     def test_carries_the_recommendations_and_the_counts(self) -> None:
         advices = (_advice("openai", summary="Repository fits.", recommendation="Use Approach A."),)
         approaches = (
-            Approach(name="Approach A", recommended_by=2, pros=(), cons=(), risk_level="low", fit_rating=None),
-            Approach(name="Approach B", recommended_by=0, pros=(), cons=(), risk_level="high", fit_rating=None),
+            Approach(name="Approach A", recommended_by=2, pros=(), cons=(), risk_level=RiskLevel.LOW, fit_rating=None),
+            Approach(name="Approach B", recommended_by=0, pros=(), cons=(), risk_level=RiskLevel.HIGH, fit_rating=None),
         )
 
         material = render_design_material(advices, approaches)

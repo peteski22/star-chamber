@@ -141,7 +141,7 @@
       "description": "All approaches mentioned by any provider, including those not recommended (design-question mode).",
       "items": {
         "type": "object",
-        "required": ["name", "recommended_by", "pros", "cons", "risk_level"],
+        "required": ["name", "recommended_by", "pros", "cons", "risk_level", "fit_rating"],
         "properties": {
           "name": { "type": "string" },
           "recommended_by": {

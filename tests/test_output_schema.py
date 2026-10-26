@@ -12,7 +12,7 @@ import copy
 import dataclasses
 import json
 import re
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from importlib.resources import files
 from typing import Any
 
@@ -52,6 +52,12 @@ _VERSION_STATEMENTS = {
 # Keywords the spec forbids the derivation from entering, because a subschema
 # they hold constrains the same instance as the schema that carries it.
 _IN_PLACE_KEYWORDS = ("allOf", "anyOf", "dependentSchemas", "else", "if", "not", "oneOf", "then")
+
+# The fields a summary reports whether or not a member was asked for the assessment.
+_REPORTING_FIELDS = ("synthesis_error", "synthesized_by")
+
+# A recorded failure, as a document carries it, for probing the pairing rules.
+_SYNTHESIS_FAILURE = {"provider": "openai", "model": "gpt-4o", "error": "Timeout.", "raw_content": None}
 
 
 @pytest.fixture
@@ -152,6 +158,11 @@ def _failed_synthesis_document() -> dict:
     return _as_document(result)
 
 
+def _unasked_synthesis_document() -> dict:
+    """A council no member answered, so none was asked for the assessment."""
+    return _as_document(build_code_review_result([], files_reviewed=()))
+
+
 def _full_design_document() -> dict:
     responses = [
         ProviderResponse("openai", "openai", "gpt-4o", True, _design_body()),
@@ -174,6 +185,7 @@ _STRICT_DOCUMENTS = {
     "design_question_example": lambda: _shipped_example("design_question"),
     "failed_synthesis": _failed_synthesis_document,
     "majority": _majority_code_review_document,
+    "unasked_synthesis": _unasked_synthesis_document,
 }
 
 # Every object the schema declares a fixed shape for, as a document path reaches it.
@@ -596,15 +608,17 @@ class TestDerivedStrictSchema:
 class TestCompositionReach:
     """Strictness at a base object cannot see a property declared only in a branch.
 
-    `additionalProperties` is composition blind, so a mode branch states which
+    `additionalProperties` is composition blind, so a branch states which
     properties are required and never introduces one. These tests hold the
     schema to that, because the derivation is only safe while it holds.
     """
 
-    def test_a_mode_branch_introduces_no_property(self, published: dict[str, Any]) -> None:
-        base = set(published["properties"])
+    @pytest.mark.parametrize("owner", ["$", "$.summary"])
+    def test_a_branch_introduces_no_property(self, published: dict[str, Any], owner: str) -> None:
+        carrier = {"$": published, "$.summary": published["properties"]["summary"]}[owner]
+        base = set(carrier["properties"])
 
-        for rule in published["allOf"]:
+        for rule in carrier.get("allOf", []):
             for branch in ("if", "then", "else"):
                 carried = rule.get(branch, {})
                 assert set(carried.get("properties", {})) <= base
@@ -616,6 +630,119 @@ class TestCompositionReach:
         for rule in published["allOf"]:
             summary = rule.get("then", {}).get("properties", {}).get("summary", {})
             assert set(summary.get("required", [])) <= declared
+
+
+class TestSynthesisReportingIsRequired:
+    """Both synthesis fields are required and nullable, so a document cannot skip the question.
+
+    A null reports an absence the schema documents per field. An absent key
+    reports nothing, and a requirement rather than the strictness derivation
+    carries that rule, so the copy a consumer holds rejects the omission as
+    well.
+    """
+
+    @pytest.mark.parametrize("document_name", sorted(_STRICT_DOCUMENTS))
+    def test_the_producer_reports_both(self, document_name: str) -> None:
+        document = _STRICT_DOCUMENTS[document_name]()
+
+        assert set(_REPORTING_FIELDS) <= set(document["summary"])
+
+    @pytest.mark.parametrize(
+        ("field", "build"),
+        [
+            ("synthesis_error", _full_code_review_document),
+            ("synthesized_by", _unasked_synthesis_document),
+        ],
+        ids=_REPORTING_FIELDS,
+    )
+    def test_a_null_the_producer_emits_is_accepted(
+        self,
+        published: dict[str, Any],
+        schema: dict[str, Any],
+        field: str,
+        build: Callable[[], dict],
+    ) -> None:
+        """Pin nullability against a document the spec permits, so an edit that dropped it fails."""
+        document = build()
+
+        assert document["summary"][field] is None
+        jsonschema.validate(document, published)
+        jsonschema.validate(document, schema)
+
+    @pytest.mark.parametrize("field", _REPORTING_FIELDS)
+    @pytest.mark.parametrize("document_name", sorted(_STRICT_DOCUMENTS))
+    def test_a_document_that_omits_one_is_rejected(
+        self,
+        published: dict[str, Any],
+        document_name: str,
+        field: str,
+    ) -> None:
+        """Validate against the published copy, because a requirement is not a strictness."""
+        document = _STRICT_DOCUMENTS[document_name]()
+        del document["summary"][field]
+
+        with pytest.raises(jsonschema.ValidationError) as rejection:
+            jsonschema.validate(document, published)
+
+        assert rejection.value.validator == "required"
+        assert list(rejection.value.absolute_path) == ["summary"]
+        assert field in rejection.value.message
+
+    @pytest.mark.parametrize(
+        ("synthesis", "error", "author", "permitted"),
+        [
+            pytest.param("", None, None, True, id="nothing_was_requested"),
+            pytest.param("", None, SYNTHESIS_AUTHOR, False, id="an_author_with_nothing_to_show"),
+            pytest.param("", _SYNTHESIS_FAILURE, None, False, id="a_failure_against_no_member"),
+            pytest.param("", _SYNTHESIS_FAILURE, SYNTHESIS_AUTHOR, True, id="an_author_that_failed"),
+            pytest.param(SYNTHESIS, None, None, False, id="an_assessment_without_an_author"),
+            pytest.param(SYNTHESIS, None, SYNTHESIS_AUTHOR, True, id="an_assessment_by_its_author"),
+            pytest.param(SYNTHESIS, _SYNTHESIS_FAILURE, None, False, id="a_failure_and_an_assessment"),
+            pytest.param(SYNTHESIS, _SYNTHESIS_FAILURE, SYNTHESIS_AUTHOR, False, id="a_failure_beside_an_assessment"),
+        ],
+    )
+    def test_every_combination_of_the_three_fields_is_judged(
+        self,
+        published: dict[str, Any],
+        schema: dict[str, Any],
+        synthesis: str,
+        error: dict[str, Any] | None,
+        author: str | None,
+        permitted: bool,
+    ) -> None:
+        """Enumerate the state space, so a rule covering only part of it fails here."""
+        document = _full_code_review_document()
+        document["summary"] |= {"synthesis": synthesis, "synthesis_error": error, "synthesized_by": author}
+
+        for variant in (published, schema):
+            if permitted:
+                jsonschema.validate(document, variant)
+                continue
+
+            with pytest.raises(jsonschema.ValidationError) as rejection:
+                jsonschema.validate(document, variant)
+
+            assert list(rejection.value.absolute_path)[:1] == ["summary"]
+
+    def test_an_author_named_by_nobody_is_rejected(
+        self,
+        published: dict[str, Any],
+        schema: dict[str, Any],
+    ) -> None:
+        """An empty name passes a type check and still identifies no member."""
+        document = _failed_synthesis_document()
+        document["summary"]["synthesized_by"] = ""
+
+        for variant in (published, schema):
+            with pytest.raises(jsonschema.ValidationError):
+                jsonschema.validate(document, variant)
+
+    def test_the_requirement_is_not_duplicated_into_a_mode_branch(self, published: dict[str, Any]) -> None:
+        assert set(_REPORTING_FIELDS) <= set(published["properties"]["summary"]["required"])
+
+        for rule in published["allOf"]:
+            branch = rule.get("then", {}).get("properties", {}).get("summary", {})
+            assert not set(_REPORTING_FIELDS) & set(branch.get("required", []))
 
 
 class TestSpecVersion:

@@ -172,7 +172,8 @@
     },
     "summary": {
       "type": "object",
-      "description": "Summary counts and synthesis.",
+      "description": "Summary counts, the closing assessment, and which member was asked for it.",
+      "required": ["synthesis_error", "synthesized_by"],
       "properties": {
         "total_issues": {
           "type": "integer",
@@ -195,10 +196,46 @@
           "oneOf": [{ "$ref": "#/$defs/provider_error" }, { "type": "null" }]
         },
         "synthesized_by": {
-          "description": "Display name of the member asked for the synthesis, whether or not it wrote one. Null when no member was asked.",
-          "type": ["string", "null"]
+          "description": "Display name of the member asked for the synthesis, whether or not it wrote one. Null when no member was asked, and never an empty name.",
+          "type": ["string", "null"],
+          "minLength": 1
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["synthesis_error"],
+            "properties": { "synthesis_error": { "type": "object" } }
+          },
+          "then": {
+            "properties": { "synthesized_by": { "type": "string" } }
+          }
+        },
+        {
+          "if": {
+            "required": ["synthesis"],
+            "properties": { "synthesis": { "minLength": 1 } }
+          },
+          "then": {
+            "properties": {
+              "synthesis_error": { "type": "null" },
+              "synthesized_by": { "type": "string" }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["synthesis", "synthesized_by"],
+            "properties": {
+              "synthesis": { "maxLength": 0 },
+              "synthesized_by": { "type": "string" }
+            }
+          },
+          "then": {
+            "properties": { "synthesis_error": { "type": "object" } }
+          }
+        }
+      ]
     },
     "debate": {
       "type": "object",

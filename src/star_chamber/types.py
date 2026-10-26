@@ -182,7 +182,10 @@ class Approach:
         pros: Tuple of advantages.
         cons: Tuple of disadvantages.
         risk_level: Risk assessment string.
-        fit_rating: Optional fitness rating.
+        fit_rating: Fitness rating, or None where none was stated.
+
+    NOTE: fit_rating has no default. A site that failed to state it would claim
+    nobody rated the approach, which is what a null here reports.
     """
 
     name: str
@@ -190,7 +193,7 @@ class Approach:
     pros: tuple[str, ...]
     cons: tuple[str, ...]
     risk_level: str
-    fit_rating: str | None = None
+    fit_rating: str | None
 
 
 @dataclass(frozen=True)

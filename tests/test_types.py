@@ -341,13 +341,15 @@ class TestApproach:
         assert a.risk_level == "low"
         assert a.fit_rating == "excellent"
 
-    def test_defaults(self) -> None:
+    def test_a_rating_nobody_stated_is_passed_explicitly(self) -> None:
+        """No default, so a site cannot claim nobody rated the approach by omission."""
         a = Approach(
             name="Option B",
             recommended_by=1,
             pros=(),
             cons=(),
             risk_level="high",
+            fit_rating=None,
         )
         assert a.fit_rating is None
 
@@ -358,6 +360,7 @@ class TestApproach:
             pros=(),
             cons=(),
             risk_level="low",
+            fit_rating=None,
         )
         with pytest.raises(AttributeError):
             a.name = "changed"  # type: ignore[misc]
@@ -394,6 +397,7 @@ class TestProviderDesignAdvice:
             pros=("scalable",),
             cons=("complex",),
             risk_level="medium",
+            fit_rating="good",
         )
         pda = ProviderDesignAdvice(
             provider="anthropic",

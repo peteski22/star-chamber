@@ -254,7 +254,9 @@ class TestDesignMaterial:
             _advice("openai", summary="Repository fits.", recommendation="Use Approach A."),
             _advice("anthropic", summary="Service fits.", recommendation="Use Approach B."),
         )
-        approaches = (Approach(name="Approach A", recommended_by=1, pros=(), cons=(), risk_level="low"),)
+        approaches = (
+            Approach(name="Approach A", recommended_by=1, pros=(), cons=(), risk_level="low", fit_rating=None),
+        )
 
         material = render_design_material(advices, approaches)
 
@@ -264,8 +266,8 @@ class TestDesignMaterial:
     def test_carries_the_recommendations_and_the_counts(self) -> None:
         advices = (_advice("openai", summary="Repository fits.", recommendation="Use Approach A."),)
         approaches = (
-            Approach(name="Approach A", recommended_by=2, pros=(), cons=(), risk_level="low"),
-            Approach(name="Approach B", recommended_by=0, pros=(), cons=(), risk_level="high"),
+            Approach(name="Approach A", recommended_by=2, pros=(), cons=(), risk_level="low", fit_rating=None),
+            Approach(name="Approach B", recommended_by=0, pros=(), cons=(), risk_level="high", fit_rating=None),
         )
 
         material = render_design_material(advices, approaches)

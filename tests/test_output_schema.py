@@ -320,7 +320,7 @@ class TestDesignOutput:
         assert result.consensus_recommendation is None
         jsonschema.validate(_as_document(result), schema)
 
-    def test_approach_without_a_fit_rating_validates(self, schema) -> None:
+    def test_approach_nobody_rated_reports_a_null_fit_rating(self, schema) -> None:
         """A provider that does not assess fit leaves fit_rating null."""
         responses = [
             ProviderResponse(
@@ -341,6 +341,19 @@ class TestDesignOutput:
 
         assert result.approaches[0].fit_rating is None
         jsonschema.validate(_as_document(result), schema)
+
+    def test_approach_that_omits_the_fit_rating_is_rejected(
+        self,
+        published: dict[str, Any],
+        schema: dict[str, Any],
+    ) -> None:
+        """A null states that nobody rated the approach, and an absent key states nothing."""
+        document = _full_design_document()
+        del document["approaches"][0]["fit_rating"]
+
+        for variant in (published, schema):
+            with pytest.raises(jsonschema.ValidationError):
+                jsonschema.validate(document, variant)
 
 
 class TestReviewsItems:

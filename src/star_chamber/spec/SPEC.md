@@ -1,10 +1,10 @@
-# Council Protocol Specification v0.7
+# Council Protocol Specification v0.8
 
 This document specifies the portable council deliberation protocol — the invocation modes, prompt templates, response parsing, consensus classification, and output format that any orchestrator can implement independently.
 
 The orchestrator-specific implementation for Claude Code lives in `plugins/pragma/skills/star-chamber/PROTOCOL.md`. That document handles Bash subprocess isolation, `uv run` invocation, temp file management, and other runtime concerns. This spec covers only the portable protocol logic.
 
-**Status:** Draft (v0.7). Breaking changes may occur before v1.0.
+**Status:** Draft (v0.8). Breaking changes may occur before v1.0.
 
 ## Table of Contents
 
@@ -27,7 +27,7 @@ The council protocol defines how multiple LLM providers are queried in parallel,
 
 ### Versioning
 
-This spec follows [Semantic Versioning](https://semver.org/). The current version is **0.7** (pre-stable). The version will advance to 1.0 when the schema and algorithm definitions are considered stable.
+This spec follows [Semantic Versioning](https://semver.org/). The current version is **0.8** (pre-stable). The version will advance to 1.0 when the schema and algorithm definitions are considered stable.
 
 ### Spec Version in Output
 
@@ -401,7 +401,7 @@ The structured output includes:
 - `files_reviewed[]`: List of reviewed file paths.
 - `providers_used[]`: The roster asked. All council members consulted, including those that failed, by display name.
 - `providers_responded[]`: The roster that answered. Members that returned a usable review, by display name. This is the denominator the classifications below were computed over.
-- `failed_providers[]`: Members that failed or returned malformed responses, by display name.
+- `failed_providers[]`: Members that failed or returned malformed responses, by display name, each with the model it was asked and the reply it sent.
 - `consensus_issues[]`: Issues flagged by every member in `providers_responded`.
 - `majority_issues[]`: Issues flagged by more than one member in `providers_responded`. Each item includes `provider_count` and `flagged_by` (array of member display names) to identify which members raised it.
 - `individual_issues{}`: Issues keyed by member display name.
@@ -457,7 +457,7 @@ The structured output includes:
 - `prompt`: The original design question (enables rendering the Markdown template without external context).
 - `providers_used[]`: The roster asked. All council members consulted, including those that failed, by display name.
 - `providers_responded[]`: The roster that answered. Members that returned usable advice, by display name. This is the denominator `consensus_recommendation` was computed over.
-- `failed_providers[]`: Members that failed or returned malformed responses, by display name.
+- `failed_providers[]`: Members that failed or returned malformed responses, by display name, each with the model it was asked and the reply it sent.
 - `consensus_recommendation`: High-level directional agreement when every member that answered agrees. Differing specifics count only where a synthesis step establishes the shared direction. Without one the field carries the name of the one approach every member named, and is null otherwise, as section 9.3 requires.
 - `approaches[]`: All approaches mentioned by any provider, with `recommended_by` count, merged pros/cons, `risk_level`, and `fit_rating`. `risk_level` is `unknown` when no provider stated one. `fit_rating` is null when no provider assessed fit for the approach; when providers disagree, use the most common rating.
 - `summary{}`: Contains `synthesis` (a short overall assessment, written as [section 7.2](#72-closing-assessment) requires, empty when no member wrote one), `synthesis_error` (the member asked and the reason it wrote none, null otherwise), and `synthesized_by` (the member asked, null when none was).
@@ -522,6 +522,18 @@ Orchestrators SHOULD set restrictive permissions on config files containing key 
 
 If a provider fails (network error, auth error, timeout), continue with remaining providers. Record the failure in `failed_providers[]` with the error message.
 
+Every recorded failure MUST name the `model` that was asked. A member display name does not give it when several members share one provider, which is the arrangement a gateway makes ordinary.
+
+Every recorded failure MUST carry `raw_content`, whatever the member sent. A description of a failure is not evidence of it, and the reply is the only copy: an orchestrator holds it for the length of one session and nothing else persists it. A failure that produced no reply at all states `raw_content` as null. That means the call returned no message from the member: a timeout, an authentication failure, a response carrying no choices, or a failure nothing anticipated. A message that arrived carrying no content is a reply rather than an absence, so it states `raw_content` as empty, which is a different fact and MUST NOT be reported as null. The two say different things to whoever reads the failure: null points at the network or the gateway, and empty points at the model or the prompt.
+
+The reply MUST be retained whole rather than truncated. A reply is diagnosed from where it stops, so keeping its beginning and discarding its end withholds the part that explains the failure. The reply is already bounded by the output token budget the request set.
+
+A reply the provider cut short at that budget, or withheld, is a failure rather than partial content, and its reply MUST be retained on the failure like any other. These are the failures most worth diagnosing, because the reply shows where it stopped.
+
+A provider that declines to answer may state its reason outside the reply content. Where it does, that statement MUST be retained as the reply, because it is the member explaining itself and nothing else records it.
+
+A failure that no part of this protocol anticipated MUST be recorded against the member that caused it, and MUST NOT end the round. The output document is the only durable record of a session, so a round that ends early discards the replies of every member that answered.
+
 ### All Providers Fail
 
 If all providers fail, report the error with all failure details. Do not produce partial output — there is no consensus to classify.
@@ -532,7 +544,7 @@ Each provider MAY have a configurable timeout (`timeout_seconds` in the council 
 
 ### Malformed Response
 
-If a provider returns a response that cannot be parsed (see [section 8](#8-response-parsing)), mark it as failed and continue with other providers.
+If a provider returns a response that cannot be parsed (see [section 8](#8-response-parsing)), mark it as failed and continue with other providers. Record the unparsed reply as `raw_content` on the failure. A reply that could not be parsed is the one reply a reader needs, and the parse error names a symptom rather than showing it.
 
 ### Synthesis Failure
 

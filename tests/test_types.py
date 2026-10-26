@@ -255,17 +255,17 @@ class TestMajorityIssue:
 
 class TestProviderError:
     def test_all_fields_set(self) -> None:
-        pe = ProviderError(provider="openai", error="timeout")
+        pe = ProviderError(provider="openai", model="gpt-4o", error="timeout", raw_content=None)
         assert pe.provider == "openai"
         assert pe.error == "timeout"
 
     def test_frozen(self) -> None:
-        pe = ProviderError(provider="openai", error="timeout")
+        pe = ProviderError(provider="openai", model="gpt-4o", error="timeout", raw_content=None)
         with pytest.raises(AttributeError):
             pe.error = "other"  # type: ignore[misc]
 
     def test_json_round_trip(self) -> None:
-        pe = ProviderError(provider="openai", error="rate-limited")
+        pe = ProviderError(provider="openai", model="gpt-4o", error="rate-limited", raw_content=None)
         data = _round_trip(pe)
         rebuilt = _reconstruct(ProviderError, data)
         assert rebuilt == pe
@@ -568,7 +568,7 @@ class TestCodeReviewResult:
             files_reviewed=("app.py",),
             providers_used=("openai", "anthropic"),
             providers_responded=("openai",),
-            failed_providers=(ProviderError(provider="local", error="crash"),),
+            failed_providers=(ProviderError(provider="local", model="m", error="crash", raw_content=None),),
             reviews=(review,),
             consensus_issues=(issue,),
             majority_issues=(mi,),

@@ -1,6 +1,6 @@
 """Council protocol specification files shipped as package data, and the version they state."""
 
-SPEC_VERSION = "0.7"
+SPEC_VERSION = "0.8"
 """The protocol version this package implements, as SPEC.md states it.
 
 A consumer compares this with the version its own instructions were written

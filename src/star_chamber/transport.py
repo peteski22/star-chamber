@@ -51,19 +51,31 @@ class ProviderResponse:
             is configured.
         model: Model name used.
         success: Whether the call succeeded.
-        content: Response content on success.
+        content: Response content, when the provider returned any. A reply the
+            provider cut short or withheld is carried here as well, so the
+            failure can be diagnosed, though success stays False. None when the
+            call produced no reply at all, which an empty reply does not mean.
         error: Error message on failure.
+
+    Raises:
+        ValueError: If a successful response carries no content, which the
+            attributes above say cannot happen.
     """
 
     provider: str
     display_name: str
     model: str
     success: bool
-    content: str = ""
+    content: str | None = None
     error: str = ""
 
+    def __post_init__(self) -> None:
+        """Reject a state the attributes above say cannot exist."""
+        if self.success and self.content is None:
+            raise ValueError("A successful response carries the content the provider returned.")
 
-def _sanitize_error(message: str) -> str:
+
+def sanitize_error(message: str) -> str:
     """Redact API keys from an error message.
 
     Args:
@@ -111,8 +123,9 @@ async def send_to_provider(
         otari: Optional Otari gateway routing configuration.
 
     Returns:
-        A ProviderResponse indicating success or failure.  A reply the provider
-        cut short, or withheld, is a failure rather than partial content.
+        A ProviderResponse indicating success or failure. A reply the provider
+        cut short, or withheld, is a failure rather than partial content, and
+        the reply itself is carried on the failure for diagnosis.
     """
     identity = config.identity
 
@@ -172,7 +185,7 @@ async def send_to_provider(
     except Exception as exc:
         error_msg = str(exc)
         if _is_auth_error(error_msg):
-            sanitized = _sanitize_error(error_msg)
+            sanitized = sanitize_error(error_msg)
             if routed_via_otari:
                 detail = "Authentication failed at the Otari gateway. Check your Otari API key"
             elif config.local:
@@ -191,7 +204,7 @@ async def send_to_provider(
             display_name=identity,
             model=config.model,
             success=False,
-            error=_sanitize_error(error_msg),
+            error=sanitize_error(error_msg),
         )
 
     if not response.choices:
@@ -204,6 +217,15 @@ async def send_to_provider(
         )
 
     choice = response.choices[0]
+    # Passed through rather than defaulted, so a reply that never arrived stays
+    # distinguishable from one that arrived carrying nothing.
+    content = choice.message.content
+    # A provider that declines states its reason here rather than in the content.
+    # Checked for type, not presence, because the field is absent on most SDKs.
+    declined = getattr(choice.message, "refusal", None)
+    refusal = declined if isinstance(declined, str) and declined else None
+    # A message arrived either way, so an empty reply is not an absent one.
+    reply = content if content is not None else (refusal or "")
 
     if choice.finish_reason == _STOPPED_AT_TOKEN_LIMIT:
         return ProviderResponse(
@@ -211,6 +233,7 @@ async def send_to_provider(
             display_name=identity,
             model=config.model,
             success=False,
+            content=reply,
             error=(
                 f"Provider {config.provider} reached its {max_tok} output token limit, "
                 f"so the reply is cut off and incomplete. "
@@ -224,7 +247,22 @@ async def send_to_provider(
             display_name=identity,
             model=config.model,
             success=False,
+            content=reply,
             error=f"Provider {config.provider} blocked its own response, so no review is available.",
+        )
+
+    if content is None:
+        return ProviderResponse(
+            provider=config.provider,
+            display_name=identity,
+            model=config.model,
+            success=False,
+            content=reply,
+            error=(
+                f"Provider {config.provider} declined to answer, so no review is available."
+                if refusal
+                else f"Provider {config.provider} returned a reply with no content."
+            ),
         )
 
     return ProviderResponse(
@@ -232,7 +270,7 @@ async def send_to_provider(
         display_name=identity,
         model=config.model,
         success=True,
-        content=choice.message.content or "",
+        content=content,
     )
 
 
@@ -255,10 +293,27 @@ async def fan_out(
 
     NOTE: Returning the pairs keeps the member reachable from its reply, so a
     caller never has to match the two sequences up itself.
+    NOTE: A member that fails in a way nothing anticipated becomes a recorded
+    failure rather than an exception, because one member must not discard every
+    other member's reply along with its own.
     """
     tasks = [send_to_provider(cfg, prompt, timeout=timeout, otari=otari) for cfg in configs]
-    responses = await asyncio.gather(*tasks)
-    return list(zip(configs, responses, strict=True))
+    outcomes = await asyncio.gather(*tasks, return_exceptions=True)
+
+    pairs: list[tuple[ProviderConfig, ProviderResponse]] = []
+    for config, outcome in zip(configs, outcomes, strict=True):
+        if isinstance(outcome, asyncio.CancelledError):
+            raise outcome
+        if isinstance(outcome, BaseException):
+            outcome = ProviderResponse(
+                provider=config.provider,
+                display_name=config.identity,
+                model=config.model,
+                success=False,
+                error=f"Unexpected failure reading the reply from {config.provider}: {sanitize_error(str(outcome))}",
+            )
+        pairs.append((config, outcome))
+    return pairs
 
 
 def resolve_api_keys(

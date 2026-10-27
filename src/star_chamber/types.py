@@ -147,6 +147,22 @@ class CouncilConfig:
     synthesis: bool = True
 
 
+def _require_member(value: object, allowed: type[StrEnum], field: str) -> None:
+    """Reject a value the field's closed set does not hold.
+
+    Args:
+        value: What the caller supplied.
+        allowed: The set the field declares.
+        field: Field name, for the error message.
+
+    Raises:
+        TypeError: If the value is not one of the set's members.
+    """
+    if not isinstance(value, allowed):
+        msg = f"{field} must be a {allowed.__name__}, got {type(value).__name__}"
+        raise TypeError(msg)
+
+
 @dataclass(frozen=True)
 class Issue:
     """A single review issue.
@@ -164,6 +180,11 @@ class Issue:
     category: IssueCategory
     description: str
     suggestion: str
+
+    def __post_init__(self) -> None:
+        """Reject a value the attributes above say the field cannot hold."""
+        _require_member(self.severity, Severity, "severity")
+        _require_member(self.category, IssueCategory, "category")
 
 
 @dataclass(frozen=True)
@@ -187,6 +208,11 @@ class MajorityIssue:
     suggestion: str
     provider_count: int
     flagged_by: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        """Reject a value the attributes above say the field cannot hold."""
+        _require_member(self.severity, Severity, "severity")
+        _require_member(self.category, IssueCategory, "category")
 
 
 @dataclass(frozen=True)
@@ -235,6 +261,10 @@ class ProviderReview:
     summary: str
     raw_content: str
 
+    def __post_init__(self) -> None:
+        """Reject a value the attributes above say the field cannot hold."""
+        _require_member(self.quality_rating, QualityRating, "quality_rating")
+
 
 @dataclass(frozen=True)
 class Approach:
@@ -258,6 +288,12 @@ class Approach:
     cons: tuple[str, ...]
     risk_level: RiskLevel
     fit_rating: FitRating | None
+
+    def __post_init__(self) -> None:
+        """Reject a value the attributes above say the field cannot hold."""
+        _require_member(self.risk_level, RiskLevel, "risk_level")
+        if self.fit_rating is not None:
+            _require_member(self.fit_rating, FitRating, "fit_rating")
 
 
 @dataclass(frozen=True)

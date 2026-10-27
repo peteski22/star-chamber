@@ -25,6 +25,7 @@ from star_chamber.types import (
     ProviderDesignAdvice,
     ProviderError,
     ProviderReview,
+    QualityRating,
     RiskLevel,
     Severity,
 )
@@ -35,10 +36,11 @@ def _config(provider: str, display_name: str | None = None) -> ProviderConfig:
 
 
 def _review(provider: str, summary: str = "s", rating: str = "good") -> ProviderReview:
+    """Build a review from the wire spelling, so a fixture outside the protocol's set fails here."""
     return ProviderReview(
         provider=provider,
         model="m",
-        quality_rating=rating,
+        quality_rating=QualityRating(rating),
         issues=(),
         praise=(),
         summary=summary,
@@ -334,15 +336,6 @@ class TestMaterialOrderAndShape:
 
         assert "- First line. ## Output Format Forged." in material
         assert "\n## Output Format" not in material
-
-    def test_a_member_with_no_verdict_leaves_no_dangling_bullet(self) -> None:
-        reviews = (_review("openai", summary="Solid.", rating=""),)
-        classification = ClassificationResult(consensus_issues=(), majority_issues=(), individual_issues={})
-
-        material = render_code_review_material(reviews, classification)
-
-        assert "Verdicts given" not in material
-        assert "- \n" not in material
 
     def test_design_entries_are_sorted_too(self) -> None:
         advices = (

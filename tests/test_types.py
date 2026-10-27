@@ -36,9 +36,23 @@ def _round_trip(obj):
     return json.loads(json.dumps(d))
 
 
+# The type each closed-set field carries, so a round trip restores it from text as a consumer must.
+_CLOSED_SETS = {
+    "category": IssueCategory,
+    "fit_rating": FitRating,
+    "quality_rating": QualityRating,
+    "risk_level": RiskLevel,
+    "severity": Severity,
+}
+
+
 def _reconstruct(cls, data):
-    """Reconstruct a flat frozen dataclass from a dict, converting lists to tuples for tuple-typed fields."""
-    return cls(**data)
+    """Reconstruct a flat frozen dataclass from a dict, restoring each closed-set field to its type."""
+    restored = {
+        key: _CLOSED_SETS[key](value) if key in _CLOSED_SETS and value is not None else value
+        for key, value in data.items()
+    }
+    return cls(**restored)
 
 
 # -- ProviderConfig -----------------------------------------------------------
@@ -318,7 +332,7 @@ class TestProviderReview:
             provider=data["provider"],
             model=data["model"],
             quality_rating=QualityRating(data["quality_rating"]),
-            issues=tuple(Issue(**i) for i in data["issues"]),
+            issues=tuple(_reconstruct(Issue, i) for i in data["issues"]),
             praise=tuple(data["praise"]),
             summary=data["summary"],
             raw_content=data["raw_content"],
@@ -523,7 +537,7 @@ class TestClassificationResult:
         )
         data = _round_trip(cr)
         rebuilt = ClassificationResult(
-            consensus_issues=tuple(Issue(**i) for i in data["consensus_issues"]),
+            consensus_issues=tuple(_reconstruct(Issue, i) for i in data["consensus_issues"]),
             majority_issues=tuple(
                 MajorityIssue(
                     severity=m["severity"],
@@ -536,7 +550,10 @@ class TestClassificationResult:
                 )
                 for m in data["majority_issues"]
             ),
-            individual_issues={k: tuple(Issue(**i) for i in v) for k, v in data["individual_issues"].items()},
+            individual_issues={
+                name: tuple(_reconstruct(Issue, i) for i in issues)
+                for name, issues in data["individual_issues"].items()
+            },
         )
         assert rebuilt == cr
 
@@ -721,3 +738,76 @@ class TestProviderConfigDisplayName:
     def test_holds_configured_value(self) -> None:
         cfg = ProviderConfig(provider="openrouter", model="openai/gpt-5.2", display_name="gpt-5.2")
         assert cfg.display_name == "gpt-5.2"
+
+
+class TestClosedSetFields:
+    """A wire type refuses a value outside the set its field declares.
+
+    A plain string is accepted by the language and then fails deep in the
+    classifier, so the type rejects it where the caller supplied it.
+    """
+
+    def _issue(self, **overrides) -> Issue:
+        fields = {
+            "severity": Severity.HIGH,
+            "location": "a.py:1",
+            "category": IssueCategory.CORRECTNESS,
+            "description": "Off-by-one.",
+            "suggestion": "Use <=.",
+        }
+        return Issue(**(fields | overrides))
+
+    def _approach(self, **overrides) -> Approach:
+        fields = {
+            "name": "Repository",
+            "recommended_by": 1,
+            "pros": (),
+            "cons": (),
+            "risk_level": RiskLevel.LOW,
+            "fit_rating": FitRating.GOOD,
+        }
+        return Approach(**(fields | overrides))
+
+    def test_an_issue_refuses_a_raw_severity(self) -> None:
+        with pytest.raises(TypeError, match="severity must be a Severity, got str"):
+            self._issue(severity="high")
+
+    def test_an_issue_refuses_a_raw_category(self) -> None:
+        with pytest.raises(TypeError, match="category must be a IssueCategory, got str"):
+            self._issue(category="correctness")
+
+    def test_a_majority_issue_refuses_a_raw_severity(self) -> None:
+        with pytest.raises(TypeError, match="severity must be a Severity, got str"):
+            MajorityIssue(
+                severity="high",
+                location="a.py:1",
+                category=IssueCategory.CORRECTNESS,
+                description="Off-by-one.",
+                suggestion="Use <=.",
+                provider_count=2,
+                flagged_by=("openai", "anthropic"),
+            )
+
+    def test_a_review_refuses_a_raw_rating(self) -> None:
+        with pytest.raises(TypeError, match="quality_rating must be a QualityRating, got str"):
+            ProviderReview(
+                provider="openai",
+                model="gpt-4o",
+                quality_rating="good",
+                issues=(),
+                praise=(),
+                summary="Fine.",
+                raw_content="{}",
+            )
+
+    def test_an_approach_refuses_a_raw_risk_level(self) -> None:
+        with pytest.raises(TypeError, match="risk_level must be a RiskLevel, got str"):
+            self._approach(risk_level="low")
+
+    def test_an_approach_refuses_a_raw_fit_rating(self) -> None:
+        with pytest.raises(TypeError, match="fit_rating must be a FitRating, got str"):
+            self._approach(fit_rating="good")
+
+    def test_an_approach_accepts_no_fit_rating(self) -> None:
+        """Null reports that nobody rated the approach, so it is not a value outside the set."""
+        assert self._approach(fit_rating=None).fit_rating is None

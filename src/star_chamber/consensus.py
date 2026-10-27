@@ -310,7 +310,7 @@ def _most_cautious_of_the_most_common(values: Sequence[_RankedT]) -> _RankedT | 
     """Return the value the most providers stated, resolving a tie toward the more cautious value.
 
     Args:
-        values: What each provider stated, including repeats, most cautious ranking first.
+        values: What each provider stated, including repeats.
 
     Returns:
         The winning value, or None when no provider stated one.

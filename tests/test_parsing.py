@@ -73,9 +73,9 @@ class TestParseCodeReview:
         assert review.quality_rating == "fair"
         assert len(review.issues) == 1
         assert review.issues[0] == Issue(
-            severity="high",
+            severity=Severity.HIGH,
             location="auth.py:23",
-            category="correctness",
+            category=IssueCategory.CORRECTNESS,
             description="SHA-256 for password hashing is insecure.",
             suggestion="Use bcrypt.",
         )
@@ -400,6 +400,12 @@ class TestClosedSets:
         """UNKNOWN reports that no member rated the approach, so no member can claim it."""
         with pytest.raises(ParseError, match=r"Field risk_level in .* must be one of high, medium, low, got 'unknown'"):
             _carrying("risk_level", RiskLevel.UNKNOWN.value)
+
+    @pytest.mark.parametrize("field", sorted(_MEMBER_CHOICES))
+    def test_an_empty_value_is_rejected(self, field: str) -> None:
+        """An empty value is text, so only the set catches it."""
+        with pytest.raises(ParseError, match=rf"Field {field} in .* must be one of"):
+            _carrying(field, "")
 
     def test_an_overlong_value_is_reported_by_length(self) -> None:
         """A member can put a whole reply in a field the protocol says holds one short word."""

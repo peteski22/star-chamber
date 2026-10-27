@@ -34,6 +34,14 @@ _TWO_PROVIDER_CONFIG = CouncilConfig(
     consensus_threshold=2,
 )
 
+_GEMINI_CONFIG = ProviderConfig(provider="gemini", model="gemini-pro")
+
+_UNANIMOUS_CONFIG = CouncilConfig(
+    providers=(_OPENAI_CONFIG, _ANTHROPIC_CONFIG, _GEMINI_CONFIG),
+    timeout_seconds=30,
+    consensus_threshold=3,
+)
+
 
 _GOOD_ISSUE = {
     "severity": "high",
@@ -389,6 +397,35 @@ class TestRunCouncilDesignQuestion:
         assert result.prompt == "Should we use a monorepo?"
         assert set(result.providers_used) == {"openai", "anthropic"}
         assert len(result.approaches) == 1
+
+    async def test_the_configured_threshold_decides_the_reported_direction(self) -> None:
+        mock_responses = [
+            _success_response(
+                "openai", "gpt-4o", _design_json(recommendation="Use Repository.", approaches=[_approach("Repository")])
+            ),
+            _success_response(
+                "anthropic",
+                "claude-3",
+                _design_json(recommendation="Use Repository.", approaches=[_approach("Repository")]),
+            ),
+            _success_response(
+                "gemini",
+                "gemini-pro",
+                _design_json(recommendation="Use Active Record.", approaches=[_approach("Active Record")]),
+            ),
+        ]
+
+        with (
+            patch("star_chamber.council.resolve_api_keys", return_value=_UNANIMOUS_CONFIG.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(mock_responses)),
+        ):
+            result = await run_council(
+                prompt="Which data layer?",
+                config=_UNANIMOUS_CONFIG,
+                mode="design-question",
+            )
+
+        assert result.consensus_recommendation is None
 
     async def test_design_question_partial_failure(self) -> None:
         mock_responses = [
@@ -1222,9 +1259,9 @@ class TestDesignConsensusRecommendation:
     result, and gives a consumer two shapes it cannot tell apart.
     """
 
-    def _result(self, *bodies: str):
+    def _result(self, *bodies: str, threshold: int = 2):
         responses = [_success_response(f"member-{index}", "model", body) for index, body in enumerate(bodies)]
-        return build_design_result(responses, prompt="Which data layer?")
+        return build_design_result(responses, prompt="Which data layer?", threshold=threshold)
 
     def test_identical_prose_naming_a_shared_approach_reports_the_approach_name(self) -> None:
         result = self._result(
@@ -1256,6 +1293,108 @@ class TestDesignConsensusRecommendation:
         )
 
         assert result.consensus_recommendation == "Repository"
+
+    def test_the_threshold_decides_rather_than_every_member_agreeing(self) -> None:
+        result = self._result(
+            _design_json(recommendation="Use Repository.", approaches=[_approach("Repository")]),
+            _design_json(recommendation="Use Repository.", approaches=[_approach("Repository")]),
+            _design_json(recommendation="Use Active Record.", approaches=[_approach("Active Record")]),
+        )
+
+        assert result.consensus_recommendation == "Repository"
+
+    def test_a_member_naming_two_approaches_does_not_silence_the_others(self) -> None:
+        result = self._result(
+            _design_json(recommendation="Use Repository.", approaches=[_approach("Repository")]),
+            _design_json(
+                recommendation="Use Repository over Active Record.",
+                approaches=[_approach("Repository"), _approach("Active Record")],
+            ),
+            _design_json(recommendation="Use Repository.", approaches=[_approach("Repository")]),
+        )
+
+        assert result.consensus_recommendation == "Repository"
+
+    def test_a_member_naming_two_approaches_casts_no_vote(self) -> None:
+        """Names carry no polarity, so the rejected one must not win on the member's own ballot."""
+        result = self._result(
+            _design_json(
+                recommendation="Use Repository instead of Active Record.",
+                approaches=[_approach("Repository"), _approach("Active Record")],
+            ),
+            _design_json(recommendation="Use Active Record.", approaches=[_approach("Active Record")]),
+        )
+
+        assert {a.name: a.recommended_by for a in result.approaches} == {"Repository": 1, "Active Record": 2}
+        assert result.consensus_recommendation is None
+
+    def test_differing_wording_is_tallied_apart(self) -> None:
+        result = self._result(
+            _design_json(recommendation="Use Repository.", approaches=[_approach("Repository")]),
+            _design_json(recommendation="Use Repository Pattern.", approaches=[_approach("Repository Pattern")]),
+            _design_json(recommendation="Use Data Mapper.", approaches=[_approach("Data Mapper")]),
+        )
+
+        assert result.consensus_recommendation is None
+
+    def test_an_evenly_split_council_reports_no_direction(self) -> None:
+        result = self._result(
+            _design_json(recommendation="Use Repository.", approaches=[_approach("Repository")]),
+            _design_json(recommendation="Use Repository.", approaches=[_approach("Repository")]),
+            _design_json(recommendation="Use Active Record.", approaches=[_approach("Active Record")]),
+            _design_json(recommendation="Use Active Record.", approaches=[_approach("Active Record")]),
+        )
+
+        assert result.consensus_recommendation is None
+
+    def test_a_member_that_names_no_approach_casts_no_ballot(self) -> None:
+        result = self._result(
+            _design_json(recommendation="", approaches=[_approach("Repository")]),
+            _design_json(recommendation="", approaches=[_approach("Repository")]),
+            threshold=0,
+        )
+
+        assert result.approaches[0].recommended_by == 0
+        assert result.consensus_recommendation is None
+
+    def test_a_member_rejecting_its_own_approach_cannot_carry_it_to_a_majority(self) -> None:
+        """The veto reads the names the recommendation mentions, not those the member also listed itself.
+
+        Member 0 names two approaches while listing only one, so reading its ballot
+        from the names it listed would record it for the approach it rejected, and
+        that single spurious ballot is what reaches the majority here.
+        """
+        result = self._result(
+            _design_json(
+                recommendation="Use Active Record instead of Repository.",
+                approaches=[_approach("Repository")],
+            ),
+            _design_json(recommendation="Use Repository.", approaches=[_approach("Repository")]),
+            _design_json(recommendation="Use Active Record.", approaches=[_approach("Active Record")]),
+        )
+
+        assert result.consensus_recommendation is None
+
+    def test_a_lead_short_of_a_majority_reports_no_direction(self) -> None:
+        """The field is named for consensus, so a plurality of the roster must not carry it."""
+        result = self._result(
+            _design_json(recommendation="Use Repository.", approaches=[_approach("Repository")]),
+            _design_json(recommendation="Use Repository.", approaches=[_approach("Repository")]),
+            _design_json(recommendation="Use Active Record.", approaches=[_approach("Active Record")]),
+            _design_json(recommendation="Do the simplest thing.", approaches=[_approach("Data Mapper")]),
+            _design_json(recommendation="Do the simplest thing.", approaches=[_approach("Data Mapper")]),
+        )
+
+        assert result.consensus_recommendation is None
+
+    def test_an_approach_below_the_threshold_is_null(self) -> None:
+        result = self._result(
+            _design_json(recommendation="Use Repository.", approaches=[_approach("Repository")]),
+            _design_json(recommendation="Use Active Record.", approaches=[_approach("Active Record")]),
+            _design_json(recommendation="Use Data Mapper.", approaches=[_approach("Data Mapper")]),
+        )
+
+        assert result.consensus_recommendation is None
 
 
 # ---------------------------------------------------------------------------

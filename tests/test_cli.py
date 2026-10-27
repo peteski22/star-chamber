@@ -26,6 +26,8 @@ _TWO_PROVIDER_CONFIG = CouncilConfig(
     consensus_threshold=2,
 )
 
+_GEMINI_CONFIG = ProviderConfig(provider="gemini", model="gemini-pro")
+
 
 def _code_review_json(
     quality: str = "good",
@@ -735,6 +737,33 @@ class TestRosterOutput:
 
         assert result.exit_code == 0
         assert "agreed by all 2 providers that answered" in result.output
+
+    def test_the_recommendation_heading_claims_no_unanimity(self) -> None:
+        """The value needs only the threshold, so a heading that says all is a false claim."""
+
+        def named(name: str) -> list[dict]:
+            return [{"name": name, "pros": ["Simple"], "cons": ["Limited"], "risk_level": "low", "fit_rating": "good"}]
+
+        agrees = _design_json(recommendation="Use Repository.", approaches=named("Repository"))
+        dissents = _design_json(recommendation="Use Active Record.", approaches=named("Active Record"))
+        config = CouncilConfig(providers=(_OPENAI_CONFIG, _ANTHROPIC_CONFIG, _GEMINI_CONFIG))
+        responses = [
+            _success_response("openai", "gpt-4o", agrees),
+            _success_response("anthropic", "claude-3", agrees),
+            _success_response("gemini", "gemini-pro", dissents),
+        ]
+
+        with (
+            patch("star_chamber.cli._load_config", return_value=config),
+            patch("star_chamber.council.resolve_api_keys", return_value=config.providers),
+            patch("star_chamber.council.fan_out", new_callable=AsyncMock, return_value=exchanges(responses)),
+        ):
+            runner = CliRunner()
+            result = runner.invoke(main, ["ask", "Which data layer?"])
+
+        assert result.exit_code == 0
+        assert "Consensus recommendation (3 providers answered): Repository" in result.output
+        assert "all 3" not in result.output
 
     def test_no_answers_reports_none(self, tmp_path: Path) -> None:
         src = tmp_path / "app.py"

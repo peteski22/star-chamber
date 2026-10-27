@@ -1,6 +1,6 @@
 {
   "mode": "code-review",
-  "spec_version": "0.9",
+  "spec_version": "0.10",
   "files_reviewed": [
     "backend/app/services/auth.py",
     "backend/app/api/routes/auth.py"

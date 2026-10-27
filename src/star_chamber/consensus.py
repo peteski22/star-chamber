@@ -394,30 +394,45 @@ def aggregate_approaches(advices: Sequence[ProviderDesignAdvice]) -> tuple[Appro
 def consensus_recommendation(
     advices: Sequence[ProviderDesignAdvice],
     approaches: Sequence[Approach],
+    threshold: int = 2,
 ) -> str | None:
-    """Name the one approach every provider that answered recommended.
+    """Name the approach a majority of the providers that answered recommended.
 
     The value is always a name that appears in ``approaches``, so a consumer can
     look it up rather than having to tell prose and a name apart.
 
     Args:
         advices: Parsed advice from every provider that answered.
-        approaches: The grouped approaches those providers named.
+        approaches: The grouped approaches those providers named, which supply
+            the names a recommendation is read against.
+        threshold: Minimum providers that must recommend one approach. It can
+            raise the majority toward unanimity but never lower it.
 
     Returns:
-        The shared approach's name, or None when the providers named no single one.
+        The approach's name, or None when no approach holds a majority.
 
-    NOTE: Providers that recommend different variants of one direction yield None,
-    because recognizing the shared direction behind differing prose needs a synthesis step.
+    NOTE: A recommendation casts a ballot only when it names exactly one
+    approach and that provider named the approach itself.
+    A name carries no polarity, so a recommendation naming two does not say
+    which of them it endorsed.
+    NOTE: Providers that express one direction in different words are tallied
+    separately, and each wording must hold a majority on its own.
     """
     if not advices:
         return None
 
     display_names = {_approach_name_key(approach.name): approach.name for approach in approaches}
-    picks = [_approaches_recommended_by(advice, display_names) for advice in advices]
-    if any(len(pick) != 1 for pick in picks):
-        return None
-    shared = {next(iter(pick)) for pick in picks}
-    if len(shared) != 1:
-        return None
-    return display_names[next(iter(shared))]
+    ballots = Counter[str]()
+    for advice in advices:
+        mentioned = _names_mentioned_in(advice.recommendation, display_names)
+        if len(mentioned) != 1:
+            continue
+        key = next(iter(mentioned))
+        if key in _own_name_keys(advice):
+            ballots[key] += 1
+
+    # At most one approach can hold a majority, because two would need more
+    # ballots than there are providers, so no tie is possible here.
+    needed = max(len(advices) // 2 + 1, min(threshold, len(advices)))
+    winner = next((key for key, count in ballots.items() if count >= needed), None)
+    return None if winner is None else display_names[winner]

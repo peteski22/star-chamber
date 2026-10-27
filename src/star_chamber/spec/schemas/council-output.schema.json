@@ -134,7 +134,7 @@
     },
     "consensus_recommendation": {
       "type": ["string", "null"],
-      "description": "High-level consensus recommendation when every provider that answered agrees on a general direction (design-question mode). Differing specifics count only where a synthesis step establishes the shared direction. Without one the value is the name of the one approach every provider named, and is null otherwise."
+      "description": "The name of the approach a strict majority of the providers that answered recommended (design-question mode). The value always appears in approaches[].name. A recommendation naming any number of approaches other than one casts no ballot, so this is not derived from approaches[].recommended_by. Null when no approach reaches a majority."
     },
     "approaches": {
       "type": "array",

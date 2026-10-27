@@ -432,7 +432,8 @@ class DesignQuestionResult:
             The consensus recommendation was computed over these members alone.
         failed_providers: Providers that failed during the session.
         approaches: Aggregated design approaches.
-        consensus_recommendation: Recommendation all providers agreed on.
+        consensus_recommendation: The approach a majority of the providers
+            that answered recommended. None when no approach held one.
         summary: Prose for the session.
         spec_version: The protocol version that produced this document, for a
             consumer to compare against the version its instructions were

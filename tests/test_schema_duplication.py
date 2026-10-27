@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from importlib.resources import files
 from typing import Any
 
 import pytest
@@ -207,3 +208,35 @@ class TestPromptVocabularies:
 
         assert listed is not None, f"no template lists {named}"
         assert {value.strip() for value in listed.group(1).split("|")} == set(_VOCABULARIES[named].members)
+
+
+class TestSpecNamesTheClosedSets:
+    """The spec names the constrained fields in prose, which the schemas define.
+
+    An orchestrator implements the rule from that sentence, so a field whose
+    schema gains an enum and whose name never reaches the sentence is a rule
+    nobody outside this package can follow.
+    """
+
+    def _constrained(self, name: str) -> set[str]:
+        """Each field the schema constrains to a closed set."""
+        found: set[str] = set()
+        stack: list[Any] = [json.loads(get_schema(name))]
+        while stack:
+            node = stack.pop()
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    if isinstance(value, dict) and "enum" in value:
+                        found.add(key)
+                    stack.append(value)
+            elif isinstance(node, list):
+                stack.extend(node)
+        return found
+
+    def test_the_spec_names_every_field_a_member_schema_constrains(self) -> None:
+        spec = (files("star_chamber.spec") / "SPEC.md").read_text(encoding="utf-8")
+        section = spec.split("### Closed Sets")[1].split("###")[0]
+        named = set(re.findall(r"`([a-z_]+)`", section.split("\n\n")[1]))
+        constrained = self._constrained("code-review-result") | self._constrained("design-advice-result")
+
+        assert constrained <= named

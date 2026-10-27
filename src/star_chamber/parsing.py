@@ -30,7 +30,7 @@ _OPEN_FENCE_RE = re.compile(r"^\s*```(?:json)?\s*\n")
 
 _JSON_START_RE = re.compile(r"[{\[]")
 
-# A rejected value is quoted back only while it is as short as the values it was measured against.
+# A plausible wrong value is quoted back whole, and anything longer is reported by its length.
 _MAX_ECHOED_VALUE_CHARS = 40
 
 # The risk levels a member may send. UNKNOWN is the council's own value for a level nobody stated.

@@ -12,12 +12,16 @@ allow.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
+from importlib.resources import files
 from typing import Any
 
 import pytest
 
+from star_chamber.prompt import render_code_review_prompt, render_design_prompt
 from star_chamber.schema import get_schema
+from star_chamber.types import FitRating, IssueCategory, QualityRating, RiskLevel, Severity
 
 
 @dataclass(frozen=True)
@@ -62,6 +66,45 @@ _INLINE_COPIES = {
         source_schema="code-review-result",
         source_path=(),
         required_adds=frozenset({"model", "raw_content"}),
+    ),
+}
+
+
+@dataclass(frozen=True)
+class _Vocabulary:
+    """One closed set this package names, and the shipped schema that defines what a member may send."""
+
+    members: tuple[str, ...]
+    source_schema: str
+    source_path: tuple[str, ...]
+
+
+# Each closed set the package names in Python, beside the schema that defines it.
+_VOCABULARIES = {
+    "category": _Vocabulary(
+        members=tuple(IssueCategory),
+        source_schema="code-review-result",
+        source_path=("properties", "issues", "items", "properties", "category"),
+    ),
+    "fit_rating": _Vocabulary(
+        members=tuple(FitRating),
+        source_schema="design-advice-result",
+        source_path=("properties", "approaches", "items", "properties", "fit_rating"),
+    ),
+    "quality_rating": _Vocabulary(
+        members=tuple(QualityRating),
+        source_schema="code-review-result",
+        source_path=("properties", "quality_rating"),
+    ),
+    "risk_level": _Vocabulary(
+        members=tuple(level for level in RiskLevel if level.stated),
+        source_schema="design-advice-result",
+        source_path=("properties", "approaches", "items", "properties", "risk_level"),
+    ),
+    "severity": _Vocabulary(
+        members=tuple(Severity),
+        source_schema="code-review-result",
+        source_path=("properties", "issues", "items", "properties", "severity"),
     ),
 }
 
@@ -126,3 +169,74 @@ class TestInlineCopies:
         source = _shape(duplicate.source_schema, duplicate.source_path)
 
         assert duplicate.required_adds.isdisjoint(source["properties"])
+
+
+class TestVocabularies:
+    """A closed set is written in Python and in a shipped schema, so the two are pinned together.
+
+    The parse boundary validates a member's value against the Python set, and
+    a consumer validates the document against the schema, so the sets drifting
+    apart means a reply one accepts the other rejects.
+    """
+
+    @pytest.mark.parametrize("named", sorted(_VOCABULARIES))
+    def test_the_package_names_what_a_member_may_send(self, named: str) -> None:
+        vocabulary = _VOCABULARIES[named]
+        declared = _shape(vocabulary.source_schema, vocabulary.source_path)
+
+        assert set(vocabulary.members) == set(declared["enum"])
+
+    def test_the_council_adds_the_level_no_member_states(self) -> None:
+        """The output carries one risk level a member may not send, for an approach nobody rated."""
+        declared = _shape("council-output", ("properties", "approaches", "items", "properties", "risk_level"))
+
+        assert set(RiskLevel) == set(declared["enum"])
+
+
+class TestPromptVocabularies:
+    """The request templates list the same closed sets, so they are pinned to the types as well.
+
+    A value the template invites and the set omits now fails the whole reply,
+    so the two drifting apart costs a member's whole review rather than one
+    field.
+    """
+
+    @pytest.mark.parametrize("named", sorted(_VOCABULARIES))
+    def test_the_template_invites_what_a_member_may_send(self, named: str) -> None:
+        asked = render_code_review_prompt(files={"app.py": "x = 1"}) + render_design_prompt(question="Which layer?")
+        listed = re.search(rf'"{named}": "([^"]+)"', asked)
+
+        assert listed is not None, f"no template lists {named}"
+        assert {value.strip() for value in listed.group(1).split("|")} == set(_VOCABULARIES[named].members)
+
+
+class TestSpecNamesTheClosedSets:
+    """The spec names the constrained fields in prose, which the schemas define.
+
+    An orchestrator implements the rule from that sentence, so a field whose
+    schema gains an enum and whose name never reaches the sentence is a rule
+    nobody outside this package can follow.
+    """
+
+    def _constrained(self, name: str) -> set[str]:
+        """Each field the schema constrains to a closed set."""
+        found: set[str] = set()
+        stack: list[Any] = [json.loads(get_schema(name))]
+        while stack:
+            node = stack.pop()
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    if isinstance(value, dict) and "enum" in value:
+                        found.add(key)
+                    stack.append(value)
+            elif isinstance(node, list):
+                stack.extend(node)
+        return found
+
+    def test_the_spec_names_every_field_a_member_schema_constrains(self) -> None:
+        spec = (files("star_chamber.spec") / "SPEC.md").read_text(encoding="utf-8")
+        section = spec.split("### Closed Sets")[1].split("###")[0]
+        named = set(re.findall(r"`([a-z_]+)`", section.split("\n\n")[1]))
+        constrained = self._constrained("code-review-result") | self._constrained("design-advice-result")
+
+        assert constrained <= named

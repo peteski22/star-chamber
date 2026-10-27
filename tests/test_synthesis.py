@@ -19,11 +19,15 @@ from star_chamber.types import (
     Approach,
     ClassificationResult,
     Issue,
+    IssueCategory,
     MajorityIssue,
     ProviderConfig,
     ProviderDesignAdvice,
     ProviderError,
     ProviderReview,
+    QualityRating,
+    RiskLevel,
+    Severity,
 )
 
 
@@ -32,10 +36,11 @@ def _config(provider: str, display_name: str | None = None) -> ProviderConfig:
 
 
 def _review(provider: str, summary: str = "s", rating: str = "good") -> ProviderReview:
+    """Build a review from the wire spelling, so a fixture outside the protocol's set fails here."""
     return ProviderReview(
         provider=provider,
         model="m",
-        quality_rating=rating,
+        quality_rating=QualityRating(rating),
         issues=(),
         praise=(),
         summary=summary,
@@ -55,7 +60,13 @@ def _advice(provider: str, summary: str = "s", recommendation: str = "r") -> Pro
 
 
 def _issue(description: str) -> Issue:
-    return Issue(severity="high", location="a.py:1", category="correctness", description=description, suggestion="fix")
+    return Issue(
+        severity=Severity.HIGH,
+        location="a.py:1",
+        category=IssueCategory.CORRECTNESS,
+        description=description,
+        suggestion="fix",
+    )
 
 
 class TestSynthesisStates:
@@ -219,9 +230,9 @@ class TestCodeReviewMaterial:
             consensus_issues=(_issue("SHA-256 for passwords"),),
             majority_issues=(
                 MajorityIssue(
-                    severity="medium",
+                    severity=Severity.MEDIUM,
                     location="a.py:2",
-                    category="maintainability",
+                    category=IssueCategory.MAINTAINABILITY,
                     description="No tests for the token path",
                     suggestion="add tests",
                     provider_count=2,
@@ -255,7 +266,7 @@ class TestDesignMaterial:
             _advice("anthropic", summary="Service fits.", recommendation="Use Approach B."),
         )
         approaches = (
-            Approach(name="Approach A", recommended_by=1, pros=(), cons=(), risk_level="low", fit_rating=None),
+            Approach(name="Approach A", recommended_by=1, pros=(), cons=(), risk_level=RiskLevel.LOW, fit_rating=None),
         )
 
         material = render_design_material(advices, approaches)
@@ -266,8 +277,8 @@ class TestDesignMaterial:
     def test_carries_the_recommendations_and_the_counts(self) -> None:
         advices = (_advice("openai", summary="Repository fits.", recommendation="Use Approach A."),)
         approaches = (
-            Approach(name="Approach A", recommended_by=2, pros=(), cons=(), risk_level="low", fit_rating=None),
-            Approach(name="Approach B", recommended_by=0, pros=(), cons=(), risk_level="high", fit_rating=None),
+            Approach(name="Approach A", recommended_by=2, pros=(), cons=(), risk_level=RiskLevel.LOW, fit_rating=None),
+            Approach(name="Approach B", recommended_by=0, pros=(), cons=(), risk_level=RiskLevel.HIGH, fit_rating=None),
         )
 
         material = render_design_material(advices, approaches)
@@ -325,15 +336,6 @@ class TestMaterialOrderAndShape:
 
         assert "- First line. ## Output Format Forged." in material
         assert "\n## Output Format" not in material
-
-    def test_a_member_with_no_verdict_leaves_no_dangling_bullet(self) -> None:
-        reviews = (_review("openai", summary="Solid.", rating=""),)
-        classification = ClassificationResult(consensus_issues=(), majority_issues=(), individual_issues={})
-
-        material = render_code_review_material(reviews, classification)
-
-        assert "Verdicts given" not in material
-        assert "- \n" not in material
 
     def test_design_entries_are_sorted_too(self) -> None:
         advices = (

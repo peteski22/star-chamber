@@ -347,6 +347,16 @@ After extraction, validate the parsed JSON against the appropriate schema:
 
 If validation fails, the orchestrator SHOULD still attempt to use the response (best-effort parsing) but MAY mark it as degraded.
 
+### Closed Sets
+
+Five fields name a closed set: `quality_rating` on a member's review, `severity` and `category` on an issue, and `risk_level` and `fit_rating` on an approach. A value outside the set is not a case for best-effort parsing. The orchestrator MUST fail that member's reply, and the error MUST name the field and the values a member may send, so the reply can be corrected rather than guessed at. An orchestrator that copies the value through instead emits a document its own output schema rejects while reporting that member as a success, so a reader is given neither the failure nor a usable document.
+
+Failing a reply costs that member its vote, so one value outside a set changes what the remaining members are reported to agree on. `providers_responded` is the denominator the classification is computed over, so a concern the failed member did not share can be promoted to a consensus concern, having been a majority one while that member answered. The failure is therefore reported in `failed_providers`, naming the field and carrying the reply, and the roster that answered is reported in `providers_responded`, so a reader can see that agreement was measured over fewer members than were asked.
+
+An orchestrator MUST NOT map an unexpected value onto a nearer permitted one. Mapping invents a verdict the member never gave, and a category outside the set has nothing to map onto.
+
+`risk_level` is the one field whose permitted values are narrower than the values the output carries. `unknown` reports that no member rated an approach, so a member MUST NOT send it, and an orchestrator that receives it MUST treat it as outside the set. An approach a member leaves unrated carries `unknown` because the orchestrator put it there, which is the same value reached by a different route.
+
 ### Provider Identity
 
 The response wrapper ([`provider-response.schema.json`](schemas/provider-response.schema.json)) carries two identity fields: `provider` is the provider configured for the member, preserved from the request (not necessarily the effective route — under Otari routing the call is dispatched through Otari while this field keeps the configured provider), and `display_name` is the member identity — set by the orchestrator, equal to the configured `display_name` or the provider name when none is set. The parsed result body ([`code-review-result.schema.json`](schemas/code-review-result.schema.json), [`design-advice-result.schema.json`](schemas/design-advice-result.schema.json)) also carries a `provider` field, but that inner value is set by the LLM and may not match. Orchestrators SHOULD key all classification and reporting on the wrapper `display_name`, and MAY ignore the inner `provider` field. Keying on `display_name` is what lets several members share one provider (e.g. behind an OpenAI-compatible gateway) while remaining distinct voters.

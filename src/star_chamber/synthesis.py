@@ -17,6 +17,7 @@ from star_chamber.types import (
     ProviderDesignAdvice,
     ProviderError,
     ProviderReview,
+    QualityRating,
 )
 
 # A reply long enough to be prose rather than the sentence or two asked for.
@@ -26,9 +27,6 @@ _BOTH_STATES = "An assessment cannot carry both prose and a failure."
 _NO_AUTHOR = "An assessment and a failure each need the member they came from."
 _EMPTY_REPLY = "The member returned no assessment."
 _OVERLONG_REPLY = f"The member returned more than {MAX_ASSESSMENT_CHARS} characters instead of a sentence or two."
-
-# Worst first, so a reader meets the harshest verdict before the kindest.
-_RATING_ORDER = ("needs-work", "fair", "good", "excellent")
 
 _WHITESPACE_RUN = re.compile(r"\s+")
 
@@ -200,9 +198,9 @@ def _rating_tally(reviews: Sequence[ProviderReview]) -> list[str]:
     A single tally rather than one entry per member, so the material carries
     nothing a reader could line up against another section.
     """
-    counts = Counter(_one_line(review.quality_rating) for review in reviews)
-    ordered = [rating for rating in _RATING_ORDER if counts[rating]]
-    ordered += sorted(rating for rating in counts if rating and rating not in _RATING_ORDER)
+    counts = Counter(review.quality_rating for review in reviews)
+    # QualityRating is declared worst first, so a reader meets the harshest verdict before the kindest.
+    ordered = [rating for rating in QualityRating if counts[rating]]
     if not ordered:
         return []
     return [", ".join(f"{rating}: {counts[rating]}" for rating in ordered)]

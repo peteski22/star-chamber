@@ -13,13 +13,18 @@ from star_chamber.types import (
     CouncilConfig,
     DesignQuestionResult,
     DesignSummary,
+    FitRating,
     Issue,
+    IssueCategory,
     MajorityIssue,
     OtariConfig,
     ProviderConfig,
     ProviderDesignAdvice,
     ProviderError,
     ProviderReview,
+    QualityRating,
+    RiskLevel,
+    Severity,
 )
 
 # -- helpers ------------------------------------------------------------------
@@ -31,9 +36,23 @@ def _round_trip(obj):
     return json.loads(json.dumps(d))
 
 
+# The type each closed-set field carries, so a round trip restores it from text as a consumer must.
+_CLOSED_SETS = {
+    "category": IssueCategory,
+    "fit_rating": FitRating,
+    "quality_rating": QualityRating,
+    "risk_level": RiskLevel,
+    "severity": Severity,
+}
+
+
 def _reconstruct(cls, data):
-    """Reconstruct a flat frozen dataclass from a dict, converting lists to tuples for tuple-typed fields."""
-    return cls(**data)
+    """Reconstruct a flat frozen dataclass from a dict, restoring each closed-set field to its type."""
+    restored = {
+        key: _CLOSED_SETS[key](value) if key in _CLOSED_SETS and value is not None else value
+        for key, value in data.items()
+    }
+    return cls(**restored)
 
 
 # -- ProviderConfig -----------------------------------------------------------
@@ -160,23 +179,23 @@ class TestOtariConfig:
 class TestIssue:
     def test_all_fields_set(self) -> None:
         issue = Issue(
-            severity="error",
+            severity=Severity.HIGH,
             location="main.py:10",
-            category="security",
+            category=IssueCategory.ARCHITECTURE,
             description="SQL injection",
             suggestion="Use parameterised queries",
         )
-        assert issue.severity == "error"
+        assert issue.severity == "high"
         assert issue.location == "main.py:10"
-        assert issue.category == "security"
+        assert issue.category == "architecture"
         assert issue.description == "SQL injection"
         assert issue.suggestion == "Use parameterised queries"
 
     def test_frozen(self) -> None:
         issue = Issue(
-            severity="error",
+            severity=Severity.HIGH,
             location="main.py:10",
-            category="security",
+            category=IssueCategory.ARCHITECTURE,
             description="SQL injection",
             suggestion="Use parameterised queries",
         )
@@ -185,9 +204,9 @@ class TestIssue:
 
     def test_json_round_trip(self) -> None:
         issue = Issue(
-            severity="warning",
+            severity=Severity.MEDIUM,
             location="utils.py:42",
-            category="style",
+            category=IssueCategory.CRAFTSMANSHIP,
             description="Long line",
             suggestion="Break the line",
         )
@@ -202,23 +221,23 @@ class TestIssue:
 class TestMajorityIssue:
     def test_all_fields_set(self) -> None:
         mi = MajorityIssue(
-            severity="error",
+            severity=Severity.HIGH,
             location="app.py:5",
-            category="bug",
+            category=IssueCategory.CORRECTNESS,
             description="Null deref",
             suggestion="Add null check",
             provider_count=2,
             flagged_by=("openai", "anthropic"),
         )
-        assert mi.severity == "error"
+        assert mi.severity == "high"
         assert mi.provider_count == 2
         assert mi.flagged_by == ("openai", "anthropic")
 
     def test_frozen(self) -> None:
         mi = MajorityIssue(
-            severity="error",
+            severity=Severity.HIGH,
             location="app.py:5",
-            category="bug",
+            category=IssueCategory.CORRECTNESS,
             description="Null deref",
             suggestion="Add null check",
             provider_count=2,
@@ -229,9 +248,9 @@ class TestMajorityIssue:
 
     def test_json_round_trip(self) -> None:
         mi = MajorityIssue(
-            severity="warning",
+            severity=Severity.MEDIUM,
             location="x.py:1",
-            category="perf",
+            category=IssueCategory.MAINTAINABILITY,
             description="Slow loop",
             suggestion="Vectorise",
             provider_count=3,
@@ -239,9 +258,9 @@ class TestMajorityIssue:
         )
         data = _round_trip(mi)
         rebuilt = MajorityIssue(
-            severity=data["severity"],
+            severity=Severity(data["severity"]),
             location=data["location"],
-            category=data["category"],
+            category=IssueCategory(data["category"]),
             description=data["description"],
             suggestion=data["suggestion"],
             provider_count=data["provider_count"],
@@ -280,12 +299,12 @@ class TestProviderReview:
         return ProviderReview(
             provider="openai",
             model="gpt-4",
-            quality_rating="good",
+            quality_rating=QualityRating.GOOD,
             issues=(
                 Issue(
-                    severity="warning",
+                    severity=Severity.MEDIUM,
                     location="a.py:1",
-                    category="style",
+                    category=IssueCategory.CRAFTSMANSHIP,
                     description="bad name",
                     suggestion="rename",
                 ),
@@ -312,8 +331,8 @@ class TestProviderReview:
         rebuilt = ProviderReview(
             provider=data["provider"],
             model=data["model"],
-            quality_rating=data["quality_rating"],
-            issues=tuple(Issue(**i) for i in data["issues"]),
+            quality_rating=QualityRating(data["quality_rating"]),
+            issues=tuple(_reconstruct(Issue, i) for i in data["issues"]),
             praise=tuple(data["praise"]),
             summary=data["summary"],
             raw_content=data["raw_content"],
@@ -331,8 +350,8 @@ class TestApproach:
             recommended_by=3,
             pros=("fast", "simple"),
             cons=("limited",),
-            risk_level="low",
-            fit_rating="excellent",
+            risk_level=RiskLevel.LOW,
+            fit_rating=FitRating.EXCELLENT,
         )
         assert a.name == "Option A"
         assert a.recommended_by == 3
@@ -348,7 +367,7 @@ class TestApproach:
             recommended_by=1,
             pros=(),
             cons=(),
-            risk_level="high",
+            risk_level=RiskLevel.HIGH,
             fit_rating=None,
         )
         assert a.fit_rating is None
@@ -359,7 +378,7 @@ class TestApproach:
             recommended_by=1,
             pros=(),
             cons=(),
-            risk_level="low",
+            risk_level=RiskLevel.LOW,
             fit_rating=None,
         )
         with pytest.raises(AttributeError):
@@ -371,8 +390,8 @@ class TestApproach:
             recommended_by=2,
             pros=("a",),
             cons=("b",),
-            risk_level="medium",
-            fit_rating="good",
+            risk_level=RiskLevel.MEDIUM,
+            fit_rating=FitRating.GOOD,
         )
         data = _round_trip(a)
         rebuilt = Approach(
@@ -380,8 +399,8 @@ class TestApproach:
             recommended_by=data["recommended_by"],
             pros=tuple(data["pros"]),
             cons=tuple(data["cons"]),
-            risk_level=data["risk_level"],
-            fit_rating=data["fit_rating"],
+            risk_level=RiskLevel(data["risk_level"]),
+            fit_rating=FitRating(data["fit_rating"]),
         )
         assert rebuilt == a
 
@@ -396,8 +415,8 @@ class TestProviderDesignAdvice:
             recommended_by=2,
             pros=("scalable",),
             cons=("complex",),
-            risk_level="medium",
-            fit_rating="good",
+            risk_level=RiskLevel.MEDIUM,
+            fit_rating=FitRating.GOOD,
         )
         pda = ProviderDesignAdvice(
             provider="anthropic",
@@ -431,8 +450,8 @@ class TestProviderDesignAdvice:
             recommended_by=1,
             pros=("simple",),
             cons=("scaling",),
-            risk_level="low",
-            fit_rating="fair",
+            risk_level=RiskLevel.LOW,
+            fit_rating=FitRating.FAIR,
         )
         pda = ProviderDesignAdvice(
             provider="openai",
@@ -453,8 +472,8 @@ class TestProviderDesignAdvice:
                     recommended_by=a["recommended_by"],
                     pros=tuple(a["pros"]),
                     cons=tuple(a["cons"]),
-                    risk_level=a["risk_level"],
-                    fit_rating=a["fit_rating"],
+                    risk_level=RiskLevel(a["risk_level"]),
+                    fit_rating=FitRating(a["fit_rating"]),
                 )
                 for a in data["approaches"]
             ),
@@ -470,16 +489,16 @@ class TestProviderDesignAdvice:
 class TestClassificationResult:
     def test_all_fields_set(self) -> None:
         issue = Issue(
-            severity="error",
+            severity=Severity.HIGH,
             location="x.py:1",
-            category="bug",
+            category=IssueCategory.CORRECTNESS,
             description="desc",
             suggestion="fix",
         )
         mi = MajorityIssue(
-            severity="warning",
+            severity=Severity.MEDIUM,
             location="y.py:2",
-            category="style",
+            category=IssueCategory.CRAFTSMANSHIP,
             description="desc2",
             suggestion="fix2",
             provider_count=2,
@@ -505,9 +524,9 @@ class TestClassificationResult:
 
     def test_json_round_trip(self) -> None:
         issue = Issue(
-            severity="error",
+            severity=Severity.HIGH,
             location="z.py:3",
-            category="sec",
+            category=IssueCategory.INVARIANTS,
             description="vuln",
             suggestion="patch",
         )
@@ -518,7 +537,7 @@ class TestClassificationResult:
         )
         data = _round_trip(cr)
         rebuilt = ClassificationResult(
-            consensus_issues=tuple(Issue(**i) for i in data["consensus_issues"]),
+            consensus_issues=tuple(_reconstruct(Issue, i) for i in data["consensus_issues"]),
             majority_issues=tuple(
                 MajorityIssue(
                     severity=m["severity"],
@@ -531,7 +550,10 @@ class TestClassificationResult:
                 )
                 for m in data["majority_issues"]
             ),
-            individual_issues={k: tuple(Issue(**i) for i in v) for k, v in data["individual_issues"].items()},
+            individual_issues={
+                name: tuple(_reconstruct(Issue, i) for i in issues)
+                for name, issues in data["individual_issues"].items()
+            },
         )
         assert rebuilt == cr
 
@@ -543,16 +565,16 @@ class TestCodeReviewResult:
     @pytest.fixture()
     def result(self):
         issue = Issue(
-            severity="error",
+            severity=Severity.HIGH,
             location="m.py:1",
-            category="bug",
+            category=IssueCategory.CORRECTNESS,
             description="crash",
             suggestion="fix it",
         )
         mi = MajorityIssue(
-            severity="warning",
+            severity=Severity.MEDIUM,
             location="m.py:2",
-            category="style",
+            category=IssueCategory.CRAFTSMANSHIP,
             description="naming",
             suggestion="rename",
             provider_count=2,
@@ -561,7 +583,7 @@ class TestCodeReviewResult:
         review = ProviderReview(
             provider="openai",
             model="gpt-4",
-            quality_rating="good",
+            quality_rating=QualityRating.GOOD,
             issues=(issue,),
             praise=("nice",),
             summary="ok",
@@ -577,7 +599,7 @@ class TestCodeReviewResult:
             consensus_issues=(issue,),
             majority_issues=(mi,),
             individual_issues={"openai": (issue,)},
-            quality_ratings={"openai": "good"},
+            quality_ratings={"openai": QualityRating.GOOD},
             summary=CodeReviewSummary(total_issues=1, consensus_count=1, majority_count=1, synthesis="Overall good"),
         )
 
@@ -647,8 +669,8 @@ class TestDesignQuestionResult:
             recommended_by=2,
             pros=("fast",),
             cons=("limited",),
-            risk_level="low",
-            fit_rating="good",
+            risk_level=RiskLevel.LOW,
+            fit_rating=FitRating.GOOD,
         )
         return DesignQuestionResult(
             mode="design-question",
@@ -716,3 +738,93 @@ class TestProviderConfigDisplayName:
     def test_holds_configured_value(self) -> None:
         cfg = ProviderConfig(provider="openrouter", model="openai/gpt-5.2", display_name="gpt-5.2")
         assert cfg.display_name == "gpt-5.2"
+
+
+class TestClosedSetFields:
+    """A wire type refuses a value outside the set its field declares.
+
+    A plain string is accepted by the language and then fails deep in the
+    classifier, so the type rejects it where the caller supplied it.
+    """
+
+    def _issue(self, **overrides) -> Issue:
+        fields = {
+            "severity": Severity.HIGH,
+            "location": "a.py:1",
+            "category": IssueCategory.CORRECTNESS,
+            "description": "Off-by-one.",
+            "suggestion": "Use <=.",
+        }
+        return Issue(**(fields | overrides))
+
+    def _approach(self, **overrides) -> Approach:
+        fields = {
+            "name": "Repository",
+            "recommended_by": 1,
+            "pros": (),
+            "cons": (),
+            "risk_level": RiskLevel.LOW,
+            "fit_rating": FitRating.GOOD,
+        }
+        return Approach(**(fields | overrides))
+
+    def test_an_issue_refuses_a_raw_severity(self) -> None:
+        with pytest.raises(TypeError, match="severity must be a Severity, got str"):
+            self._issue(severity="high")
+
+    def test_an_issue_refuses_a_raw_category(self) -> None:
+        with pytest.raises(TypeError, match="category must be a IssueCategory, got str"):
+            self._issue(category="correctness")
+
+    def test_a_majority_issue_refuses_a_raw_severity(self) -> None:
+        with pytest.raises(TypeError, match="severity must be a Severity, got str"):
+            MajorityIssue(
+                severity="high",
+                location="a.py:1",
+                category=IssueCategory.CORRECTNESS,
+                description="Off-by-one.",
+                suggestion="Use <=.",
+                provider_count=2,
+                flagged_by=("openai", "anthropic"),
+            )
+
+    def test_a_review_refuses_a_raw_rating(self) -> None:
+        with pytest.raises(TypeError, match="quality_rating must be a QualityRating, got str"):
+            ProviderReview(
+                provider="openai",
+                model="gpt-4o",
+                quality_rating="good",
+                issues=(),
+                praise=(),
+                summary="Fine.",
+                raw_content="{}",
+            )
+
+    def test_an_approach_refuses_a_raw_risk_level(self) -> None:
+        with pytest.raises(TypeError, match="risk_level must be a RiskLevel, got str"):
+            self._approach(risk_level="low")
+
+    def test_an_approach_refuses_a_raw_fit_rating(self) -> None:
+        with pytest.raises(TypeError, match="fit_rating must be a FitRating, got str"):
+            self._approach(fit_rating="good")
+
+    def test_a_result_refuses_a_raw_rating_in_its_map(self) -> None:
+        """The map keyed by member name carries the vocabulary too."""
+        with pytest.raises(TypeError, match=r"quality_ratings\['openai'\] must be a QualityRating, got str"):
+            CodeReviewResult(
+                mode="code-review",
+                files_reviewed=(),
+                providers_used=(),
+                providers_responded=(),
+                failed_providers=(),
+                reviews=(),
+                consensus_issues=(),
+                majority_issues=(),
+                individual_issues={},
+                quality_ratings={"openai": "good"},
+                summary=CodeReviewSummary(total_issues=0, consensus_count=0, majority_count=0, synthesis=""),
+            )
+
+    def test_an_approach_accepts_no_fit_rating(self) -> None:
+        """Null reports that nobody rated the approach, so it is not a value outside the set."""
+        assert self._approach(fit_rating=None).fit_rating is None

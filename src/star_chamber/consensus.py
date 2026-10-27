@@ -12,15 +12,22 @@ from __future__ import annotations
 import re
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
+from typing import TypeVar
 
 from star_chamber.types import (
     Approach,
     ClassificationResult,
+    FitRating,
     Issue,
+    IssueCategory,
     MajorityIssue,
     ProviderDesignAdvice,
     ProviderReview,
+    Ranked,
+    RiskLevel,
 )
+
+_RankedT = TypeVar("_RankedT", bound=Ranked)
 
 # Line numbers within this tolerance are considered the same location.
 _LINE_TOLERANCE = 5
@@ -39,10 +46,7 @@ _MAX_SPAN_LINES = 50
 _LineSpan = tuple[int, int]
 
 # A grouping key: file path, line span, and category.
-_IssueKey = tuple[str, _LineSpan | None, str]
-
-# Sort order for severity levels (lower value = higher priority).
-_SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
+_IssueKey = tuple[str, _LineSpan | None, IssueCategory]
 
 
 def _parse_location(location: str) -> tuple[str, _LineSpan | None]:
@@ -151,7 +155,7 @@ def _severity_sort_key(issue: Issue | MajorityIssue) -> int:
     Returns:
         Integer sort value where lower means higher severity.
     """
-    return _SEVERITY_ORDER.get(issue.severity, 999)
+    return issue.severity.rank
 
 
 def classify(reviews: Sequence[ProviderReview], threshold: int = 2) -> ClassificationResult:
@@ -244,13 +248,6 @@ _NON_WORD_RE = re.compile(r"[\W_]+")
 # word. Expanding it into a word of its own would let "C" match a recommendation of "C++".
 _NAME_SYMBOL_WORDS = {"#": "sharp", "+": "plus"}
 
-# Fit ratings, most cautious first, so a tie resolves to the more cautious rating.
-_FIT_RATINGS_BY_CAUTION = ("poor", "fair", "good", "excellent")
-
-# Risk levels, most cautious first, so a tie resolves to the more cautious level.
-# "unknown" is absent because it means no provider stated a level, not that one was chosen.
-_RISK_LEVELS_BY_CAUTION = ("high", "medium", "low")
-
 
 def _approach_name_key(name: str) -> str:
     """Reduce an approach name to the form two providers must share to mean the same approach."""
@@ -309,21 +306,20 @@ def _approaches_recommended_by(advice: ProviderDesignAdvice, name_keys: Iterable
     return _names_mentioned_in(advice.recommendation, name_keys) & _own_name_keys(advice).keys()
 
 
-def _most_cautious_of_the_most_common(values: Sequence[str], by_caution: Sequence[str]) -> str | None:
+def _most_cautious_of_the_most_common(values: Sequence[_RankedT]) -> _RankedT | None:
     """Return the value the most providers stated, resolving a tie toward the more cautious value.
 
     Args:
         values: What each provider stated, including repeats.
-        by_caution: The permitted values, most cautious first.
 
     Returns:
-        The winning value, or None when no provider stated a permitted one.
+        The winning value, or None when no provider stated one.
     """
-    counts = Counter(value for value in values if value in by_caution)
+    counts = Counter(values)
     if not counts:
         return None
     most = max(counts.values())
-    return next(value for value in by_caution if counts.get(value) == most)
+    return min((value for value, count in counts.items() if count == most), key=lambda value: value.rank)
 
 
 def aggregate_approaches(advices: Sequence[ProviderDesignAdvice]) -> tuple[Approach, ...]:
@@ -347,13 +343,13 @@ def aggregate_approaches(advices: Sequence[ProviderDesignAdvice]) -> tuple[Appro
     display_names: dict[str, str] = {}
     pros: dict[str, dict[str, None]] = {}
     cons: dict[str, dict[str, None]] = {}
-    risk_levels: dict[str, list[str]] = defaultdict(list)
-    fit_ratings: dict[str, list[str]] = defaultdict(list)
+    risk_levels: dict[str, list[RiskLevel]] = defaultdict(list)
+    fit_ratings: dict[str, list[FitRating]] = defaultdict(list)
     recommended_by = Counter[str]()
 
     for advice in advices:
-        stated_risks: dict[str, list[str]] = defaultdict(list)
-        stated_fits: dict[str, list[str]] = defaultdict(list)
+        stated_risks: dict[str, list[RiskLevel]] = defaultdict(list)
+        stated_fits: dict[str, list[FitRating]] = defaultdict(list)
 
         for approach in advice.approaches:
             key = _approach_name_key(approach.name)
@@ -362,17 +358,18 @@ def aggregate_approaches(advices: Sequence[ProviderDesignAdvice]) -> tuple[Appro
             display_names.setdefault(key, approach.name)
             pros.setdefault(key, {}).update(dict.fromkeys(approach.pros))
             cons.setdefault(key, {}).update(dict.fromkeys(approach.cons))
-            stated_risks[key].append(approach.risk_level)
+            if approach.risk_level.stated:
+                stated_risks[key].append(approach.risk_level)
             if approach.fit_rating is not None:
                 stated_fits[key].append(approach.fit_rating)
 
         # One ballot per provider per approach, so naming an approach twice does not vote twice.
         for key, levels in stated_risks.items():
-            level = _most_cautious_of_the_most_common(levels, _RISK_LEVELS_BY_CAUTION)
+            level = _most_cautious_of_the_most_common(levels)
             if level is not None:
                 risk_levels[key].append(level)
         for key, ratings in stated_fits.items():
-            rating = _most_cautious_of_the_most_common(ratings, _FIT_RATINGS_BY_CAUTION)
+            rating = _most_cautious_of_the_most_common(ratings)
             if rating is not None:
                 fit_ratings[key].append(rating)
 
@@ -387,8 +384,8 @@ def aggregate_approaches(advices: Sequence[ProviderDesignAdvice]) -> tuple[Appro
             recommended_by=recommended_by[key],
             pros=tuple(pros[key]),
             cons=tuple(cons[key]),
-            risk_level=_most_cautious_of_the_most_common(risk_levels[key], _RISK_LEVELS_BY_CAUTION) or "unknown",
-            fit_rating=_most_cautious_of_the_most_common(fit_ratings[key], _FIT_RATINGS_BY_CAUTION),
+            risk_level=_most_cautious_of_the_most_common(risk_levels[key]) or RiskLevel.UNKNOWN,
+            fit_rating=_most_cautious_of_the_most_common(fit_ratings[key]),
         )
         for key in display_names
     )

@@ -1,10 +1,77 @@
-"""Frozen dataclass types for all council protocol wire formats."""
+"""Frozen dataclass types and closed-set vocabularies for the council protocol wire formats."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 from star_chamber.spec import SPEC_VERSION
+
+
+class Ranked(StrEnum):
+    """A closed set whose declaration order carries meaning."""
+
+    @property
+    def rank(self) -> int:
+        """Position in declaration order, so an ordered set needs no table beside it.
+
+        NOTE: A set holds at most four members, so the scan costs less than caching it would.
+        """
+        return list(type(self)).index(self)
+
+
+class Severity(Ranked):
+    """How urgent an issue is. Declared most urgent first, which is the order issues sort in."""
+
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class IssueCategory(StrEnum):
+    """What kind of concern an issue raises."""
+
+    ARCHITECTURE = "architecture"
+    CORRECTNESS = "correctness"
+    CRAFTSMANSHIP = "craftsmanship"
+    INVARIANTS = "invariants"
+    MAINTAINABILITY = "maintainability"
+
+
+class QualityRating(Ranked):
+    """A member's verdict on the code it reviewed. Declared worst first, which is the order a tally reads in."""
+
+    NEEDS_WORK = "needs-work"
+    FAIR = "fair"
+    GOOD = "good"
+    EXCELLENT = "excellent"
+
+
+class RiskLevel(Ranked):
+    """How risky an approach is. Declared most cautious first, which is how a tie resolves.
+
+    NOTE: UNKNOWN is the council's own value for an approach no member rated.
+    A member may not send it.
+    """
+
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    UNKNOWN = "unknown"
+
+    @property
+    def stated(self) -> bool:
+        """Whether a member stated this level, which UNKNOWN reports that none did."""
+        return self is not RiskLevel.UNKNOWN
+
+
+class FitRating(Ranked):
+    """How well an approach fits the project. Declared most cautious first, which is how a tie resolves."""
+
+    POOR = "poor"
+    FAIR = "fair"
+    GOOD = "good"
+    EXCELLENT = "excellent"
 
 
 @dataclass(frozen=True)
@@ -83,23 +150,44 @@ class CouncilConfig:
     synthesis: bool = True
 
 
+def _require_member(value: object, allowed: type[StrEnum], field: str) -> None:
+    """Reject a value the field's closed set does not hold.
+
+    Args:
+        value: What the caller supplied.
+        allowed: The set the field declares.
+        field: Field name, for the error message.
+
+    Raises:
+        TypeError: If the value is not one of the set's members.
+    """
+    if not isinstance(value, allowed):
+        msg = f"{field} must be a {allowed.__name__}, got {type(value).__name__}"
+        raise TypeError(msg)
+
+
 @dataclass(frozen=True)
 class Issue:
     """A single review issue.
 
     Attributes:
-        severity: Issue severity level (e.g. "error", "warning").
+        severity: How urgent the issue is.
         location: File and line location string.
-        category: Issue category (e.g. "security", "style", "bug").
+        category: What kind of concern the issue raises.
         description: Human-readable description of the issue.
         suggestion: Suggested fix or improvement.
     """
 
-    severity: str
+    severity: Severity
     location: str
-    category: str
+    category: IssueCategory
     description: str
     suggestion: str
+
+    def __post_init__(self) -> None:
+        """Reject a value the attributes above say the field cannot hold."""
+        _require_member(self.severity, Severity, "severity")
+        _require_member(self.category, IssueCategory, "category")
 
 
 @dataclass(frozen=True)
@@ -107,22 +195,27 @@ class MajorityIssue:
     """An issue flagged by multiple (but not all) providers.
 
     Attributes:
-        severity: Issue severity level.
+        severity: How urgent the issue is.
         location: File and line location string.
-        category: Issue category.
+        category: What kind of concern the issue raises.
         description: Human-readable description of the issue.
         suggestion: Suggested fix or improvement.
         provider_count: Number of providers that flagged this issue.
         flagged_by: Names of providers that flagged this issue.
     """
 
-    severity: str
+    severity: Severity
     location: str
-    category: str
+    category: IssueCategory
     description: str
     suggestion: str
     provider_count: int
     flagged_by: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        """Reject a value the attributes above say the field cannot hold."""
+        _require_member(self.severity, Severity, "severity")
+        _require_member(self.category, IssueCategory, "category")
 
 
 @dataclass(frozen=True)
@@ -156,7 +249,7 @@ class ProviderReview:
     Attributes:
         provider: Name of the provider.
         model: Model used for this review.
-        quality_rating: Overall quality rating string.
+        quality_rating: This member's verdict on the code it reviewed.
         issues: Tuple of issues found by this provider.
         praise: Tuple of positive observations.
         summary: Provider's summary of the review.
@@ -165,11 +258,15 @@ class ProviderReview:
 
     provider: str
     model: str
-    quality_rating: str
+    quality_rating: QualityRating
     issues: tuple[Issue, ...]
     praise: tuple[str, ...]
     summary: str
     raw_content: str
+
+    def __post_init__(self) -> None:
+        """Reject a value the attributes above say the field cannot hold."""
+        _require_member(self.quality_rating, QualityRating, "quality_rating")
 
 
 @dataclass(frozen=True)
@@ -181,8 +278,8 @@ class Approach:
         recommended_by: Number of providers recommending this approach.
         pros: Tuple of advantages.
         cons: Tuple of disadvantages.
-        risk_level: Risk assessment string.
-        fit_rating: Fitness rating, or None where none was stated.
+        risk_level: How risky the approach is.
+        fit_rating: How well the approach fits, or None where none was stated.
 
     NOTE: fit_rating has no default. A site that failed to state it would claim
     nobody rated the approach, which is what a null here reports.
@@ -192,8 +289,14 @@ class Approach:
     recommended_by: int
     pros: tuple[str, ...]
     cons: tuple[str, ...]
-    risk_level: str
-    fit_rating: str | None
+    risk_level: RiskLevel
+    fit_rating: FitRating | None
+
+    def __post_init__(self) -> None:
+        """Reject a value the attributes above say the field cannot hold."""
+        _require_member(self.risk_level, RiskLevel, "risk_level")
+        if self.fit_rating is not None:
+            _require_member(self.fit_rating, FitRating, "fit_rating")
 
 
 @dataclass(frozen=True)
@@ -290,7 +393,7 @@ class CodeReviewResult:
         consensus_issues: Issues all providers agree on.
         majority_issues: Issues flagged by most providers.
         individual_issues: Issues keyed by provider name.
-        quality_ratings: Quality ratings keyed by provider name.
+        quality_ratings: Each member's verdict, keyed by provider name.
         summary: Counts and prose for the session.
         spec_version: The protocol version that produced this document, for a
             consumer to compare against the version its instructions were
@@ -307,9 +410,14 @@ class CodeReviewResult:
     consensus_issues: tuple[Issue, ...]
     majority_issues: tuple[MajorityIssue, ...]
     individual_issues: dict[str, tuple[Issue, ...]]
-    quality_ratings: dict[str, str]
+    quality_ratings: dict[str, QualityRating]
     summary: CodeReviewSummary
     spec_version: str = field(default=SPEC_VERSION, init=False)
+
+    def __post_init__(self) -> None:
+        """Reject a value the attributes above say the field cannot hold."""
+        for member, rating in self.quality_ratings.items():
+            _require_member(rating, QualityRating, f"quality_ratings[{member!r}]")
 
 
 @dataclass(frozen=True)

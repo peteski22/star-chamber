@@ -1408,3 +1408,52 @@ class TestRunCouncilSynthesis:
         assert send.await_count == 0
         assert result.summary.synthesis == ""
         assert result.summary.synthesis_error is None
+
+
+class TestOneOddValueCostsAVote:
+    """A value outside a closed set fails its member, which moves the denominator.
+
+    The cost is not confined to that member. The roster that answered is what
+    consensus is measured against, so dropping a member changes what the rest
+    are reported to agree on.
+    """
+
+    _ISSUE = {
+        "severity": "high",
+        "location": "app.py:10",
+        "category": "correctness",
+        "description": "Off-by-one.",
+        "suggestion": "Use <=.",
+    }
+
+    def _council(self, third: list[dict]) -> list[ProviderResponse]:
+        """Two members that share one concern, and a third that raises its own."""
+        return [
+            _success_response("openai", "gpt-4o", _code_review_json(issues=[dict(self._ISSUE)])),
+            _success_response("anthropic", "claude-3", _code_review_json(issues=[dict(self._ISSUE)])),
+            _success_response("gemini", "g-2", _code_review_json(issues=third)),
+        ]
+
+    def test_failing_a_member_promotes_a_concern_it_did_not_share(self) -> None:
+        theirs = dict(self._ISSUE) | {"location": "app.py:90"}
+        invented = theirs | {"category": "defensive-design"}
+
+        answered = build_code_review_result(self._council([theirs]), files_reviewed=("app.py",), threshold=2)
+        failed = build_code_review_result(self._council([invented]), files_reviewed=("app.py",), threshold=2)
+
+        assert answered.providers_responded == ("openai", "anthropic", "gemini")
+        assert [issue.location for issue in answered.majority_issues] == ["app.py:10"]
+        assert answered.consensus_issues == ()
+
+        assert failed.providers_responded == ("openai", "anthropic")
+        assert [issue.location for issue in failed.consensus_issues] == ["app.py:10"]
+        assert failed.majority_issues == ()
+
+    def test_the_failed_member_s_reply_is_still_readable(self) -> None:
+        invented = dict(self._ISSUE) | {"category": "defensive-design"}
+        responses = [_success_response("gemini", "g-2", _code_review_json(issues=[invented]))]
+
+        result = build_code_review_result(responses, files_reviewed=("app.py",))
+
+        assert "defensive-design" in result.failed_providers[0].error
+        assert "defensive-design" in (result.failed_providers[0].raw_content or "")

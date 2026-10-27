@@ -351,6 +351,8 @@ If validation fails, the orchestrator SHOULD still attempt to use the response (
 
 Five fields name a closed set: `quality_rating`, `severity` and `category` on an issue, and `risk_level` and `fit_rating` on an approach. A value outside the set is not a case for best-effort parsing. The orchestrator MUST fail that member's reply, and the error MUST name the field and the values a member may send, so the reply can be corrected rather than guessed at. An orchestrator that copies the value through instead emits a document its own output schema rejects while reporting that member as a success, so a reader is given neither the failure nor a usable document.
 
+Failing a reply costs that member its vote, so one value outside a set changes what the remaining members are reported to agree on. `providers_responded` is the denominator the classification is computed over, so a concern the failed member did not share can be promoted to a consensus concern, having been a majority one while that member answered. The failure is therefore reported, and the roster that answered is reported with it, so a reader can see that agreement was measured over fewer members than were asked.
+
 An orchestrator MUST NOT map an unexpected value onto a nearer permitted one. Mapping invents a verdict the member never gave, and a category outside the set has nothing to map onto.
 
 `risk_level` is the one field whose permitted values are narrower than the values the output carries. `unknown` reports that no member rated an approach, so a member MUST NOT send it, and an orchestrator that receives it MUST treat it as outside the set. An approach a member leaves unrated carries `unknown` because the orchestrator put it there, which is the same value reached by a different route.

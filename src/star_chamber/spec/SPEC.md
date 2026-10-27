@@ -478,7 +478,7 @@ The structured output includes:
 - `providers_used[]`: The roster asked. All council members consulted, including those that failed, by display name.
 - `providers_responded[]`: The roster that answered. Members that returned usable advice, by display name. This is the denominator `consensus_recommendation` was computed over.
 - `failed_providers[]`: Members that failed or returned malformed responses, by display name, each with the model it was asked and the reply it sent.
-- `consensus_recommendation`: The name of the approach a strict majority of the members that answered recommended. A recommendation naming any number of approaches other than one casts no ballot. Null when no approach reaches a majority, as section 9.3 requires.
+- `consensus_recommendation`: The name of the approach a strict majority of the members that answered recommended. A recommendation naming any number of approaches other than one casts no ballot. Null when no approach reaches that majority, which the configured consensus threshold can raise toward unanimity, as section 9.3 requires.
 - `approaches[]`: All approaches mentioned by any provider, with `recommended_by` count, merged pros/cons, `risk_level`, and `fit_rating`. `risk_level` is `unknown` when no provider stated one. `fit_rating` is null when no provider assessed fit for the approach; when providers disagree, use the most common rating.
 - `summary{}`: Contains `synthesis` (a short overall assessment, written as [section 7.2](#72-closing-assessment) requires, empty when no member wrote one), `synthesis_error` (the member asked and the reason it wrote none, null otherwise), and `synthesized_by` (the member asked, null when none was).
 - `debate{}` (optional): Debate metadata (rounds_completed, converged).

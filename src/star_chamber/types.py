@@ -439,7 +439,8 @@ class DesignQuestionResult:
         failed_providers: Providers that failed during the session.
         approaches: Aggregated design approaches.
         consensus_recommendation: The approach a majority of the providers
-            that answered recommended. None when no approach held one.
+            that answered recommended, where the configured threshold can
+            raise that majority. None when no approach held it.
         summary: Prose for the session.
         spec_version: The protocol version that produced this document, for a
             consumer to compare against the version its instructions were

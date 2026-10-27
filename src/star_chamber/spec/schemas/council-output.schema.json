@@ -134,7 +134,7 @@
     },
     "consensus_recommendation": {
       "type": ["string", "null"],
-      "description": "The name of the approach a strict majority of the providers that answered recommended (design-question mode). The value always appears in approaches[].name. A recommendation naming any number of approaches other than one casts no ballot, so this is not derived from approaches[].recommended_by. Null when no approach reaches a majority."
+      "description": "The name of the approach a strict majority of the providers that answered recommended (design-question mode). The value always appears in approaches[].name. A recommendation naming any number of approaches other than one casts no ballot, so this is not derived from approaches[].recommended_by. Null when no approach reaches that majority, which the configured consensus threshold can raise toward unanimity."
     },
     "approaches": {
       "type": "array",

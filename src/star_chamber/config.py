@@ -171,10 +171,15 @@ def load_config(path: Path | None = None) -> CouncilConfig:
         msg = f"'synthesis' must be true or false in {path}"
         raise ConfigError(msg)
 
+    threshold = raw.get("consensus_threshold", 2)
+    if isinstance(threshold, bool) or not isinstance(threshold, int):
+        msg = f"'consensus_threshold' must be a whole number in {path}"
+        raise ConfigError(msg)
+
     return CouncilConfig(
         providers=providers,
         timeout_seconds=raw.get("timeout_seconds", 60),
-        consensus_threshold=raw.get("consensus_threshold", 2),
+        consensus_threshold=threshold,
         otari=otari,
         synthesis=synthesis,
     )

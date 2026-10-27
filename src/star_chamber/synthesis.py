@@ -198,7 +198,7 @@ def _rating_tally(reviews: Sequence[ProviderReview]) -> list[str]:
     A single tally rather than one entry per member, so the material carries
     nothing a reader could line up against another section.
     """
-    counts = Counter(_one_line(review.quality_rating) for review in reviews)
+    counts = Counter(review.quality_rating for review in reviews)
     # QualityRating is declared worst first, so a reader meets the harshest verdict before the kindest.
     ordered = [rating for rating in QualityRating if counts[rating]]
     if not ordered:

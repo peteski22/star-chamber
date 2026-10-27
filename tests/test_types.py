@@ -599,7 +599,7 @@ class TestCodeReviewResult:
             consensus_issues=(issue,),
             majority_issues=(mi,),
             individual_issues={"openai": (issue,)},
-            quality_ratings={"openai": "good"},
+            quality_ratings={"openai": QualityRating.GOOD},
             summary=CodeReviewSummary(total_issues=1, consensus_count=1, majority_count=1, synthesis="Overall good"),
         )
 
@@ -807,6 +807,23 @@ class TestClosedSetFields:
     def test_an_approach_refuses_a_raw_fit_rating(self) -> None:
         with pytest.raises(TypeError, match="fit_rating must be a FitRating, got str"):
             self._approach(fit_rating="good")
+
+    def test_a_result_refuses_a_raw_rating_in_its_map(self) -> None:
+        """The map keyed by member name carries the vocabulary too."""
+        with pytest.raises(TypeError, match=r"quality_ratings\['openai'\] must be a QualityRating, got str"):
+            CodeReviewResult(
+                mode="code-review",
+                files_reviewed=(),
+                providers_used=(),
+                providers_responded=(),
+                failed_providers=(),
+                reviews=(),
+                consensus_issues=(),
+                majority_issues=(),
+                individual_issues={},
+                quality_ratings={"openai": "good"},
+                summary=CodeReviewSummary(total_issues=0, consensus_count=0, majority_count=0, synthesis=""),
+            )
 
     def test_an_approach_accepts_no_fit_rating(self) -> None:
         """Null reports that nobody rated the approach, so it is not a value outside the set."""

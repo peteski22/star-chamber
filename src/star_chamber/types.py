@@ -13,7 +13,10 @@ class Ranked(StrEnum):
 
     @property
     def rank(self) -> int:
-        """Position in declaration order, so an ordered set needs no table beside it."""
+        """Position in declaration order, so an ordered set needs no table beside it.
+
+        NOTE: A set holds at most four members, so the scan costs less than caching it would.
+        """
         return list(type(self)).index(self)
 
 
@@ -410,6 +413,11 @@ class CodeReviewResult:
     quality_ratings: dict[str, QualityRating]
     summary: CodeReviewSummary
     spec_version: str = field(default=SPEC_VERSION, init=False)
+
+    def __post_init__(self) -> None:
+        """Reject a value the attributes above say the field cannot hold."""
+        for member, rating in self.quality_ratings.items():
+            _require_member(rating, QualityRating, f"quality_ratings[{member!r}]")
 
 
 @dataclass(frozen=True)

@@ -149,6 +149,12 @@ class CouncilConfig:
     otari: OtariConfig | None = None
     synthesis: bool = True
 
+    def __post_init__(self) -> None:
+        """Reject a threshold that is not a whole number, before a call is spent on it."""
+        if isinstance(self.consensus_threshold, bool) or not isinstance(self.consensus_threshold, int):
+            msg = f"consensus_threshold must be a whole number, got {type(self.consensus_threshold).__name__}"
+            raise TypeError(msg)
+
 
 def _require_member(value: object, allowed: type[StrEnum], field: str) -> None:
     """Reject a value the field's closed set does not hold.

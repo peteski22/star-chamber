@@ -740,6 +740,22 @@ class TestProviderConfigDisplayName:
         assert cfg.display_name == "gpt-5.2"
 
 
+class TestCouncilConfigThreshold:
+    """A threshold the comparison cannot use must fail before any provider is called."""
+
+    def test_a_string_threshold_is_rejected(self) -> None:
+        with pytest.raises(TypeError, match="consensus_threshold must be a whole number, got str"):
+            CouncilConfig(providers=(ProviderConfig(provider="openai", model="m"),), consensus_threshold="2")
+
+    def test_a_boolean_threshold_is_rejected(self) -> None:
+        with pytest.raises(TypeError, match="consensus_threshold must be a whole number, got bool"):
+            CouncilConfig(providers=(ProviderConfig(provider="openai", model="m"),), consensus_threshold=True)
+
+    def test_a_whole_number_is_accepted(self) -> None:
+        config = CouncilConfig(providers=(ProviderConfig(provider="openai", model="m"),), consensus_threshold=3)
+        assert config.consensus_threshold == 3
+
+
 class TestClosedSetFields:
     """A wire type refuses a value outside the set its field declares.
 

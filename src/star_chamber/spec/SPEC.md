@@ -494,7 +494,7 @@ The structured output includes:
 
 ### Consensus Recommendation
 
-{If all providers agree on an approach, state it here}
+{If `consensus_recommendation` is present, state it here, with the number of providers that answered}
 
 ### Approaches Considered
 

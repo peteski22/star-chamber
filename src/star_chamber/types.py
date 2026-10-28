@@ -197,31 +197,72 @@ class Issue:
 
 
 @dataclass(frozen=True)
-class MajorityIssue:
-    """An issue flagged by multiple (but not all) providers.
+class Finding:
+    """One member's account of what is wrong at a place it cited.
 
     Attributes:
-        severity: How urgent the issue is.
-        location: File and line location string.
-        category: What kind of concern the issue raises.
-        description: Human-readable description of the issue.
-        suggestion: Suggested fix or improvement.
-        provider_count: Number of providers that flagged this issue.
-        flagged_by: Names of providers that flagged this issue.
+        provider: The member that raised it.
+        severity: How urgent that member called it.
+        location: The place that member cited.
+        category: What kind of concern that member raised.
+        description: That member's description of the concern.
+        suggestion: That member's suggested fix.
     """
 
+    provider: str
     severity: Severity
     location: str
     category: IssueCategory
     description: str
     suggestion: str
-    provider_count: int
-    flagged_by: tuple[str, ...]
 
     def __post_init__(self) -> None:
         """Reject a value the attributes above say the field cannot hold."""
         _require_member(self.severity, Severity, "severity")
         _require_member(self.category, IssueCategory, "category")
+
+
+@dataclass(frozen=True)
+class IssueGroup:
+    """One place the council cited, and every member's account of what is wrong there.
+
+    Attributes:
+        findings: Every account the members gave of this place, in the order
+            the members were read. A member that cited the place more than once
+            contributes one finding per citation.
+        location: The citation that opened the group, which names the place the
+            group is reported at. A finding may cite a narrower or wider place.
+        severity: The most urgent severity any finding carries, so a group is
+            as urgent as the worst account any member gave it.
+        categories: Every category the findings carry, A-Z and without repeats.
+            More than one means the members disagreed about what kind of
+            concern this place raises.
+        flagged_by: The members that contributed a finding, A-Z and without repeats.
+
+    Raises:
+        ValueError: If no finding is given, because a group with none names a
+            place nobody cited.
+
+    NOTE: Only findings is a constructor argument. The rest are derived from
+    it, so a caller cannot state a value the findings contradict.
+    """
+
+    findings: tuple[Finding, ...]
+    location: str = field(init=False)
+    severity: Severity = field(init=False)
+    categories: tuple[IssueCategory, ...] = field(init=False)
+    flagged_by: tuple[str, ...] = field(init=False)
+
+    def __post_init__(self) -> None:
+        """Derive what the findings decide, and reject a group that has none."""
+        if not self.findings:
+            msg = "An issue group needs at least one finding."
+            raise ValueError(msg)
+        severity = min((finding.severity for finding in self.findings), key=lambda level: level.rank)
+        object.__setattr__(self, "location", self.findings[0].location)
+        object.__setattr__(self, "severity", severity)
+        object.__setattr__(self, "categories", tuple(sorted({finding.category for finding in self.findings})))
+        object.__setattr__(self, "flagged_by", tuple(sorted({finding.provider for finding in self.findings})))
 
 
 @dataclass(frozen=True)
@@ -331,14 +372,14 @@ class ClassificationResult:
     """Result of consensus classification.
 
     Attributes:
-        consensus_issues: Issues all providers agree on.
-        majority_issues: Issues flagged by most but not all providers.
-        individual_issues: Issues keyed by provider name.
+        consensus_issues: Grouped issues every provider cited.
+        majority_issues: Grouped issues more than one but not all providers cited.
+        individual_issues: Grouped issues one provider cited, keyed by provider name.
     """
 
-    consensus_issues: tuple[Issue, ...]
-    majority_issues: tuple[MajorityIssue, ...]
-    individual_issues: dict[str, tuple[Issue, ...]]
+    consensus_issues: tuple[IssueGroup, ...]
+    majority_issues: tuple[IssueGroup, ...]
+    individual_issues: dict[str, tuple[IssueGroup, ...]]
 
 
 @dataclass(frozen=True)
@@ -346,9 +387,9 @@ class CodeReviewSummary:
     """Counts and prose summarizing a code review council session.
 
     Attributes:
-        total_issues: Number of distinct issues found, across every bucket.
-        consensus_count: Number of issues every member that answered flagged.
-        majority_count: Number of issues more than one but not all of them flagged.
+        total_issues: Number of grouped issues found, across every bucket.
+        consensus_count: Number of grouped issues every member that answered cited.
+        majority_count: Number of grouped issues more than one but not all of them cited.
         synthesis: Overall assessment in prose. Empty when no member wrote one.
         synthesis_error: The member asked for the assessment and why it wrote
             none. Null when the assessment is present, and null when no member
@@ -396,9 +437,9 @@ class CodeReviewResult:
             over these members alone.
         failed_providers: Providers that failed during the session.
         reviews: Individual provider reviews.
-        consensus_issues: Issues all providers agree on.
-        majority_issues: Issues flagged by most providers.
-        individual_issues: Issues keyed by provider name.
+        consensus_issues: Grouped issues every member that answered cited.
+        majority_issues: Grouped issues more than one but not all of them cited.
+        individual_issues: Grouped issues one member cited, keyed by provider name.
         quality_ratings: Each member's verdict, keyed by provider name.
         summary: Counts and prose for the session.
         spec_version: The protocol version that produced this document, for a
@@ -413,9 +454,9 @@ class CodeReviewResult:
     providers_responded: tuple[str, ...]
     failed_providers: tuple[ProviderError, ...]
     reviews: tuple[ProviderReview, ...]
-    consensus_issues: tuple[Issue, ...]
-    majority_issues: tuple[MajorityIssue, ...]
-    individual_issues: dict[str, tuple[Issue, ...]]
+    consensus_issues: tuple[IssueGroup, ...]
+    majority_issues: tuple[IssueGroup, ...]
+    individual_issues: dict[str, tuple[IssueGroup, ...]]
     quality_ratings: dict[str, QualityRating]
     summary: CodeReviewSummary
     spec_version: str = field(default=SPEC_VERSION, init=False)

@@ -1,10 +1,10 @@
-# Council Protocol Specification v0.10
+# Council Protocol Specification v0.11
 
 This document specifies the portable council deliberation protocol — the invocation modes, prompt templates, response parsing, consensus classification, and output format that any orchestrator can implement independently.
 
 The orchestrator-specific implementation for Claude Code lives in `plugins/pragma/skills/star-chamber/PROTOCOL.md`. That document handles Bash subprocess isolation, `uv run` invocation, temp file management, and other runtime concerns. This spec covers only the portable protocol logic.
 
-**Status:** Draft (v0.10). Breaking changes may occur before v1.0.
+**Status:** Draft (v0.11). Breaking changes may occur before v1.0.
 
 ## Table of Contents
 
@@ -27,7 +27,7 @@ The council protocol defines how multiple LLM providers are queried in parallel,
 
 ### Versioning
 
-This spec follows [Semantic Versioning](https://semver.org/). The current version is **0.10** (pre-stable). The version will advance to 1.0 when the schema and algorithm definitions are considered stable.
+This spec follows [Semantic Versioning](https://semver.org/). The current version is **0.11** (pre-stable). The version will advance to 1.0 when the schema and algorithm definitions are considered stable.
 
 A version is published when it ships in a package release. An unpublished version is amended in place, so a change that lands before the next release does not move it. A number this spec has already stated is spent and is not reused, whether or not it was published.
 
@@ -365,12 +365,21 @@ The response wrapper ([`provider-response.schema.json`](schemas/provider-respons
 
 ### 9.1 Issue Grouping (Code Review)
 
-Issues from different providers are grouped when they refer to the same underlying concern:
+Issues from different providers are grouped when they cite the same place:
 
-- **Same file** AND **same line range** (overlapping, or within ±5 lines tolerance) AND **same category** = same issue.
+- **Same file** AND **same line range** (overlapping, or within ±5 lines tolerance) = same place.
 - A location MAY cite a single line (`file.py:205`) or a line range (`file.py:203-207`). A single line is treated as a range of one line, so the two forms group with each other.
 - A location whose trailing segment is neither is kept whole as the file path, so a path containing a colon is not split.
+- A location citing no line, and a range too wide to mean one place, both cite the file rather than a place within it. A reference orchestrator treats a range wider than 50 lines that way; the exact width is not normative.
 - Orchestrators MAY supply a custom semantic similarity function for more sophisticated grouping.
+
+The category MUST NOT take part in grouping. Two members can read one defect as two kinds of concern, and `correctness` against `invariants` at one line is disagreement about the reading, not evidence of two defects. Grouping on the category reported that disagreement as several members each raising something alone, which is the weakest claim the buckets can make about the strongest evidence they hold.
+
+A group MUST carry every contributing member's own account of the place, as `findings`, and no account may stand in for another. An orchestrator that keeps one account per group loses the rest, and nothing in its output says an account was dropped, so a reader cannot recover it or even know to look. An undercount is visible and a reader can group it by hand, so where the two cannot both be avoided, grouping too little is the error to prefer. A group MUST also carry the set of categories its findings name, so that a disagreement which no longer splits the group stays visible within it.
+
+A group's `location`, `severity`, `categories` and `flagged_by` are each derived from its findings. `location` is the citation that opened the group, `severity` is the most urgent severity any finding carries, and a member that cites one place more than once contributes one finding per citation while counting once toward agreement.
+
+Grouping is not transitive, because three citations can overlap in pairs without naming one place. An issue joins the first group whose place matches its own, so where that happens the order the members are read in decides which group it joins, and two orchestrators reading one input in different member orders MAY place an issue in different buckets. An orchestrator that needs an order-independent answer has to define the rule itself; this spec does not define one.
 
 ### 9.2 Approach Grouping (Design Question)
 
@@ -422,12 +431,13 @@ The structured output includes:
 - `providers_used[]`: The roster asked. All council members consulted, including those that failed, by display name.
 - `providers_responded[]`: The roster that answered. Members that returned a usable review, by display name. This is the denominator the classifications below were computed over.
 - `failed_providers[]`: Members that failed or returned malformed responses, by display name, each with the model it was asked and the reply it sent.
-- `consensus_issues[]`: Issues flagged by every member in `providers_responded`.
-- `majority_issues[]`: Issues flagged by more than one member in `providers_responded`. Each item includes `provider_count` and `flagged_by` (array of member display names) to identify which members raised it.
-- `individual_issues{}`: Issues keyed by member display name.
+- `consensus_issues[]`: Grouped issues cited by every member in `providers_responded`.
+- `majority_issues[]`: Grouped issues cited by more than one member in `providers_responded`.
+- `individual_issues{}`: Grouped issues cited by a single member, keyed by member display name.
+- Every item of all three is the same grouped issue: a `location`, a `severity`, the `categories` its members named, the members in `flagged_by`, and `findings[]` carrying each member's own `provider`, `location`, `severity`, `category`, `description` and `suggestion`. A consumer reads `flagged_by` to see which members raised a group and `findings[]` to see what each of them said. `total_issues` counts groups rather than findings, so one place several members described counts once.
 - `quality_ratings{}`: Per-member quality rating, keyed by display name.
 - `reviews[]`: Each answering member's parsed review in full, including its raw response text.
-- `summary{}`: Counts (`total_issues`, `consensus_count`, `majority_count`), `synthesis` (a short overall assessment, written as [section 7.2](#72-closing-assessment) requires, empty when no member wrote one), `synthesis_error` (the member asked and the reason it wrote none, null otherwise), and `synthesized_by` (the member asked, null when none was). `total_issues` counts distinct issues across all three buckets.
+- `summary{}`: Counts (`total_issues`, `consensus_count`, `majority_count`), `synthesis` (a short overall assessment, written as [section 7.2](#72-closing-assessment) requires, empty when no member wrote one), `synthesis_error` (the member asked and the reason it wrote none, null otherwise), and `synthesized_by` (the member asked, null when none was). `total_issues` counts grouped issues across all three buckets.
 - `debate{}` (optional): Debate metadata (rounds_completed, converged).
 
 **Markdown presentation** (for human consumption):
@@ -443,21 +453,21 @@ The structured output includes:
 
 These issues were flagged by every council member that answered. Address these first.
 
-1. `{file}:{line}` **[{SEVERITY}]** - {description}
-   - **Suggestion:** {how to fix}
+1. `{location}` **[{SEVERITY}]** ({categories}) - every member's account
+   - **{provider}:** {description} — **Suggestion:** {how to fix}
 
 ### Majority Issues ({N}/{M} Providers)
 
 These issues were flagged by most council members.
 
-1. `{file}:{line}` **[{SEVERITY}]** ({which providers}) - {description}
-   - **Suggestion:** {how to fix}
+1. `{location}` **[{SEVERITY}]** ({categories}, flagged by {flagged_by}) - every member's account
+   - **{provider}:** {description} — **Suggestion:** {how to fix}
 
 ### Individual Observations
 
 Issues raised by a single provider. May be valid specialised insights.
 
-- **{Provider}:** `{location}` - {observation}
+- **{Provider}:** `{location}` - {description}
 
 ### Summary
 

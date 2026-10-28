@@ -1,8 +1,9 @@
 """Consensus algorithms that combine what several providers reported.
 
 Implements the grouping and classification algorithm from spec section 9.
-Issues from multiple providers are grouped by file, line proximity, and
-category, then classified as consensus, majority, or individual.
+Issues from multiple providers are grouped by file and line proximity, each
+group keeping every provider's own account, then classified as consensus,
+majority, or individual.
 Design approaches are grouped by name, and the count of providers that
 recommended each one is derived from the recommendation each provider gave.
 """
@@ -17,10 +18,9 @@ from typing import TypeVar
 from star_chamber.types import (
     Approach,
     ClassificationResult,
+    Finding,
     FitRating,
-    Issue,
-    IssueCategory,
-    MajorityIssue,
+    IssueGroup,
     ProviderDesignAdvice,
     ProviderReview,
     Ranked,
@@ -37,19 +37,18 @@ _LINE_TOLERANCE = 5
 _LINE_SPAN_RE = re.compile(r"(\d{1,7})(?:-(\d{1,7}))?$", re.ASCII)
 
 # The most lines a span may cover, counting both ends, and still mean one place.
-# A wider span cites a file-level concern.
-# Grouping such a span by overlap would let it absorb unrelated findings, whose
-# descriptions the group then discards, so it is treated as no span instead.
+# A wider span cites the file rather than a place within it, so it is treated as
+# no span.
 _MAX_SPAN_LINES = 50
 
 # An inclusive first and last line.  A single line is a span of one.
 _LineSpan = tuple[int, int]
 
-# A grouping key: file path, line span, and category.
-_IssueKey = tuple[str, _LineSpan | None, IssueCategory]
+# A cited place: file path and an optional line span.
+_Location = tuple[str, _LineSpan | None]
 
 
-def _parse_location(location: str) -> tuple[str, _LineSpan | None]:
+def _parse_location(location: str) -> _Location:
     """Parse a location string into a file path and an optional line span.
 
     Accepts a single line ("file.py:42"), a line range ("file.py:203-207"), or
@@ -84,19 +83,6 @@ def _parse_location(location: str) -> tuple[str, _LineSpan | None]:
     return (location[:idx], (first, last))
 
 
-def _issue_key(issue: Issue) -> _IssueKey:
-    """Build a grouping key from an issue.
-
-    Args:
-        issue: The issue to extract a key from.
-
-    Returns:
-        Tuple of (file, line_span, category).
-    """
-    file, span = _parse_location(issue.location)
-    return (file, span, issue.category)
-
-
 def _spans_match(span_a: _LineSpan, span_b: _LineSpan) -> bool:
     """Determine whether two line spans refer to the same place.
 
@@ -116,25 +102,28 @@ def _spans_match(span_a: _LineSpan, span_b: _LineSpan) -> bool:
     return first_a - _LINE_TOLERANCE <= last_b and first_b - _LINE_TOLERANCE <= last_a
 
 
-def _issues_match(key_a: _IssueKey, key_b: _IssueKey) -> bool:
-    """Determine whether two issue keys refer to the same logical issue.
+def _locations_match(place_a: _Location, place_b: _Location) -> bool:
+    """Determine whether two cited places refer to the same place.
 
-    Two keys match when they share the same file and category, and their line
-    spans refer to the same place.  Both spans must be present for that
-    comparison; if both are absent they match, but if only one is absent they
-    do not.
+    Two places match when they name the same file and their line spans refer
+    to the same place.  Both spans must be present for that comparison; if both
+    are absent they match, but if only one is absent they do not.
+
+    The category a member chose does not take part, because two members can
+    read one defect as two kinds of concern, and a group carries every category
+    its findings name.
 
     Args:
-        key_a: First issue key.
-        key_b: Second issue key.
+        place_a: First cited place.
+        place_b: Second cited place.
 
     Returns:
-        True if the keys represent the same logical issue.
+        True if the places refer to the same place.
     """
-    file_a, span_a, cat_a = key_a
-    file_b, span_b, cat_b = key_b
+    file_a, span_a = place_a
+    file_b, span_b = place_b
 
-    if file_a != file_b or cat_a != cat_b:
+    if file_a != file_b:
         return False
 
     # Both absent => match.  One absent => no match.
@@ -146,85 +135,47 @@ def _issues_match(key_a: _IssueKey, key_b: _IssueKey) -> bool:
     return _spans_match(span_a, span_b)
 
 
-def _severity_sort_key(issue: Issue | MajorityIssue) -> int:
-    """Return a numeric sort key for an issue's severity.
+def _severity_sort_key(group: IssueGroup) -> int:
+    """Return a numeric sort key for a grouped issue's severity.
 
     Args:
-        issue: An Issue or MajorityIssue to sort.
+        group: A grouped issue to sort.
 
     Returns:
         Integer sort value where lower means higher severity.
     """
-    return issue.severity.rank
+    return group.severity.rank
 
 
-def classify(reviews: Sequence[ProviderReview], threshold: int = 2) -> ClassificationResult:
-    """Classify issues from multiple providers into consensus, majority, and individual buckets.
+def _bucketed(groups: Sequence[IssueGroup], num_providers: int, threshold: int) -> ClassificationResult:
+    """Sort each grouped issue into the bucket its number of contributing providers names.
 
     Args:
-        reviews: Sequence of provider reviews to classify.
-        threshold: Minimum number of providers that must agree for consensus.
+        groups: The grouped issues to sort.
+        num_providers: How many providers answered, all of which consensus needs.
+        threshold: Minimum providers that must agree, clamped to that roster.
 
     Returns:
-        ClassificationResult with consensus, majority, and individual issues.
+        ClassificationResult holding each group in one bucket, ordered by severity.
     """
-    num_providers = len(reviews)
-    if num_providers == 0:
-        return ClassificationResult(
-            consensus_issues=(),
-            majority_issues=(),
-            individual_issues={},
-        )
-
-    # Clamp threshold so it never exceeds the number of providers.
     effective_threshold = min(threshold, num_providers)
+    consensus: list[IssueGroup] = []
+    majority: list[IssueGroup] = []
+    individual_map: dict[str, list[IssueGroup]] = defaultdict(list)
 
-    # Each group tracks: the representative issue, its key, and the set of providers.
-    groups: list[tuple[Issue, _IssueKey, set[str]]] = []
-
-    for review in reviews:
-        for issue in review.issues:
-            key = _issue_key(issue)
-            matched = False
-            for group in groups:
-                _, group_key, providers = group
-                if _issues_match(key, group_key) and review.provider not in providers:
-                    providers.add(review.provider)
-                    matched = True
-                    break
-            if not matched:
-                groups.append((issue, key, {review.provider}))
-
-    # Classify each group.
-    consensus: list[Issue] = []
-    majority: list[MajorityIssue] = []
-    individual_map: dict[str, list[Issue]] = defaultdict(list)
-
-    for representative, _key, providers in groups:
-        count = len(providers)
+    for group in groups:
+        count = len(group.flagged_by)
         all_agree = count == num_providers
         meets_threshold = count >= effective_threshold
 
         if all_agree and meets_threshold:
-            consensus.append(representative)
+            consensus.append(group)
         elif count >= 2:
-            majority.append(
-                MajorityIssue(
-                    severity=representative.severity,
-                    location=representative.location,
-                    category=representative.category,
-                    description=representative.description,
-                    suggestion=representative.suggestion,
-                    provider_count=count,
-                    flagged_by=tuple(sorted(providers)),
-                )
-            )
+            majority.append(group)
         else:
             # Exactly one provider.
-            provider_name = next(iter(providers))
-            individual_map[provider_name].append(representative)
+            individual_map[group.flagged_by[0]].append(group)
 
-    # Sort each bucket by severity.
     consensus.sort(key=_severity_sort_key)
     majority.sort(key=_severity_sort_key)
     for issues in individual_map.values():
@@ -235,6 +186,56 @@ def classify(reviews: Sequence[ProviderReview], threshold: int = 2) -> Classific
         majority_issues=tuple(majority),
         individual_issues={k: tuple(v) for k, v in individual_map.items()},
     )
+
+
+def classify(reviews: Sequence[ProviderReview], threshold: int = 2) -> ClassificationResult:
+    """Classify issues from multiple providers into consensus, majority, and individual buckets.
+
+    Every issue joins the first group whose place matches its own, and each
+    group keeps the account its contributor gave, so a group that draws several
+    providers reports all of them rather than one on behalf of the rest.
+
+    Args:
+        reviews: Sequence of provider reviews to classify.
+        threshold: Minimum number of providers that must agree for consensus.
+
+    Returns:
+        ClassificationResult with consensus, majority, and individual issues.
+
+    NOTE: Matching is not transitive, because three citations can overlap in
+    pairs without naming one place.  Where that happens, the order the reviews
+    arrive in decides which group a citation joins.
+    """
+    num_providers = len(reviews)
+    if num_providers == 0:
+        return ClassificationResult(
+            consensus_issues=(),
+            majority_issues=(),
+            individual_issues={},
+        )
+
+    # A group keeps the place that opened it, rather than widening to cover what joined.
+    groups: list[tuple[_Location, list[Finding]]] = []
+
+    for review in reviews:
+        for issue in review.issues:
+            place = _parse_location(issue.location)
+            finding = Finding(
+                provider=review.provider,
+                severity=issue.severity,
+                location=issue.location,
+                category=issue.category,
+                description=issue.description,
+                suggestion=issue.suggestion,
+            )
+            for group_place, findings in groups:
+                if _locations_match(place, group_place):
+                    findings.append(finding)
+                    break
+            else:
+                groups.append((place, [finding]))
+
+    return _bucketed([IssueGroup(findings=tuple(findings)) for _, findings in groups], num_providers, threshold)
 
 
 # Characters outside a name's words, so a name matches regardless of case and punctuation.

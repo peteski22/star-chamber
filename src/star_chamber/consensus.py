@@ -38,7 +38,7 @@ _LINE_SPAN_RE = re.compile(r"(\d{1,7})(?:-(\d{1,7}))?$", re.ASCII)
 
 # The most lines a span may cover, counting both ends, and still mean one place.
 # A wider span cites the file rather than a place within it, so it is treated as
-# no span.
+# no span and placed the way a bare file path is.
 _MAX_SPAN_LINES = 50
 
 # An inclusive first and last line.  A single line is a span of one.
@@ -106,8 +106,8 @@ def _locations_match(place_a: _Location, place_b: _Location) -> bool:
     """Determine whether two cited places refer to the same place.
 
     Two places match when they name the same file and their line spans refer
-    to the same place.  Both spans must be present for that comparison; if both
-    are absent they match, but if only one is absent they do not.
+    to the same place.  A citation carrying no span names the file as a whole,
+    so it matches every span within that file.
 
     The category a member chose does not take part, because two members can
     read one defect as two kinds of concern, and a group carries every category
@@ -126,13 +126,30 @@ def _locations_match(place_a: _Location, place_b: _Location) -> bool:
     if file_a != file_b:
         return False
 
-    # Both absent => match.  One absent => no match.
-    if span_a is None and span_b is None:
-        return True
     if span_a is None or span_b is None:
-        return False
+        return True
 
     return _spans_match(span_a, span_b)
+
+
+def _is_file_level(place: _Location) -> bool:
+    """Determine whether a citation names a file rather than a place within it."""
+    return place[1] is None
+
+
+def _place(groups: list[tuple[_Location, list[Finding]]], place: _Location, finding: Finding) -> None:
+    """Add a finding to the first group whose place matches, or open a group for it.
+
+    Args:
+        groups: The groups collected so far, which this may extend.
+        place: The place the finding cited.
+        finding: The finding to place.
+    """
+    for group_place, findings in groups:
+        if _locations_match(place, group_place):
+            findings.append(finding)
+            return
+    groups.append((place, [finding]))
 
 
 def _severity_sort_key(group: IssueGroup) -> int:
@@ -195,6 +212,9 @@ def classify(reviews: Sequence[ProviderReview], threshold: int = 2) -> Classific
     group keeps the account its contributor gave, so a group that draws several
     providers reports all of them rather than one on behalf of the rest.
 
+    A citation naming a file rather than a place within it joins one group of
+    that file rather than merging the places the providers raised separately.
+
     Args:
         reviews: Sequence of provider reviews to classify.
         threshold: Minimum number of providers that must agree for consensus.
@@ -216,6 +236,7 @@ def classify(reviews: Sequence[ProviderReview], threshold: int = 2) -> Classific
 
     # A group keeps the place that opened it, rather than widening to cover what joined.
     groups: list[tuple[_Location, list[Finding]]] = []
+    file_level: list[tuple[_Location, Finding]] = []
 
     for review in reviews:
         for issue in review.issues:
@@ -228,12 +249,15 @@ def classify(reviews: Sequence[ProviderReview], threshold: int = 2) -> Classific
                 description=issue.description,
                 suggestion=issue.suggestion,
             )
-            for group_place, findings in groups:
-                if _locations_match(place, group_place):
-                    findings.append(finding)
-                    break
+            if _is_file_level(place):
+                file_level.append((place, finding))
             else:
-                groups.append((place, [finding]))
+                _place(groups, place, finding)
+
+    # A file-level citation matches every place in its file, so placing it first
+    # would collect the whole file into whichever group it happened to open.
+    for place, finding in file_level:
+        _place(groups, place, finding)
 
     return _bucketed([IssueGroup(findings=tuple(findings)) for _, findings in groups], num_providers, threshold)
 

@@ -97,8 +97,11 @@ class TestLocationsMatch:
     def test_absent_spans_match(self) -> None:
         assert _locations_match(("auth.py", None), ("auth.py", None)) is True
 
-    def test_one_absent_span_no_match(self) -> None:
-        assert _locations_match(("auth.py", None), ("auth.py", (10, 10))) is False
+    def test_a_bare_file_matches_a_line_within_it(self) -> None:
+        assert _locations_match(("auth.py", None), ("auth.py", (10, 10))) is True
+
+    def test_a_bare_file_does_not_match_another_file(self) -> None:
+        assert _locations_match(("auth.py", None), ("models.py", (10, 10))) is False
 
 
 # ---------------------------------------------------------------------------
@@ -438,11 +441,19 @@ class TestSpanWidthLimit:
     def test_span_past_the_limit_is_dropped(self) -> None:
         assert _parse_location("app.py:100-150") == ("app.py", None)
 
-    def test_file_wide_span_does_not_absorb_a_specific_line(self) -> None:
-        assert not _locations_match(("app.py", None), ("app.py", (50, 50)))
-
     def test_file_wide_citations_still_group_together(self) -> None:
         assert _locations_match(("app.py", None), ("app.py", None))
+
+    def test_widening_a_span_by_one_line_keeps_a_match_it_had(self) -> None:
+        """The reported cliff: one more line must not remove a match the citation had."""
+        narrower = _parse_location("m.py:10-59")
+        wider = _parse_location("m.py:10-60")
+        cited = _parse_location("m.py:42")
+
+        assert _locations_match(narrower, cited) is _locations_match(wider, cited)
+
+    def test_a_file_wide_span_groups_with_a_bare_file(self) -> None:
+        assert _locations_match(_parse_location("app.py:1-9999"), _parse_location("app.py"))
 
     def test_a_wide_citation_cannot_suppress_other_findings(self) -> None:
         reviews = [
@@ -457,6 +468,71 @@ class TestSpanWidthLimit:
             "Whole file is untested.",
             "Off-by-one loop bound.",
             "Unchecked index.",
+        }
+
+
+class TestFileLevelCitations:
+    """A member that cites a file names the whole of it, including the lines others cite."""
+
+    def test_a_file_level_citation_joins_a_line_in_that_file(self) -> None:
+        reviews = [
+            _review("openai", [_issue("models.py", "architecture")]),
+            _review("anthropic", [_issue("models.py:1042", "architecture")]),
+        ]
+
+        result = classify(reviews, threshold=2)
+
+        assert len(result.consensus_issues) == 1
+        assert result.consensus_issues[0].flagged_by == ("anthropic", "openai")
+        assert result.individual_issues == {}
+
+    def test_a_file_level_citation_keeps_both_accounts(self) -> None:
+        reviews = [
+            _review("openai", [_issue("models.py", "architecture", description="No layer boundary at all.")]),
+            _review("anthropic", [_issue("models.py:1042", "architecture", description="Query built inline.")]),
+        ]
+
+        result = classify(reviews, threshold=2)
+
+        assert _descriptions(result) == {"No layer boundary at all.", "Query built inline."}
+
+    def test_a_file_level_citation_does_not_merge_the_places_others_raised(self) -> None:
+        """One member citing a file must not collapse the lines the others cited apart."""
+        apart = [f"app.py:{line}" for line in range(10, 200, 20)]
+        reviews = [
+            _review("openai", [_issue("app.py", "correctness")]),
+            _review("anthropic", [_issue(location, "correctness") for location in apart]),
+        ]
+
+        result = classify(reviews, threshold=2)
+
+        groups = _groups(result)
+        assert len(groups) == len(apart)
+        assert sum(len(group.findings) for group in groups) == len(apart) + 1
+
+    def test_a_span_too_wide_to_be_one_place_does_not_merge_them_either(self) -> None:
+        apart = [f"app.py:{line}" for line in range(10, 200, 20)]
+        reviews = [
+            _review("openai", [_issue("app.py:1-9999", "correctness")]),
+            _review("anthropic", [_issue(location, "correctness") for location in apart]),
+        ]
+
+        result = classify(reviews, threshold=2)
+
+        assert len(_groups(result)) == len(apart)
+
+    def test_a_file_level_citation_does_not_reach_another_file(self) -> None:
+        reviews = [
+            _review("openai", [_issue("models.py", "architecture")]),
+            _review("anthropic", [_issue("views.py:1042", "architecture")]),
+        ]
+
+        result = classify(reviews, threshold=2)
+
+        assert result.consensus_issues == ()
+        assert {name: len(groups) for name, groups in result.individual_issues.items()} == {
+            "openai": 1,
+            "anthropic": 1,
         }
 
 

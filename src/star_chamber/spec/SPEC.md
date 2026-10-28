@@ -370,8 +370,10 @@ Issues from different providers are grouped when they cite the same place:
 - **Same file** AND **same line range** (overlapping, or within ±5 lines tolerance) = same place.
 - A location MAY cite a single line (`file.py:205`) or a line range (`file.py:203-207`). A single line is treated as a range of one line, so the two forms group with each other.
 - A location whose trailing segment is neither is kept whole as the file path, so a path containing a colon is not split.
-- A location citing no line, and a range too wide to mean one place, both cite the file rather than a place within it. A reference orchestrator treats a range wider than 50 lines that way; the exact width is not normative.
+- A location citing no line, and a range too wide to mean one place, both cite the file rather than a place within it. Such a citation MUST match any line range in that file, so a member citing `models.py` groups with one citing `models.py:1042`. Reporting those two apart claims they raised separate concerns.
 - Orchestrators MAY supply a custom semantic similarity function for more sophisticated grouping.
+
+Because a file-level citation matches every place in its file, an orchestrator MUST place one only after every other citation has a group. Placing it earlier would collect the whole file into whichever group it opened, so one member citing a file would reduce a report of many separate places to a single issue, and the count of distinct issues with it. Placed last, it joins one group of that file and merges nothing. It joins the first such group, so where the file holds several, the order the members are read in decides that group's `location` and `flagged_by`. A reference orchestrator treats a range wider than 50 lines as file-level; the exact width is not normative, but the rule that width alone MUST NOT change whether a citation matches a given line is, because a member cannot otherwise reason about what its own citation will group with.
 
 The category MUST NOT take part in grouping. Two members can read one defect as two kinds of concern, and `correctness` against `invariants` at one line is disagreement about the reading, not evidence of two defects. Grouping on the category reported that disagreement as several members each raising something alone, which is the weakest claim the buckets can make about the strongest evidence they hold.
 

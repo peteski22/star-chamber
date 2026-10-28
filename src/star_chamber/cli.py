@@ -133,8 +133,8 @@ def _print_design_result(result: DesignQuestionResult) -> None:
 
     if result.consensus_recommendation:
         click.echo(
-            f"\nConsensus recommendation, from all {len(result.providers_responded)} "
-            f"providers that answered: {result.consensus_recommendation}"
+            f"\nConsensus recommendation ({len(result.providers_responded)} providers answered): "
+            f"{result.consensus_recommendation}"
         )
 
     if result.approaches:

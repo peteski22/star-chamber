@@ -149,6 +149,12 @@ class CouncilConfig:
     otari: OtariConfig | None = None
     synthesis: bool = True
 
+    def __post_init__(self) -> None:
+        """Reject a threshold that is not a whole number, before a call is spent on it."""
+        if isinstance(self.consensus_threshold, bool) or not isinstance(self.consensus_threshold, int):
+            msg = f"consensus_threshold must be a whole number, got {type(self.consensus_threshold).__name__}"
+            raise TypeError(msg)
+
 
 def _require_member(value: object, allowed: type[StrEnum], field: str) -> None:
     """Reject a value the field's closed set does not hold.
@@ -432,7 +438,9 @@ class DesignQuestionResult:
             The consensus recommendation was computed over these members alone.
         failed_providers: Providers that failed during the session.
         approaches: Aggregated design approaches.
-        consensus_recommendation: Recommendation all providers agreed on.
+        consensus_recommendation: The approach a majority of the providers
+            that answered recommended, where the configured threshold can
+            raise that majority. None when no approach held it.
         summary: Prose for the session.
         spec_version: The protocol version that produced this document, for a
             consumer to compare against the version its instructions were

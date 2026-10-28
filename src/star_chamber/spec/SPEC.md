@@ -1,10 +1,10 @@
-# Council Protocol Specification v0.9
+# Council Protocol Specification v0.10
 
 This document specifies the portable council deliberation protocol — the invocation modes, prompt templates, response parsing, consensus classification, and output format that any orchestrator can implement independently.
 
 The orchestrator-specific implementation for Claude Code lives in `plugins/pragma/skills/star-chamber/PROTOCOL.md`. That document handles Bash subprocess isolation, `uv run` invocation, temp file management, and other runtime concerns. This spec covers only the portable protocol logic.
 
-**Status:** Draft (v0.9). Breaking changes may occur before v1.0.
+**Status:** Draft (v0.10). Breaking changes may occur before v1.0.
 
 ## Table of Contents
 
@@ -27,11 +27,11 @@ The council protocol defines how multiple LLM providers are queried in parallel,
 
 ### Versioning
 
-This spec follows [Semantic Versioning](https://semver.org/). The current version is **0.9** (pre-stable). The version will advance to 1.0 when the schema and algorithm definitions are considered stable.
+This spec follows [Semantic Versioning](https://semver.org/). The current version is **0.10** (pre-stable). The version will advance to 1.0 when the schema and algorithm definitions are considered stable.
 
 A version is published when it ships in a package release. An unpublished version is amended in place, so a change that lands before the next release does not move it. A number this spec has already stated is spent and is not reused, whether or not it was published.
 
-A published version MUST move when the older copy of a schema and the new one disagree about any document. A tightening rejects a document the older copy accepted. A widening, such as a value added to an emitted enum, produces a document the older copy rejects. Either way one number names two checks, and a consumer cannot tell which of them its own copy carries. A rejection discards the whole document rather than the one field, so the version is the only warning a consumer gets.
+A published version MUST also move when an algorithm this spec defines changes the value a conforming orchestrator emits for the same input, even where both values validate against an unchanged schema. Two orchestrators at one version would otherwise disagree about a field while both conforming, and a consumer comparing their output has nothing to tell them apart. A published version MUST move when the older copy of a schema and the new one disagree about any document. A tightening rejects a document the older copy accepted. A widening, such as a value added to an emitted enum, produces a document the older copy rejects. Either way one number names two checks, and a consumer cannot tell which of them its own copy carries. A rejection discards the whole document rather than the one field, so the version is the only warning a consumer gets.
 
 ### Spec Version in Output
 
@@ -396,9 +396,11 @@ Issues/recommendations fall into mutually exclusive buckets:
 
 Classification counts a member only when it returned a usable response. The denominator is therefore `providers_responded`, not `providers_used`. A consensus across two members when three were asked is a weaker signal than the same word across three, so consumers that report agreement MUST state which roster it was computed over.
 
-**Design question consensus:** For design questions, `consensus_recommendation` captures high-level directional agreement (e.g., "use CRUD, not event sourcing"), which a synthesis step can establish even when providers recommend different specific variants. It is not populated when providers disagree on direction. Per-approach `recommended_by` counts track the specific variant each provider chose.
+**Design question consensus:** For design questions, `consensus_recommendation` names the approach a strict majority of the members that answered recommended, when one approach leads alone. Each member's recommendation is read against the grouped approach names and casts at most one ballot. A strict majority is more than half the members that answered. The configured consensus threshold, clamped to that roster, can tighten the requirement but never loosen it, as classification likewise requires unanimity before its own threshold applies. At most one approach can hold a majority, because two would need more ballots than there are members, so no tie can arise. Agreement is tallied over names alone, so members that word one direction differently are tallied apart and each wording must reach the majority on its own.
 
-Without a synthesis step an orchestrator MUST populate it only when every provider that answered named one and the same approach, and the value MUST be that approach's name. It MUST be null otherwise. A consumer can therefore always read the value as a name that appears in `approaches`, rather than having to tell a name from a provider's prose. Directional agreement across differently named variants reads the shared direction out of differing prose, which needs synthesis, so an orchestrator that performs none reports null in that case rather than guessing.
+An orchestrator MUST take a ballot only from a recommendation that names exactly one approach, and the member MUST have named that approach itself. A name carries no polarity, so a recommendation naming two does not say which of them it endorsed, and counting either would let the rejected one win on the objector's own ballot. The test is the set of names the recommendation mentions, not the subset the member also listed, because a member that lists one approach and argues against it in favor of another still named two. A recommendation that names none casts no ballot. The value MUST be an approach's name, and MUST be null when no approach reaches a majority. A consumer can therefore always read the value as a name that appears in `approaches`, rather than having to tell a name from a provider's prose. Reading one direction out of differently named variants needs synthesis. An orchestrator MAY perform it, and MUST still report a name that appears in `approaches`; one that performs none leaves each wording to reach the threshold alone.
+
+`Approach.recommended_by` counts a recommendation toward every approach name it holds, so it is not the tally this field is computed from. The two numbers answer different questions: `recommended_by` reports how often an approach was named in a recommendation, and `consensus_recommendation` reports the one direction the council settled on.
 
 ### 9.4 Confidence Ordering
 
@@ -476,7 +478,7 @@ The structured output includes:
 - `providers_used[]`: The roster asked. All council members consulted, including those that failed, by display name.
 - `providers_responded[]`: The roster that answered. Members that returned usable advice, by display name. This is the denominator `consensus_recommendation` was computed over.
 - `failed_providers[]`: Members that failed or returned malformed responses, by display name, each with the model it was asked and the reply it sent.
-- `consensus_recommendation`: High-level directional agreement when every member that answered agrees. Differing specifics count only where a synthesis step establishes the shared direction. Without one the field carries the name of the one approach every member named, and is null otherwise, as section 9.3 requires.
+- `consensus_recommendation`: The name of the approach a strict majority of the members that answered recommended. A recommendation naming any number of approaches other than one casts no ballot. Null when no approach reaches that majority, which the configured consensus threshold can raise toward unanimity, as section 9.3 requires.
 - `approaches[]`: All approaches mentioned by any provider, with `recommended_by` count, merged pros/cons, `risk_level`, and `fit_rating`. `risk_level` is `unknown` when no provider stated one. `fit_rating` is null when no provider assessed fit for the approach; when providers disagree, use the most common rating.
 - `summary{}`: Contains `synthesis` (a short overall assessment, written as [section 7.2](#72-closing-assessment) requires, empty when no member wrote one), `synthesis_error` (the member asked and the reason it wrote none, null otherwise), and `synthesized_by` (the member asked, null when none was).
 - `debate{}` (optional): Debate metadata (rounds_completed, converged).
@@ -492,7 +494,7 @@ The structured output includes:
 
 ### Consensus Recommendation
 
-{If all providers agree on an approach, state it here}
+{If `consensus_recommendation` is present, state it here, with the number of providers that answered}
 
 ### Approaches Considered
 

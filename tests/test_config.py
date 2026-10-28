@@ -279,3 +279,25 @@ class TestDocumentedDefaults:
         loaded = CouncilConfig(providers=(ProviderConfig(provider="openai", model="gpt-4o"),))
 
         assert schema["properties"]["synthesis"]["default"] is loaded.synthesis
+
+
+class TestConsensusThresholdValidation:
+    """A threshold the comparison cannot use is a configuration error, not a traceback."""
+
+    def test_a_string_threshold_is_a_config_error(self, tmp_path) -> None:
+        path = tmp_path / "providers.json"
+        path.write_text(
+            json.dumps({"providers": [{"provider": "openai", "model": "gpt-4o"}], "consensus_threshold": "2"})
+        )
+
+        with pytest.raises(ConfigError, match="'consensus_threshold' must be a whole number"):
+            load_config(path)
+
+    def test_a_boolean_threshold_is_a_config_error(self, tmp_path) -> None:
+        path = tmp_path / "providers.json"
+        path.write_text(
+            json.dumps({"providers": [{"provider": "openai", "model": "gpt-4o"}], "consensus_threshold": True})
+        )
+
+        with pytest.raises(ConfigError, match="'consensus_threshold' must be a whole number"):
+            load_config(path)

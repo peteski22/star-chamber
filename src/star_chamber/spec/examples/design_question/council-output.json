@@ -1,6 +1,6 @@
 {
   "mode": "design-question",
-  "spec_version": "0.9",
+  "spec_version": "0.10",
   "prompt": "Should we use event sourcing or CRUD for our order management system? We expect ~1000 orders/day, need audit trails, and may add a recommendation engine later.",
   "providers_used": [
     "openai",

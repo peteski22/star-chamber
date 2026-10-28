@@ -46,10 +46,13 @@ def build_design_result(
     responses: Sequence[ProviderResponse],
     *,
     prompt: str,
+    threshold: int = 2,
     synthesizer: Synthesizer = stub_synthesizer,
 ) -> DesignQuestionResult:
     """Build a design question result without reaching a provider for the synthesis."""
-    return asyncio.run(_build_design_result(exchanges(responses), prompt=prompt, synthesizer=synthesizer))
+    return asyncio.run(
+        _build_design_result(exchanges(responses), prompt=prompt, threshold=threshold, synthesizer=synthesizer)
+    )
 
 
 def exchanges(

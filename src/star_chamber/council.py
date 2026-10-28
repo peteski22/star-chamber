@@ -125,6 +125,7 @@ async def _build_design_result(
     exchanges: Sequence[tuple[ProviderConfig, ProviderResponse]],
     prompt: str,
     *,
+    threshold: int = 2,
     synthesizer: Synthesizer,
 ) -> DesignQuestionResult:
     """Parse responses, aggregate approaches, and build a DesignQuestionResult.
@@ -132,6 +133,8 @@ async def _build_design_result(
     Args:
         exchanges: Each member of the fan-out round paired with its reply.
         prompt: The original design question.
+        threshold: Minimum members that must recommend one approach for it to
+            be reported as the council's direction.
         synthesizer: Writes the session's closing assessment.
 
     Returns:
@@ -183,7 +186,7 @@ async def _build_design_result(
         providers_responded=tuple(a.provider for a in advices),
         failed_providers=tuple(failed),
         approaches=approaches,
-        consensus_recommendation=consensus_recommendation(advices, approaches),
+        consensus_recommendation=consensus_recommendation(advices, approaches, threshold),
         summary=DesignSummary(
             synthesis=synthesis.text,
             synthesis_error=synthesis.error,
@@ -288,6 +291,7 @@ async def run_council(
     return await _build_design_result(
         exchanges,
         prompt=prompt,
+        threshold=config.consensus_threshold,
         synthesizer=synthesizer,
     )
 

@@ -334,12 +334,12 @@
         },
         "location": {
           "type": "string",
-          "description": "The citation that opened the group, which names the place the group is reported at. An individual finding may cite a narrower or wider place."
+          "description": "The citation that opened the group, which names the place the group is reported at. Derived by the council and belonging to the group, not quoted from any one member. An individual finding may cite a narrower or wider place."
         },
         "severity": {
           "type": "string",
           "enum": ["high", "medium", "low"],
-          "description": "The most urgent severity any finding carries."
+          "description": "The most urgent severity any finding carries. Derived by the council and belonging to the group, so it may exceed what the member at the group location said."
         },
         "categories": {
           "type": "array",

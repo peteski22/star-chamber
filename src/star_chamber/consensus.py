@@ -201,7 +201,7 @@ def _bucketed(groups: Sequence[IssueGroup], num_providers: int, threshold: int) 
     return ClassificationResult(
         consensus_issues=tuple(consensus),
         majority_issues=tuple(majority),
-        individual_issues={k: tuple(v) for k, v in individual_map.items()},
+        individual_issues={provider: tuple(individual_map[provider]) for provider in sorted(individual_map)},
     )
 
 

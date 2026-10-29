@@ -157,6 +157,18 @@ class TestClassify:
         assert len(result.individual_issues["openai"]) == 1
         assert result.individual_issues["openai"][0].categories == ("architecture",)
 
+    def test_individual_issues_are_keyed_in_member_order_a_to_z(self) -> None:
+        """The members have no meaningful order, so a reader is told where to look."""
+        reviews = [
+            _review("openai", [_issue("a.py:10", "correctness")]),
+            _review("gemini", [_issue("b.py:10", "correctness")]),
+            _review("anthropic", [_issue("c.py:10", "correctness")]),
+        ]
+
+        result = classify(reviews)
+
+        assert list(result.individual_issues) == ["anthropic", "gemini", "openai"]
+
     def test_line_tolerance_groups_nearby_lines(self) -> None:
         reviews = [
             _review("openai", [_issue("auth.py:23", "architecture")]),

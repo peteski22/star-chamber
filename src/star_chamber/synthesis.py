@@ -67,9 +67,13 @@ Synthesizer = Callable[[str, Sequence[ProviderConfig]], Awaitable[Synthesis]]
 """Takes council material and the members that answered, and returns the assessment."""
 
 
-def _descriptions(groups: Iterable[IssueGroup]) -> list[str]:
-    """Return every account the members gave of each grouped issue."""
-    return [finding.description for group in groups for finding in group.findings]
+def _concerns(groups: Iterable[IssueGroup]) -> list[str]:
+    """Return one entry per grouped issue, carrying every account its members gave.
+
+    One entry per group rather than one per account, so a place several members
+    described cannot read as several separate concerns.
+    """
+    return [" ".join(finding.description for finding in group.findings) for group in groups]
 
 
 def render_code_review_material(
@@ -92,11 +96,11 @@ def render_code_review_material(
     sections: list[tuple[str, Sequence[str]]] = [
         ("Verdicts given", _rating_tally(reviews)),
         ("Each assessment of its own", [review.summary for review in reviews]),
-        ("Concerns every member raised", _descriptions(classification.consensus_issues)),
-        ("Concerns more than one member raised", _descriptions(classification.majority_issues)),
+        ("Concerns every member raised", _concerns(classification.consensus_issues)),
+        ("Concerns more than one member raised", _concerns(classification.majority_issues)),
         (
             "Concerns one member raised",
-            _descriptions(group for groups in classification.individual_issues.values() for group in groups),
+            _concerns(group for groups in classification.individual_issues.values() for group in groups),
         ),
     ]
     return _render_sections(sections)

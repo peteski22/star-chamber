@@ -270,6 +270,18 @@ class TestCodeReviewMaterial:
         assert "Off-by-one loop bound." in material
         assert "Misleading name." in material
 
+    def test_one_grouped_concern_reads_as_one_concern(self) -> None:
+        """Several accounts of one place are one bullet, so agreement is not read as several concerns."""
+        classification = ClassificationResult(
+            consensus_issues=(_group("Off-by-one loop bound.", "Misleading name."),),
+            majority_issues=(),
+            individual_issues={},
+        )
+
+        material = render_code_review_material((), classification)
+
+        assert len([line for line in material.splitlines() if line.startswith("- ")]) == 1
+
     def test_omits_a_section_with_nothing_in_it(self) -> None:
         reviews = (_review("openai", summary="All good."),)
         classification = ClassificationResult(consensus_issues=(), majority_issues=(), individual_issues={})

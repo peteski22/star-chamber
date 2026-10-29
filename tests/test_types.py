@@ -283,6 +283,16 @@ class TestIssueGroup:
         assert group.categories == ("architecture", "correctness")
         assert group.flagged_by == ("anthropic", "openai")
 
+    def test_a_caller_cannot_change_the_findings_after_the_group_is_built(self) -> None:
+        """The group holds its own tuple, so the derived fields cannot drift from the findings."""
+        passed = [_finding("openai")]
+        group = IssueGroup(findings=passed)  # type: ignore[arg-type]
+
+        passed.append(_finding("gemini"))
+
+        assert group.findings == (_finding("openai"),)
+        assert group.flagged_by == ("openai",)
+
     def test_a_derived_field_is_not_a_constructor_argument(self) -> None:
         with pytest.raises(TypeError):
             IssueGroup(findings=(_finding("openai"),), severity=Severity.LOW)  # type: ignore[call-arg]

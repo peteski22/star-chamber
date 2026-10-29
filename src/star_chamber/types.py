@@ -244,7 +244,9 @@ class IssueGroup:
             place nobody cited.
 
     NOTE: Only findings is a constructor argument. The rest are derived from
-    it, so a caller cannot state a value the findings contradict.
+    it, so a caller cannot state a value the findings contradict. The findings
+    are held as a tuple of their own, so a sequence the caller still holds
+    cannot change them afterwards.
     """
 
     findings: tuple[Finding, ...]
@@ -258,6 +260,7 @@ class IssueGroup:
         if not self.findings:
             msg = "An issue group needs at least one finding."
             raise ValueError(msg)
+        object.__setattr__(self, "findings", tuple(self.findings))
         severity = min((finding.severity for finding in self.findings), key=lambda level: level.rank)
         object.__setattr__(self, "location", self.findings[0].location)
         object.__setattr__(self, "severity", severity)

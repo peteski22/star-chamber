@@ -365,7 +365,7 @@ The response wrapper ([`provider-response.schema.json`](schemas/provider-respons
 
 ### 9.1 Issue Grouping (Code Review)
 
-Issues from different providers are grouped when they cite the same place:
+Issues are grouped when they cite the same place, whichever members cited them:
 
 - **Same file** AND **same line range** (overlapping, or within ±5 lines tolerance) = same place.
 - A location MAY cite a single line (`file.py:205`) or a line range (`file.py:203-207`). A single line is treated as a range of one line, so the two forms group with each other.

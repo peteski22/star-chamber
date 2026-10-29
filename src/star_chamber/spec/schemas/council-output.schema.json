@@ -77,47 +77,25 @@
     },
     "consensus_issues": {
       "type": "array",
-      "description": "Issues flagged by every member in providers_responded (code-review mode).",
-      "items": { "$ref": "#/$defs/issue" }
+      "description": "Grouped issues cited by every member in providers_responded (code-review mode).",
+      "items": { "$ref": "#/$defs/issue_group" }
     },
     "majority_issues": {
       "type": "array",
-      "description": "Issues flagged by more than one but not all members in providers_responded (code-review mode).",
+      "description": "Grouped issues cited by more than one but not all members in providers_responded (code-review mode).",
       "items": {
-        "type": "object",
-        "required": ["severity", "location", "category", "description", "suggestion", "provider_count", "flagged_by"],
-        "properties": {
-          "severity": {
-            "type": "string",
-            "enum": ["high", "medium", "low"]
-          },
-          "location": { "type": "string" },
-          "category": {
-            "type": "string",
-            "enum": ["craftsmanship", "architecture", "correctness", "invariants", "maintainability"]
-          },
-          "description": { "type": "string" },
-          "suggestion": { "type": "string" },
-          "provider_count": {
-            "type": "integer",
-            "description": "Number of providers that flagged this issue.",
-            "minimum": 2
-          },
-          "flagged_by": {
-            "type": "array",
-            "description": "Display names of members that flagged this issue.",
-            "items": { "type": "string" },
-            "minItems": 2
-          }
-        }
+        "allOf": [
+          { "$ref": "#/$defs/issue_group" },
+          { "properties": { "flagged_by": { "minItems": 2 } } }
+        ]
       }
     },
     "individual_issues": {
       "type": "object",
-      "description": "Issues flagged by a single member, keyed by member display name (code-review mode).",
+      "description": "Grouped issues cited by a single member, keyed by member display name (code-review mode).",
       "additionalProperties": {
         "type": "array",
-        "items": { "$ref": "#/$defs/issue" }
+        "items": { "$ref": "#/$defs/issue_group" }
       }
     },
     "quality_ratings": {
@@ -300,8 +278,33 @@
     }
   ],
   "$defs": {
+    "finding": {
+      "description": "One member's account of what is wrong at a place it cited. This declares the issue shape inline because it adds the member that raised it, and the strict variant's additionalProperties:false does not compose through a $ref.",
+      "type": "object",
+      "required": ["provider", "severity", "location", "category", "description", "suggestion"],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "description": "Display name of the member that raised it."
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["high", "medium", "low"]
+        },
+        "location": {
+          "type": "string",
+          "description": "The place this member cited, which can be narrower or wider than the place its group is reported at."
+        },
+        "category": {
+          "type": "string",
+          "enum": ["craftsmanship", "architecture", "correctness", "invariants", "maintainability"]
+        },
+        "description": { "type": "string" },
+        "suggestion": { "type": "string" }
+      }
+    },
     "issue": {
-      "description": "One issue as a member reported it. majority_issues declares this shape inline because it adds two fields, and the strict variant's additionalProperties:false does not compose through a $ref.",
+      "description": "One issue as a member reported it.",
       "type": "object",
       "required": ["severity", "location", "category", "description", "suggestion"],
       "properties": {
@@ -316,6 +319,45 @@
         },
         "description": { "type": "string" },
         "suggestion": { "type": "string" }
+      }
+    },
+    "issue_group": {
+      "description": "One place the council cited, and every member's account of what is wrong there. location, severity, categories and flagged_by are each derived from findings, which carries the whole of what the members said.",
+      "type": "object",
+      "required": ["findings", "location", "severity", "categories", "flagged_by"],
+      "properties": {
+        "findings": {
+          "type": "array",
+          "description": "Every account the members gave of this place, one entry per citation, so a member that cited the place twice appears twice. No account stands in for another.",
+          "items": { "$ref": "#/$defs/finding" },
+          "minItems": 1
+        },
+        "location": {
+          "type": "string",
+          "description": "The citation that opened the group, which names the place the group is reported at. Derived by the council and belonging to the group, not quoted from any one member. An individual finding may cite a narrower or wider place."
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["high", "medium", "low"],
+          "description": "The most urgent severity any finding carries. Derived by the council and belonging to the group, so it may exceed what the member at the group location said."
+        },
+        "categories": {
+          "type": "array",
+          "description": "Every category the findings carry, A-Z and without repeats. More than one means the members disagreed about what kind of concern this place raises, which is not a reason to report them apart.",
+          "items": {
+            "type": "string",
+            "enum": ["craftsmanship", "architecture", "correctness", "invariants", "maintainability"]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "flagged_by": {
+          "type": "array",
+          "description": "Display names of the members that contributed a finding, A-Z and without repeats.",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "uniqueItems": true
+        }
       }
     },
     "provider_error": {

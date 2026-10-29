@@ -193,6 +193,7 @@ _DECLARED_OBJECTS = (
     "$",
     "$.approaches[",
     "$.consensus_issues[",
+    "$.consensus_issues[0].findings[",
     "$.debate",
     "$.failed_providers[",
     "$.individual_issues.",
@@ -354,6 +355,62 @@ class TestDesignOutput:
         for variant in (published, schema):
             with pytest.raises(jsonschema.ValidationError):
                 jsonschema.validate(document, variant)
+
+
+class TestIssueGroups:
+    """A grouped issue carries every member's account, and the bucket states how many agreed.
+
+    A consumer reads the buckets as strength of agreement, so a group that
+    reports one member in a bucket meaning several is worse than no group.
+    """
+
+    def test_a_group_carries_one_finding_per_member(self, schema: dict[str, Any]) -> None:
+        document = _majority_code_review_document()
+
+        jsonschema.validate(document, schema)
+        group = document["consensus_issues"][0]
+        assert [finding["provider"] for finding in group["findings"]] == ["openai", "anthropic", "gemini"]
+        assert group["flagged_by"] == ["anthropic", "gemini", "openai"]
+
+    def test_a_group_declares_only_the_fields_a_producer_emits(self, schema: dict[str, Any]) -> None:
+        document = _majority_code_review_document()
+
+        jsonschema.validate(document, schema)
+        assert set(document["consensus_issues"][0]) == {
+            "categories",
+            "findings",
+            "flagged_by",
+            "location",
+            "severity",
+        }
+
+    def test_a_group_with_no_findings_is_rejected(self, schema: dict[str, Any]) -> None:
+        document = _majority_code_review_document()
+        document["consensus_issues"][0]["findings"] = []
+
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(document, schema)
+
+    def test_a_majority_group_naming_one_member_is_rejected(
+        self,
+        published: dict[str, Any],
+        schema: dict[str, Any],
+    ) -> None:
+        """A majority means more than one member, so one name there is not a majority."""
+        document = _majority_code_review_document()
+        group = document["majority_issues"][0]
+        group["flagged_by"] = group["flagged_by"][:1]
+
+        for variant in (published, schema):
+            with pytest.raises(jsonschema.ValidationError):
+                jsonschema.validate(document, variant)
+
+    def test_a_finding_keeps_the_issue_vocabulary(self, schema: dict[str, Any]) -> None:
+        document = _majority_code_review_document()
+        document["consensus_issues"][0]["findings"][0]["category"] = "performance"
+
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(document, schema)
 
 
 class TestReviewsItems:

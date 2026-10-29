@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import dataclass
 
 from star_chamber.prompt import render_synthesis_prompt
@@ -12,6 +12,7 @@ from star_chamber.transport import sanitize_error, send_to_provider
 from star_chamber.types import (
     Approach,
     ClassificationResult,
+    IssueGroup,
     OtariConfig,
     ProviderConfig,
     ProviderDesignAdvice,
@@ -29,6 +30,9 @@ _EMPTY_REPLY = "The member returned no assessment."
 _OVERLONG_REPLY = f"The member returned more than {MAX_ASSESSMENT_CHARS} characters instead of a sentence or two."
 
 _WHITESPACE_RUN = re.compile(r"\s+")
+
+# Characters that already close an account, so a period after one would double the punctuation.
+_ACCOUNT_END = frozenset(".!?;:")
 
 
 @dataclass(frozen=True)
@@ -66,6 +70,23 @@ Synthesizer = Callable[[str, Sequence[ProviderConfig]], Awaitable[Synthesis]]
 """Takes council material and the members that answered, and returns the assessment."""
 
 
+def _concerns(groups: Iterable[IssueGroup]) -> list[str]:
+    """Return one entry per grouped issue, carrying every account its members gave.
+
+    One entry per group rather than one per account, so a place several members
+    described cannot read as several separate concerns.
+    """
+    return [" ".join(_closed(finding.description) for finding in group.findings) for group in groups]
+
+
+def _closed(account: str) -> str:
+    """Return one member's account closed by a terminator, so the next account cannot run into it."""
+    account = account.rstrip()
+    if not account or account[-1] in _ACCOUNT_END:
+        return account
+    return f"{account}."
+
+
 def render_code_review_material(
     reviews: Sequence[ProviderReview],
     classification: ClassificationResult,
@@ -86,11 +107,11 @@ def render_code_review_material(
     sections: list[tuple[str, Sequence[str]]] = [
         ("Verdicts given", _rating_tally(reviews)),
         ("Each assessment of its own", [review.summary for review in reviews]),
-        ("Concerns every member raised", [issue.description for issue in classification.consensus_issues]),
-        ("Concerns more than one member raised", [issue.description for issue in classification.majority_issues]),
+        ("Concerns every member raised", _concerns(classification.consensus_issues)),
+        ("Concerns more than one member raised", _concerns(classification.majority_issues)),
         (
             "Concerns one member raised",
-            [issue.description for issues in classification.individual_issues.values() for issue in issues],
+            _concerns(group for groups in classification.individual_issues.values() for group in groups),
         ),
     ]
     return _render_sections(sections)

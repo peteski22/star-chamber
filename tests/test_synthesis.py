@@ -18,9 +18,10 @@ from star_chamber.transport import ProviderResponse
 from star_chamber.types import (
     Approach,
     ClassificationResult,
+    Finding,
     Issue,
     IssueCategory,
-    MajorityIssue,
+    IssueGroup,
     ProviderConfig,
     ProviderDesignAdvice,
     ProviderError,
@@ -67,6 +68,22 @@ def _issue(description: str) -> Issue:
         description=description,
         suggestion="fix",
     )
+
+
+def _group(*described: str, provider: str = "openai") -> IssueGroup:
+    """Build a grouped issue carrying one account per description."""
+    findings = tuple(
+        Finding(
+            provider=provider,
+            severity=Severity.HIGH,
+            location="a.py:1",
+            category=IssueCategory.CORRECTNESS,
+            description=description,
+            suggestion="fix",
+        )
+        for description in described
+    )
+    return IssueGroup(findings=findings)
 
 
 class TestSynthesisStates:
@@ -214,9 +231,9 @@ class TestCodeReviewMaterial:
     def test_withholds_member_names(self) -> None:
         reviews = (_review("openai", summary="Hashing is weak."), _review("anthropic", summary="Auth is broken."))
         classification = ClassificationResult(
-            consensus_issues=(_issue("SHA-256 for passwords"),),
+            consensus_issues=(_group("SHA-256 for passwords"),),
             majority_issues=(),
-            individual_issues={"openai": (_issue("Unused import"),)},
+            individual_issues={"openai": (_group("Unused import"),)},
         )
 
         material = render_code_review_material(reviews, classification)
@@ -227,19 +244,9 @@ class TestCodeReviewMaterial:
     def test_carries_each_assessment_and_the_grouped_concerns(self) -> None:
         reviews = (_review("openai", summary="Hashing is weak.", rating="fair"),)
         classification = ClassificationResult(
-            consensus_issues=(_issue("SHA-256 for passwords"),),
-            majority_issues=(
-                MajorityIssue(
-                    severity=Severity.MEDIUM,
-                    location="a.py:2",
-                    category=IssueCategory.MAINTAINABILITY,
-                    description="No tests for the token path",
-                    suggestion="add tests",
-                    provider_count=2,
-                    flagged_by=("openai", "anthropic"),
-                ),
-            ),
-            individual_issues={"openai": (_issue("Unused import"),)},
+            consensus_issues=(_group("SHA-256 for passwords"),),
+            majority_issues=(_group("No tests for the token path"),),
+            individual_issues={"openai": (_group("Unused import"),)},
         )
 
         material = render_code_review_material(reviews, classification)
@@ -249,6 +256,43 @@ class TestCodeReviewMaterial:
         assert "SHA-256 for passwords" in material
         assert "No tests for the token path" in material
         assert "Unused import" in material
+
+    def test_carries_every_account_of_one_grouped_concern(self) -> None:
+        """A group holds several members' accounts, and none of them stands in for the rest."""
+        classification = ClassificationResult(
+            consensus_issues=(_group("Off-by-one loop bound.", "Misleading name."),),
+            majority_issues=(),
+            individual_issues={},
+        )
+
+        material = render_code_review_material((), classification)
+
+        assert "Off-by-one loop bound." in material
+        assert "Misleading name." in material
+
+    def test_one_grouped_concern_reads_as_one_concern(self) -> None:
+        """Several accounts of one place are one bullet, so agreement is not read as several concerns."""
+        classification = ClassificationResult(
+            consensus_issues=(_group("Off-by-one loop bound.", "Misleading name."),),
+            majority_issues=(),
+            individual_issues={},
+        )
+
+        material = render_code_review_material((), classification)
+
+        assert len([line for line in material.splitlines() if line.startswith("- ")]) == 1
+
+    def test_one_account_does_not_run_into_the_next(self) -> None:
+        """A member that closes no sentence must not blur the boundary with the next member's account."""
+        classification = ClassificationResult(
+            consensus_issues=(_group("Off-by-one loop bound", "Misleading name"),),
+            majority_issues=(),
+            individual_issues={},
+        )
+
+        material = render_code_review_material((), classification)
+
+        assert "Off-by-one loop bound. Misleading name." in material
 
     def test_omits_a_section_with_nothing_in_it(self) -> None:
         reviews = (_review("openai", summary="All good."),)
@@ -306,15 +350,15 @@ class TestMaterialOrderAndShape:
             consensus_issues=(),
             majority_issues=(),
             individual_issues={
-                "openai": (_issue("B first member"), _issue("D first member")),
-                "anthropic": (_issue("A second member"), _issue("C second member")),
+                "openai": (_group("B first member"), _group("D first member")),
+                "anthropic": (_group("A second member"), _group("C second member")),
             },
         )
 
         material = render_code_review_material((), classification)
         bullets = [line for line in material.splitlines() if line.startswith("- ")]
 
-        assert bullets == ["- A second member", "- B first member", "- C second member", "- D first member"]
+        assert bullets == ["- A second member.", "- B first member.", "- C second member.", "- D first member."]
 
     def test_verdicts_are_tallied_rather_than_listed_per_member(self) -> None:
         reviews = (

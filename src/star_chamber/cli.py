@@ -11,7 +11,7 @@ import click
 
 from star_chamber.config import ConfigError, load_config
 from star_chamber.transport import validate_otari_api_base
-from star_chamber.types import CodeReviewResult, CouncilConfig, DesignQuestionResult, ProviderError
+from star_chamber.types import CodeReviewResult, CouncilConfig, DesignQuestionResult, IssueGroup, ProviderError
 
 
 def _load_config(config_path: str | None) -> CouncilConfig:
@@ -57,6 +57,21 @@ def _print_rosters(result: CodeReviewResult | DesignQuestionResult) -> None:
     click.echo(f"Providers answered ({len(result.providers_responded)}): {answered}")
 
 
+def _print_issue_group(group: IssueGroup, *, name_members: bool) -> None:
+    """Print one grouped issue as a heading, then each member's own account of it.
+
+    Args:
+        group: The grouped issue to print.
+        name_members: Whether the heading names the members that flagged it.
+            A section whose own heading states the roster does not need them.
+    """
+    flagged = f" — flagged by {', '.join(group.flagged_by)}" if name_members else ""
+    click.echo(f"  [{group.severity}] {group.location} ({', '.join(group.categories)}){flagged}")
+    for finding in group.findings:
+        click.echo(f"    {finding.provider} ({finding.category}) at {finding.location}: {finding.description}")
+        click.echo(f"      Suggestion: {finding.suggestion}")
+
+
 def _print_summary(synthesis: str, synthesis_error: ProviderError | None) -> None:
     """Print the closing assessment, or say which member owed one and did not write it.
 
@@ -96,18 +111,13 @@ def _print_code_review_result(result: CodeReviewResult) -> None:
             f"\nConsensus issues ({len(result.consensus_issues)}), "
             f"agreed by all {len(result.providers_responded)} providers that answered:"
         )
-        for issue in result.consensus_issues:
-            click.echo(f"  [{issue.severity}] {issue.location} ({issue.category})")
-            click.echo(f"    {issue.description}")
-            click.echo(f"    Suggestion: {issue.suggestion}")
+        for group in result.consensus_issues:
+            _print_issue_group(group, name_members=False)
 
     if result.majority_issues:
         click.echo(f"\nMajority issues ({len(result.majority_issues)}):")
-        for issue in result.majority_issues:
-            flagged = ", ".join(issue.flagged_by)
-            click.echo(f"  [{issue.severity}] {issue.location} ({issue.category}) — flagged by {flagged}")
-            click.echo(f"    {issue.description}")
-            click.echo(f"    Suggestion: {issue.suggestion}")
+        for group in result.majority_issues:
+            _print_issue_group(group, name_members=True)
 
     _print_summary(result.summary.synthesis, result.summary.synthesis_error)
 

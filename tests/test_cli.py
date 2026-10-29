@@ -808,6 +808,115 @@ class TestRosterOutput:
         assert parsed["providers_responded"] == ["openai"]
 
 
+class TestGroupedIssueOutput:
+    """Text output names every member's account of a grouped issue.
+
+    A reader who sees one account per place cannot tell agreement from a
+    group that dropped what the other members said.
+    """
+
+    def _printed(self, issues_by_member: dict[str, list[dict]]) -> str:
+        responses = [
+            ProviderResponse(
+                name,
+                name,
+                "test-model",
+                True,
+                json.dumps({"quality_rating": "fair", "issues": issues, "praise": [], "summary": "Done."}),
+            )
+            for name, issues in issues_by_member.items()
+        ]
+        result = build_code_review_result(responses, files_reviewed=("app.py",))
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            _print_code_review_result(result)
+        return output.getvalue()
+
+    def test_every_account_of_one_place_is_printed(self) -> None:
+        printed = self._printed(
+            {
+                "openai": [
+                    {
+                        "severity": "high",
+                        "location": "app.py:10",
+                        "category": "correctness",
+                        "description": "Off-by-one loop bound.",
+                        "suggestion": "Use <=.",
+                    }
+                ],
+                "gemini": [
+                    {
+                        "severity": "low",
+                        "location": "app.py:10",
+                        "category": "maintainability",
+                        "description": "Misleading name.",
+                        "suggestion": "Rename it.",
+                    }
+                ],
+            }
+        )
+
+        assert "Off-by-one loop bound." in printed
+        assert "Misleading name." in printed
+
+    def test_the_heading_names_the_place_and_every_category(self) -> None:
+        printed = self._printed(
+            {
+                "openai": [
+                    {
+                        "severity": "low",
+                        "location": "app.py:10",
+                        "category": "correctness",
+                        "description": "Off-by-one loop bound.",
+                        "suggestion": "Use <=.",
+                    }
+                ],
+                "gemini": [
+                    {
+                        "severity": "high",
+                        "location": "app.py:10",
+                        "category": "invariants",
+                        "description": "Bound breaks the invariant.",
+                        "suggestion": "Assert it.",
+                    }
+                ],
+            }
+        )
+
+        assert "[high] app.py:10 (correctness, invariants)" in printed
+
+    def test_a_majority_heading_names_the_members_that_flagged_it(self) -> None:
+        """The section states no roster of its own, so a reader needs the members on the heading."""
+        cited = [
+            {
+                "severity": "high",
+                "location": "app.py:10",
+                "category": "correctness",
+                "description": "Off-by-one loop bound.",
+                "suggestion": "Use <=.",
+            }
+        ]
+        printed = self._printed({"openai": cited, "gemini": cited, "anthropic": []})
+
+        assert "flagged by gemini, openai" in printed
+
+    def test_a_consensus_heading_leaves_the_members_to_its_section(self) -> None:
+        """The section already says every member that answered agreed, so naming them repeats it."""
+        cited = [
+            {
+                "severity": "high",
+                "location": "app.py:10",
+                "category": "correctness",
+                "description": "Off-by-one loop bound.",
+                "suggestion": "Use <=.",
+            }
+        ]
+        printed = self._printed({"openai": cited, "gemini": cited})
+
+        assert "flagged by" not in printed
+
+
 class TestFailedProviderOutput:
     """Text output says a failed member's reply was kept, so a reader knows to look.
 

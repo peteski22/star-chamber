@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
+from typing import Any
 
 import pytest
 
@@ -13,10 +14,11 @@ from star_chamber.types import (
     CouncilConfig,
     DesignQuestionResult,
     DesignSummary,
+    Finding,
     FitRating,
     Issue,
     IssueCategory,
-    MajorityIssue,
+    IssueGroup,
     OtariConfig,
     ProviderConfig,
     ProviderDesignAdvice,
@@ -215,58 +217,104 @@ class TestIssue:
         assert rebuilt == issue
 
 
-# -- MajorityIssue ------------------------------------------------------------
+# -- Finding ------------------------------------------------------------------
 
 
-class TestMajorityIssue:
+def _finding(provider: str, category: IssueCategory = IssueCategory.CORRECTNESS, **overrides: object) -> Finding:
+    """Build a finding, so a test states only the fields it is about."""
+    fields = {
+        "provider": provider,
+        "severity": Severity.HIGH,
+        "location": "app.py:5",
+        "category": category,
+        "description": f"{provider} saw a null deref",
+        "suggestion": "Add a null check",
+    }
+    return Finding(**{**fields, **overrides})
+
+
+def _rebuild_group(data: dict[str, Any]) -> IssueGroup:
+    """Rebuild a grouped issue from a document, which carries only its findings as input."""
+    return IssueGroup(findings=tuple(_reconstruct(Finding, finding) for finding in data["findings"]))
+
+
+class TestFinding:
     def test_all_fields_set(self) -> None:
-        mi = MajorityIssue(
-            severity=Severity.HIGH,
-            location="app.py:5",
-            category=IssueCategory.CORRECTNESS,
-            description="Null deref",
-            suggestion="Add null check",
-            provider_count=2,
-            flagged_by=("openai", "anthropic"),
-        )
-        assert mi.severity == "high"
-        assert mi.provider_count == 2
-        assert mi.flagged_by == ("openai", "anthropic")
+        finding = _finding("openai")
+
+        assert finding.provider == "openai"
+        assert finding.severity == "high"
+        assert finding.category == "correctness"
 
     def test_frozen(self) -> None:
-        mi = MajorityIssue(
-            severity=Severity.HIGH,
-            location="app.py:5",
-            category=IssueCategory.CORRECTNESS,
-            description="Null deref",
-            suggestion="Add null check",
-            provider_count=2,
-            flagged_by=("openai",),
-        )
+        finding = _finding("openai")
+
         with pytest.raises(AttributeError):
-            mi.provider_count = 5  # type: ignore[misc]
+            finding.provider = "anthropic"  # type: ignore[misc]
+
+    def test_rejects_a_severity_outside_the_set(self) -> None:
+        with pytest.raises(TypeError, match="severity must be a Severity"):
+            _finding("openai", severity="critical")
+
+    def test_rejects_a_category_outside_the_set(self) -> None:
+        with pytest.raises(TypeError, match="category must be a IssueCategory"):
+            _finding("openai", category="performance")
 
     def test_json_round_trip(self) -> None:
-        mi = MajorityIssue(
-            severity=Severity.MEDIUM,
-            location="x.py:1",
-            category=IssueCategory.MAINTAINABILITY,
-            description="Slow loop",
-            suggestion="Vectorise",
-            provider_count=3,
-            flagged_by=("a", "b", "c"),
+        finding = _finding("openai")
+
+        assert _reconstruct(Finding, _round_trip(finding)) == finding
+
+
+# -- IssueGroup ---------------------------------------------------------------
+
+
+class TestIssueGroup:
+    def test_the_findings_decide_the_derived_fields(self) -> None:
+        group = IssueGroup(
+            findings=(
+                _finding("openai", severity=Severity.LOW, location="app.py:5-9"),
+                _finding("anthropic", category=IssueCategory.ARCHITECTURE, severity=Severity.HIGH),
+            )
         )
-        data = _round_trip(mi)
-        rebuilt = MajorityIssue(
-            severity=Severity(data["severity"]),
-            location=data["location"],
-            category=IssueCategory(data["category"]),
-            description=data["description"],
-            suggestion=data["suggestion"],
-            provider_count=data["provider_count"],
-            flagged_by=tuple(data["flagged_by"]),
-        )
-        assert rebuilt == mi
+
+        assert group.location == "app.py:5-9"
+        assert group.severity == "high"
+        assert group.categories == ("architecture", "correctness")
+        assert group.flagged_by == ("anthropic", "openai")
+
+    def test_a_caller_cannot_change_the_findings_after_the_group_is_built(self) -> None:
+        """The group holds its own tuple, so the derived fields cannot drift from the findings."""
+        passed = [_finding("openai")]
+        group = IssueGroup(findings=passed)  # type: ignore[arg-type]
+
+        passed.append(_finding("gemini"))
+
+        assert group.findings == (_finding("openai"),)
+        assert group.flagged_by == ("openai",)
+
+    def test_a_derived_field_is_not_a_constructor_argument(self) -> None:
+        with pytest.raises(TypeError):
+            IssueGroup(findings=(_finding("openai"),), severity=Severity.LOW)  # type: ignore[call-arg]
+
+    def test_a_group_with_no_findings_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="at least one finding"):
+            IssueGroup(findings=())
+
+    def test_frozen(self) -> None:
+        group = IssueGroup(findings=(_finding("openai"),))
+
+        with pytest.raises(AttributeError):
+            group.findings = ()  # type: ignore[misc]
+
+    def test_json_round_trip(self) -> None:
+        group = IssueGroup(findings=(_finding("openai"), _finding("anthropic")))
+        data = _round_trip(group)
+
+        rebuilt = IssueGroup(findings=tuple(_reconstruct(Finding, finding) for finding in data["findings"]))
+
+        assert rebuilt == group
+        assert data["flagged_by"] == ["anthropic", "openai"]
 
 
 # -- ProviderError -------------------------------------------------------------
@@ -488,30 +536,16 @@ class TestProviderDesignAdvice:
 
 class TestClassificationResult:
     def test_all_fields_set(self) -> None:
-        issue = Issue(
-            severity=Severity.HIGH,
-            location="x.py:1",
-            category=IssueCategory.CORRECTNESS,
-            description="desc",
-            suggestion="fix",
-        )
-        mi = MajorityIssue(
-            severity=Severity.MEDIUM,
-            location="y.py:2",
-            category=IssueCategory.CRAFTSMANSHIP,
-            description="desc2",
-            suggestion="fix2",
-            provider_count=2,
-            flagged_by=("a", "b"),
-        )
+        alone = IssueGroup(findings=(_finding("openai"),))
+        shared = IssueGroup(findings=(_finding("openai"), _finding("anthropic")))
         cr = ClassificationResult(
-            consensus_issues=(issue,),
-            majority_issues=(mi,),
-            individual_issues={"openai": (issue,)},
+            consensus_issues=(shared,),
+            majority_issues=(shared,),
+            individual_issues={"openai": (alone,)},
         )
-        assert cr.consensus_issues == (issue,)
-        assert cr.majority_issues == (mi,)
-        assert cr.individual_issues == {"openai": (issue,)}
+        assert cr.consensus_issues == (shared,)
+        assert cr.majority_issues == (shared,)
+        assert cr.individual_issues == {"openai": (alone,)}
 
     def test_frozen(self) -> None:
         cr = ClassificationResult(
@@ -523,36 +557,18 @@ class TestClassificationResult:
             cr.consensus_issues = ()  # type: ignore[misc]
 
     def test_json_round_trip(self) -> None:
-        issue = Issue(
-            severity=Severity.HIGH,
-            location="z.py:3",
-            category=IssueCategory.INVARIANTS,
-            description="vuln",
-            suggestion="patch",
-        )
+        group = IssueGroup(findings=(_finding("anthropic", IssueCategory.INVARIANTS),))
         cr = ClassificationResult(
-            consensus_issues=(issue,),
+            consensus_issues=(group,),
             majority_issues=(),
-            individual_issues={"anthropic": (issue,)},
+            individual_issues={"anthropic": (group,)},
         )
         data = _round_trip(cr)
         rebuilt = ClassificationResult(
-            consensus_issues=tuple(_reconstruct(Issue, i) for i in data["consensus_issues"]),
-            majority_issues=tuple(
-                MajorityIssue(
-                    severity=m["severity"],
-                    location=m["location"],
-                    category=m["category"],
-                    description=m["description"],
-                    suggestion=m["suggestion"],
-                    provider_count=m["provider_count"],
-                    flagged_by=tuple(m["flagged_by"]),
-                )
-                for m in data["majority_issues"]
-            ),
+            consensus_issues=tuple(_rebuild_group(g) for g in data["consensus_issues"]),
+            majority_issues=tuple(_rebuild_group(g) for g in data["majority_issues"]),
             individual_issues={
-                name: tuple(_reconstruct(Issue, i) for i in issues)
-                for name, issues in data["individual_issues"].items()
+                name: tuple(_rebuild_group(g) for g in groups) for name, groups in data["individual_issues"].items()
             },
         )
         assert rebuilt == cr
@@ -571,14 +587,12 @@ class TestCodeReviewResult:
             description="crash",
             suggestion="fix it",
         )
-        mi = MajorityIssue(
-            severity=Severity.MEDIUM,
-            location="m.py:2",
-            category=IssueCategory.CRAFTSMANSHIP,
-            description="naming",
-            suggestion="rename",
-            provider_count=2,
-            flagged_by=("openai", "anthropic"),
+        alone = IssueGroup(findings=(_finding("openai", location="m.py:1"),))
+        shared = IssueGroup(
+            findings=(
+                _finding("openai", IssueCategory.CRAFTSMANSHIP, location="m.py:2"),
+                _finding("anthropic", IssueCategory.CRAFTSMANSHIP, location="m.py:2"),
+            )
         )
         review = ProviderReview(
             provider="openai",
@@ -596,9 +610,9 @@ class TestCodeReviewResult:
             providers_responded=("openai",),
             failed_providers=(ProviderError(provider="local", model="m", error="crash", raw_content=None),),
             reviews=(review,),
-            consensus_issues=(issue,),
-            majority_issues=(mi,),
-            individual_issues={"openai": (issue,)},
+            consensus_issues=(alone,),
+            majority_issues=(shared,),
+            individual_issues={"openai": (alone,)},
             quality_ratings={"openai": QualityRating.GOOD},
             summary=CodeReviewSummary(total_issues=1, consensus_count=1, majority_count=1, synthesis="Overall good"),
         )
@@ -792,17 +806,9 @@ class TestClosedSetFields:
         with pytest.raises(TypeError, match="category must be a IssueCategory, got str"):
             self._issue(category="correctness")
 
-    def test_a_majority_issue_refuses_a_raw_severity(self) -> None:
+    def test_a_finding_refuses_a_raw_severity(self) -> None:
         with pytest.raises(TypeError, match="severity must be a Severity, got str"):
-            MajorityIssue(
-                severity="high",
-                location="a.py:1",
-                category=IssueCategory.CORRECTNESS,
-                description="Off-by-one.",
-                suggestion="Use <=.",
-                provider_count=2,
-                flagged_by=("openai", "anthropic"),
-            )
+            _finding("openai", severity="high")
 
     def test_a_review_refuses_a_raw_rating(self) -> None:
         with pytest.raises(TypeError, match="quality_rating must be a QualityRating, got str"):

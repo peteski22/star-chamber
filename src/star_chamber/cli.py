@@ -57,13 +57,16 @@ def _print_rosters(result: CodeReviewResult | DesignQuestionResult) -> None:
     click.echo(f"Providers answered ({len(result.providers_responded)}): {answered}")
 
 
-def _print_issue_group(group: IssueGroup) -> None:
+def _print_issue_group(group: IssueGroup, *, name_members: bool) -> None:
     """Print one grouped issue as a heading, then each member's own account of it.
 
     Args:
         group: The grouped issue to print.
+        name_members: Whether the heading names the members that flagged it.
+            A section whose own heading states the roster does not need them.
     """
-    click.echo(f"  [{group.severity}] {group.location} ({', '.join(group.categories)})")
+    flagged = f" — flagged by {', '.join(group.flagged_by)}" if name_members else ""
+    click.echo(f"  [{group.severity}] {group.location} ({', '.join(group.categories)}){flagged}")
     for finding in group.findings:
         click.echo(f"    {finding.provider} ({finding.category}) at {finding.location}: {finding.description}")
         click.echo(f"      Suggestion: {finding.suggestion}")
@@ -109,12 +112,12 @@ def _print_code_review_result(result: CodeReviewResult) -> None:
             f"agreed by all {len(result.providers_responded)} providers that answered:"
         )
         for group in result.consensus_issues:
-            _print_issue_group(group)
+            _print_issue_group(group, name_members=False)
 
     if result.majority_issues:
         click.echo(f"\nMajority issues ({len(result.majority_issues)}):")
         for group in result.majority_issues:
-            _print_issue_group(group)
+            _print_issue_group(group, name_members=True)
 
     _print_summary(result.summary.synthesis, result.summary.synthesis_error)
 

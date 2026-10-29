@@ -886,6 +886,36 @@ class TestGroupedIssueOutput:
 
         assert "[high] app.py:10 (correctness, invariants)" in printed
 
+    def test_a_majority_heading_names_the_members_that_flagged_it(self) -> None:
+        """The section states no roster of its own, so a reader needs the members on the heading."""
+        cited = [
+            {
+                "severity": "high",
+                "location": "app.py:10",
+                "category": "correctness",
+                "description": "Off-by-one loop bound.",
+                "suggestion": "Use <=.",
+            }
+        ]
+        printed = self._printed({"openai": cited, "gemini": cited, "anthropic": []})
+
+        assert "flagged by gemini, openai" in printed
+
+    def test_a_consensus_heading_leaves_the_members_to_its_section(self) -> None:
+        """The section already says every member that answered agreed, so naming them repeats it."""
+        cited = [
+            {
+                "severity": "high",
+                "location": "app.py:10",
+                "category": "correctness",
+                "description": "Off-by-one loop bound.",
+                "suggestion": "Use <=.",
+            }
+        ]
+        printed = self._printed({"openai": cited, "gemini": cited})
+
+        assert "flagged by" not in printed
+
 
 class TestFailedProviderOutput:
     """Text output says a failed member's reply was kept, so a reader knows to look.

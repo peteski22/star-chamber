@@ -31,6 +31,9 @@ _OVERLONG_REPLY = f"The member returned more than {MAX_ASSESSMENT_CHARS} charact
 
 _WHITESPACE_RUN = re.compile(r"\s+")
 
+# Characters that already close an account, so a period after one would double the punctuation.
+_ACCOUNT_END = frozenset(".!?;:")
+
 
 @dataclass(frozen=True)
 class Synthesis:
@@ -73,7 +76,15 @@ def _concerns(groups: Iterable[IssueGroup]) -> list[str]:
     One entry per group rather than one per account, so a place several members
     described cannot read as several separate concerns.
     """
-    return [" ".join(finding.description for finding in group.findings) for group in groups]
+    return [" ".join(_closed(finding.description) for finding in group.findings) for group in groups]
+
+
+def _closed(account: str) -> str:
+    """Return one member's account closed by a terminator, so the next account cannot run into it."""
+    account = account.rstrip()
+    if not account or account[-1] in _ACCOUNT_END:
+        return account
+    return f"{account}."
 
 
 def render_code_review_material(

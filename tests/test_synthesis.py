@@ -282,6 +282,18 @@ class TestCodeReviewMaterial:
 
         assert len([line for line in material.splitlines() if line.startswith("- ")]) == 1
 
+    def test_one_account_does_not_run_into_the_next(self) -> None:
+        """A member that closes no sentence must not blur the boundary with the next member's account."""
+        classification = ClassificationResult(
+            consensus_issues=(_group("Off-by-one loop bound", "Misleading name"),),
+            majority_issues=(),
+            individual_issues={},
+        )
+
+        material = render_code_review_material((), classification)
+
+        assert "Off-by-one loop bound. Misleading name." in material
+
     def test_omits_a_section_with_nothing_in_it(self) -> None:
         reviews = (_review("openai", summary="All good."),)
         classification = ClassificationResult(consensus_issues=(), majority_issues=(), individual_issues={})
@@ -346,7 +358,7 @@ class TestMaterialOrderAndShape:
         material = render_code_review_material((), classification)
         bullets = [line for line in material.splitlines() if line.startswith("- ")]
 
-        assert bullets == ["- A second member", "- B first member", "- C second member", "- D first member"]
+        assert bullets == ["- A second member.", "- B first member.", "- C second member.", "- D first member."]
 
     def test_verdicts_are_tallied_rather_than_listed_per_member(self) -> None:
         reviews = (

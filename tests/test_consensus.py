@@ -457,12 +457,22 @@ class TestSpanWidthLimit:
         assert _locations_match(("app.py", None), ("app.py", None))
 
     def test_widening_a_span_by_one_line_keeps_a_match_it_had(self) -> None:
-        """The reported cliff: one more line must not remove a match the citation had."""
+        """Crossing the file-level width must not remove a match the narrower citation had."""
         narrower = _parse_location("m.py:10-59")
         wider = _parse_location("m.py:10-60")
         cited = _parse_location("m.py:42")
 
-        assert _locations_match(narrower, cited) is _locations_match(wider, cited)
+        assert _locations_match(narrower, cited)
+        assert _locations_match(wider, cited)
+
+    def test_widening_a_span_past_the_file_level_width_may_add_a_match(self) -> None:
+        """Widening past the file-level width cites the file, so it matches lines the span did not."""
+        narrower = _parse_location("m.py:10-59")
+        wider = _parse_location("m.py:10-60")
+        far = _parse_location("m.py:300")
+
+        assert not _locations_match(narrower, far)
+        assert _locations_match(wider, far)
 
     def test_a_file_wide_span_groups_with_a_bare_file(self) -> None:
         assert _locations_match(_parse_location("app.py:1-9999"), _parse_location("app.py"))

@@ -49,17 +49,17 @@ _INLINE_COPIES = {
         required_adds=frozenset({"recommended_by"}),
         widens=(("fit_rating", frozenset({None})), ("risk_level", frozenset({"unknown"}))),
     ),
+    "finding": _InlineCopy(
+        inline_path=("$defs", "finding"),
+        source_schema="council-output",
+        source_path=("$defs", "issue"),
+        required_adds=frozenset({"provider"}),
+    ),
     "issue": _InlineCopy(
         inline_path=("$defs", "issue"),
         source_schema="code-review-result",
         source_path=("properties", "issues", "items"),
         required_adds=frozenset(),
-    ),
-    "majority_issue": _InlineCopy(
-        inline_path=("properties", "majority_issues", "items"),
-        source_schema="council-output",
-        source_path=("$defs", "issue"),
-        required_adds=frozenset({"flagged_by", "provider_count"}),
     ),
     "review": _InlineCopy(
         inline_path=("properties", "reviews", "items"),

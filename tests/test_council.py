@@ -327,7 +327,7 @@ class TestRunCouncilCodeReview:
             )
 
         assert len(result.consensus_issues) == 1
-        assert result.consensus_issues[0].category == "architecture"
+        assert result.consensus_issues[0].categories == ("architecture",)
 
     async def test_parse_error_becomes_failed_provider(self) -> None:
         mock_responses = [

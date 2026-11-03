@@ -145,6 +145,8 @@ star-chamber schema code-review-result
 
 Each entry in `failed_providers` names the `model` it asked and carries `raw_content`, the reply that member sent, so a failure can be diagnosed from the reply rather than from its description. It is null when the call produced no reply at all, such as a timeout, and empty when a reply arrived carrying no content. The reply is kept whole, because a reply is diagnosed from where it stops.
 
+Each item of `consensus_issues`, `majority_issues` and `individual_issues` is a grouped issue: one `location`, the `severity` of its most urgent account, the `categories` the members chose, the members in `flagged_by`, and `findings` carrying each member's own `provider`, `location`, `severity`, `category`, `description` and `suggestion`. Issues are grouped by file and line range alone, so members who read one defect as different kinds of concern count as agreeing on it instead of appearing to raise several. No account stands in for another, so grouping never deletes what a member said, and `total_issues` counts groups rather than findings.
+
 Output carries `spec_version`, the protocol version that produced the document, which `star_chamber.SPEC_VERSION` also states. Compare it with the version your own handling was written against. When the document is newer, still render it, and say that it came from a newer protocol version so your field-level reading is unverified. Do not pick behavior per field for a version above the one you were written against, because such a rule goes stale without announcing it; picking behavior for a version at or below yours is fine, since those are documented. A document with no `spec_version` was produced before 0.7.
 
 `council-output` is published open: its fixed objects state no `additionalProperties`, so validating a document against this copy accepts output from a newer producer instead of rejecting it on fields the copy predates. The maps keyed by member name, `individual_issues` and `quality_ratings`, still constrain the shape of their values. Every other schema describes input the council receives and stays closed.
@@ -183,8 +185,11 @@ result = run_council_sync(
 )
 
 print(result.summary)
-for issue in result.consensus_issues:
-    print(f"  [{issue.severity}] {issue.location}: {issue.description}")
+# Each grouped issue names one place and carries every member's own account of it.
+for group in result.consensus_issues:
+    print(f"  [{group.severity}] {group.location} ({', '.join(group.categories)})")
+    for finding in group.findings:
+        print(f"    {finding.provider}: {finding.description}")
 
 # Design question.
 result = run_council_sync(

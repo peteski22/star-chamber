@@ -543,6 +543,19 @@ class TestFileLevelCitations:
 
         assert len(_groups(result)) == len(apart)
 
+    def test_a_file_level_citation_with_no_group_to_join_opens_one(self) -> None:
+        """A file no member cited a line in still reports what the members said about it."""
+        reviews = [
+            _review("openai", [_issue("models.py", "architecture", description="No layer boundary at all.")]),
+            _review("anthropic", [_issue("models.py", "invariants", description="Every field is nullable.")]),
+        ]
+
+        result = classify(reviews, threshold=2)
+
+        assert len(result.consensus_issues) == 1
+        assert result.consensus_issues[0].location == "models.py"
+        assert _descriptions(result) == {"No layer boundary at all.", "Every field is nullable."}
+
     def test_a_file_level_citation_does_not_reach_another_file(self) -> None:
         reviews = [
             _review("openai", [_issue("models.py", "architecture")]),

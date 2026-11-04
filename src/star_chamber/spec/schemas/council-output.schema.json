@@ -124,7 +124,7 @@
           "name": { "type": "string" },
           "recommended_by": {
             "type": "integer",
-            "description": "Number of providers recommending this approach. Zero indicates the approach was discussed but not recommended.",
+            "description": "How many providers named this approach in their recommendation. A provider that named it in order to reject it is counted, because the count reads names and not their polarity. Zero means no recommendation named it.",
             "minimum": 0
           },
           "pros": {

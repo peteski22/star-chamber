@@ -325,7 +325,9 @@ class Approach:
 
     Attributes:
         name: Name of the approach.
-        recommended_by: Number of providers recommending this approach.
+        recommended_by: How many providers named this approach in their
+            recommendation. A provider that named it in order to reject it is
+            counted, because the count reads names and not their polarity.
         pros: Tuple of advantages.
         cons: Tuple of disadvantages.
         risk_level: How risky the approach is.

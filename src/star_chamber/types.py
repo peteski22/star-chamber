@@ -235,8 +235,8 @@ class IssueGroup:
         severity: The most urgent severity any finding carries, so a group is
             as urgent as the worst account any member gave it.
         categories: Every category the findings carry, A-Z and without repeats.
-            More than one means the members disagreed about what kind of
-            concern this place raises.
+            A member that cited the place more than once can name a different
+            category each time, so the count says nothing about agreement.
         flagged_by: The members that contributed a finding, A-Z and without repeats.
 
     Raises:

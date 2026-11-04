@@ -343,7 +343,7 @@
         },
         "categories": {
           "type": "array",
-          "description": "Every category the findings carry, A-Z and without repeats. More than one means the members disagreed about what kind of concern this place raises, which is not a reason to report them apart.",
+          "description": "Every category the findings carry, A-Z and without repeats. A member that cited the place more than once can name a different category each time, so the count says nothing about agreement. A category difference is never a reason to report one place as several.",
           "items": {
             "type": "string",
             "enum": ["craftsmanship", "architecture", "correctness", "invariants", "maintainability"]

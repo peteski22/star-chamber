@@ -387,7 +387,7 @@ Grouping is not transitive, because three citations can overlap in pairs without
 
 The approaches array includes all approaches mentioned by any provider — both recommended and discussed-but-rejected alternatives. An approach with `recommended_by: 0` was considered by one or more providers but not recommended by any.
 
-Approaches from different providers are grouped when they refer to the same approach (by name match or semantic similarity). The `recommended_by` count reflects how many providers selected that approach as their primary recommendation.
+Approaches from different providers are grouped when they refer to the same approach (by name match or semantic similarity). The `recommended_by` count reports how many providers named that approach in their recommendation.
 
 Names MUST be matched with case and repeated spacing ignored, so `Repository` and `repository  layer` are the same name only if the remaining words match. Punctuation is ignored except for characters that tell two names apart, which MUST be preserved, so `C++`, `C#` and `C` remain three approaches rather than one. Letters and digits MUST be preserved whatever script they are written in, so an approach named outside the Latin alphabet keeps a name to group and match on. Orchestrators MAY add semantic similarity on top, as in section 9.1. A grouped approach carries the union of the pros and the union of the cons, in the order providers first stated them, with duplicates removed.
 

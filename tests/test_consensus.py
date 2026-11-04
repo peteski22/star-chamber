@@ -629,6 +629,24 @@ class TestGroupsKeepEveryAccount:
         assert group.flagged_by == ("anthropic", "openai")
         assert len(group.findings) == 3
 
+    def test_several_categories_can_come_from_one_member(self) -> None:
+        reviews = [
+            _review(
+                "openai",
+                [
+                    _issue("app.py:10", "correctness"),
+                    _issue("app.py:12", "maintainability"),
+                ],
+            ),
+            _review("anthropic", [_issue("other.py:1", "correctness")]),
+        ]
+
+        result = classify(reviews, threshold=2)
+
+        group = result.individual_issues["openai"][0]
+        assert group.categories == ("correctness", "maintainability")
+        assert group.flagged_by == ("openai",)
+
     def test_a_group_names_the_citation_that_opened_it(self) -> None:
         reviews = [
             _review("openai", [_issue("app.py:203-207", "correctness")]),

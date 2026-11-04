@@ -235,8 +235,8 @@ class IssueGroup:
         severity: The most urgent severity any finding carries, so a group is
             as urgent as the worst account any member gave it.
         categories: Every category the findings carry, A-Z and without repeats.
-            More than one means the members disagreed about what kind of
-            concern this place raises.
+            A member that cited the place more than once can name a different
+            category each time, so the count says nothing about agreement.
         flagged_by: The members that contributed a finding, A-Z and without repeats.
 
     Raises:
@@ -325,7 +325,9 @@ class Approach:
 
     Attributes:
         name: Name of the approach.
-        recommended_by: Number of providers recommending this approach.
+        recommended_by: How many providers named this approach in their
+            recommendation. A provider that named it in order to reject it is
+            counted, because the count reads names and not their polarity.
         pros: Tuple of advantages.
         cons: Tuple of disadvantages.
         risk_level: How risky the approach is.

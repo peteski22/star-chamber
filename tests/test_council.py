@@ -982,6 +982,14 @@ class TestDesignApproachAggregation:
         counts = {approach.name: approach.recommended_by for approach in result.approaches}
         assert counts == {"Repository": 1, "Active Record": 0}
 
+    def test_a_recommendation_that_rejects_an_approach_still_counts(self) -> None:
+        """The count reads names and not their polarity."""
+        result = self._result(
+            _design_json(recommendation="Avoid the Repository pattern here.", approaches=[_approach("Repository")])
+        )
+
+        assert result.approaches[0].recommended_by == 1
+
     def test_name_match_ignores_case_and_spacing(self) -> None:
         result = self._result(
             _design_json(recommendation="use   a REPOSITORY layer", approaches=[_approach("Repository")])
